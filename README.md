@@ -2,8 +2,15 @@
 
 Go base SDK for Standards Lab: layered configuration, process lifecycle, and logging.
 
-`github.com/standards-lab/go-core` is a single Go module with the process-level packages every Go
-program in the organization builds on. It depends on the standard library alone.
+`github.com/standards-lab/go-core` is a single Go module with the process-level packages every
+program in the standard builds on.
+
+## Target standard
+
+`go-core` is the base SDK of `go-minimal`, the minimal-dependency Go standard. Its dependency rule
+is the standard's line — at most packages as idiomatic and stable as the standard library
+(`golang.org/x/…`, `google/uuid`), with vendor SDKs never entering — and today it depends on the
+standard library alone.
 
 ## Packages
 

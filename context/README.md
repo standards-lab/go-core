@@ -1,18 +1,18 @@
 # go-core
 
-The Standards Lab organization's Go base SDK. This is the base-SDK tier of the organization's
-reference architecture: the process-level packages every Go program in the organization builds on,
-and the first place the standard materializes as code. Built with the marathon workflow, so the
-workflow itself is exercised in the process.
+The base SDK of `go-minimal`, the Standards Lab organization's minimal-dependency Go standard. This
+is the standard's base tier: the process-level packages every program in the standard builds on, and
+the first place the standard materializes as code. Built with the marathon workflow, so the workflow
+itself is exercised in the process.
 
 ## What we're building toward
 
 - The lowest practical level of abstraction, no frameworks. Dependencies flow downward only, and
   this repository is the bottom of the graph: it depends on the standard library alone and is
   unaware of what runs above it.
-- Process-level and universal. A package belongs in the base SDK only when every type of Go program
-  uses it; anything specific to one application type or one external technology lives in its own
-  repository, above this one.
+- Process-level and universal. A package belongs in the base SDK only when every type of program in
+  the standard uses it; anything specific to one application type or one external technology lives
+  in its own repository, above this one.
 - One Go module, versioned and released as one artifact on root tags.
 
 ## Repository topology

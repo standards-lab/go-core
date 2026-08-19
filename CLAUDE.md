@@ -1,9 +1,8 @@
 # go-core
 
-The Standards Lab organization's Go base SDK: the process-level packages every Go program in the
-organization builds on — layered configuration, the process lifecycle, and the logger. This is the
-base-SDK tier of the reference-architecture effort. Managed with the marathon workflow; start from
-`context/README.md`.
+The base SDK of `go-minimal`, the Standards Lab organization's minimal-dependency Go standard: the
+process-level packages every program in the standard builds on — layered configuration, the process
+lifecycle, and the logger. Managed with the marathon workflow; start from `context/README.md`.
 
 ## Conventions are settled in the repository
 
