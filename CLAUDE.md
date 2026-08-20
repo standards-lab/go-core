@@ -1,13 +1,17 @@
 # go-core
 
-The base SDK of `go-minimal`, the Standards Lab organization's minimal-dependency Go standard: the
-process-level packages every program in the standard builds on — layered configuration, the process
-lifecycle, and the logger. Managed with the marathon workflow; start from `context/README.md`.
+The Core SDK of Go Minimal, the Standards Lab organization's minimal-dependency Go standard:
+the common primitives useful across all Go Minimal application types — layered configuration,
+the process lifecycle, and the logger. Managed with the marathon workflow; start from
+`context/README.md`.
 
-## Conventions are settled in the repository
+## Design is documented in the landing zone
 
-The design and conventions for this SDK are recorded in `context/design/` — that is the authority.
-Keep them there; do not restate them here.
+The design and conventions of this repository are documented in the organization's
+[documentation landing zone](https://github.com/standards-lab/docs) — that is the authority.
+`context/` records only working knowledge the landing zone and the code do not express; do not
+restate documented design here. A change that alters documented behavior updates the landing
+zone page in the same effort.
 
 ## Role boundary
 
@@ -18,14 +22,11 @@ implementation guide, and the reset file.
 
 ## Repository specifics
 
-- **Module layout** — one Go module rooted at `github.com/standards-lab/go-core`; each capability is
-  a package (`config`, `lifecycle`, `logging`). No sub-modules.
-- **Dependencies** — the standard library alone; at most, packages as idiomatic and stable as the
-  standard library. Vendor SDKs never enter this module.
-- **Releases** — the module is tagged `v<semver>` at the root from `CHANGELOG.md`, cut by
-  `.github/workflows/release.yml`.
-- **Tests** are co-located `{file}_test.go` files in an external black-box package
-  (`package <pkg>_test`) that exercise the public API.
-- **Tasks** run through `mise` (`build`, `test`, `vet`, `fmt`, `tidy`, `lint`).
+- **Module layout** — one Go module rooted at `github.com/standards-lab/go-core`; each primitive
+  is a package (`config`, `lifecycle`, `logging`). No sub-modules.
+- **Dependencies** — the standard library alone; this repository enhances Go Minimal's
+  dependency line.
+- **Releases, CI, tests, tasks** — per the Go Minimal standard principles in the landing zone
+  (root `v<semver>` tags from `CHANGELOG.md`, co-located black-box tests, mise tasks).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
   config.
