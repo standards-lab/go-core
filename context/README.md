@@ -18,8 +18,9 @@ API, and the landing zone documents the design.
 
 - **config** — layered configuration through the merge/finalize contract. Documented in
   [Configuration](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-core/config.md).
-- **lifecycle** — the process lifecycle: concurrent startup, live readiness, timeout-bounded
-  drain. Documented in the standard's
+- **lifecycle** — the process lifecycle: staged services (ordered startup, reverse-stage
+  drain, named readiness checks), bracketing hooks, live readiness, timeout-bounded drain.
+  Documented in the standard's
   [lifecycle and context ownership](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/principles/lifecycle-and-context.md)
   principle.
 - **logging** — the `*slog.Logger` a process writes through. Documented in
