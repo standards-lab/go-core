@@ -2,7 +2,7 @@
 //
 // A [Coordinator]'s life divides into an inert declaration phase and a single
 // blocking call that owns everything after. While waiting, the registration
-// calls — [Coordinator.OnStartup], [Coordinator.OnShutdown],
+// calls — [Coordinator.Add], [Coordinator.OnStartup], [Coordinator.OnShutdown],
 // [Coordinator.OnReady], [Coordinator.Monitor] — declare what starting,
 // draining, becoming ready, and runtime failure mean for this service; nothing
 // executes. [Coordinator.Run] then drives the whole sequence and returns one
@@ -10,6 +10,19 @@
 // → DRAINING → STOPPED; registration is legal only while waiting, Run exactly
 // once, and each violation panics — a late registration is a programming
 // error, not a runtime condition.
+//
+// # Services and hooks
+//
+// A subsystem with a name and a place in the process's dependency order is a
+// [Service], added with [Coordinator.Add]. Its Stage orders it against the
+// other services: numbered stages start ascending with a barrier between
+// them, services within a stage start concurrently, and [StageRoot] reserves
+// the request edge — started after every numbered stage, drained first. The
+// drain reverses the stages, shutting down only services whose Start
+// succeeded. Hooks carry no ordering and bracket the stages: OnStartup hooks
+// run before the first stage, OnShutdown hooks after the last drain stage. A
+// subsystem that must order against the services is itself a Service; a
+// process-level callback with no name or order is a hook.
 //
 // # Context ownership
 //
@@ -21,14 +34,17 @@
 //
 // # Startup and readiness
 //
-// Run launches every startup hook concurrently and waits. If any hook returns
-// an error, the coordinator drains what did start and Run returns the joined
-// failures wrapped "startup:" — readiness never flips, so a probe backed by
-// [Coordinator.Ready] cannot report a partially started process. On success
-// the coordinator is ready and the OnReady hooks run synchronously, in
-// registration order. [Coordinator] satisfies [ReadinessChecker], the
-// contract a /readyz endpoint consumes; readiness is non-monotonic, false
-// again the moment draining begins.
+// Run launches every startup hook concurrently and waits, then starts the
+// service stages. If a hook or a service returns an error, the coordinator
+// drains what did start and Run returns the joined failures wrapped
+// "startup:", each service failure labeled with its name — readiness never
+// flips, so a probe backed by [Coordinator.Ready] cannot report a partially
+// started process. On success the coordinator is ready and the OnReady hooks
+// run synchronously, in registration order. [Coordinator] satisfies
+// [ReadinessChecker], the contract a /readyz endpoint consumes; readiness is
+// non-monotonic, false again the moment draining begins. [Coordinator.Checks]
+// exposes the services' named checks in start order for a probe aggregate to
+// consume.
 //
 // # Running and monitors
 //
@@ -40,12 +56,15 @@
 //
 // # Drain
 //
-// The drain runs every shutdown hook concurrently, each passed a fresh drain
-// context bounded by Run's timeout and derived from context.Background, so
-// cleanup has its whole budget regardless of the cancelled run context. Hook
-// errors join Run's return wrapped "shutdown:"; a drain that outlives the
-// timeout adds an error wrapping context.DeadlineExceeded while the
-// unfinished hooks continue on the expired context — the coordinator cannot
-// stop a goroutine — so hooks that honor their context stop promptly. Run
-// returns nil exactly when a signal-driven exit drained cleanly.
+// The drain runs the root stage first, the numbered stages descending, and
+// finally every shutdown hook — each phase concurrent within itself, every
+// participant passed a fresh drain context bounded by Run's timeout and
+// derived from context.Background, so cleanup has its whole budget
+// regardless of the cancelled run context. Errors join Run's return wrapped
+// "shutdown:", service failures labeled by name. A drain that outlives the
+// timeout adds one error wrapping context.DeadlineExceeded while unfinished
+// work continues on the expired context — the coordinator cannot stop a
+// goroutine — and the remaining phases are still attempted, so participants
+// that honor their context stop promptly. Run returns nil exactly when a
+// signal-driven exit drained cleanly.
 package lifecycle

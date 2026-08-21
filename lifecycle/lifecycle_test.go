@@ -3,7 +3,10 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -399,4 +402,411 @@ func TestRun_CalledTwicePanics(t *testing.T) {
 		}
 	}()
 	_ = lc.Run(cancelled(), failsafe)
+}
+
+// recorder collects ordered step labels from hooks and services across
+// goroutines.
+type recorder struct {
+	mu    sync.Mutex
+	steps []string
+}
+
+func (r *recorder) add(step string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.steps = append(r.steps, step)
+}
+
+func (r *recorder) list() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.steps)
+}
+
+// staticChecker reports a fixed readiness.
+type staticChecker bool
+
+func (s staticChecker) Ready() bool { return bool(s) }
+
+func TestRun_StagesStartInOrderRootLast(t *testing.T) {
+	lc := lifecycle.New()
+	rec := &recorder{}
+
+	add := func(name string, stage int) {
+		lc.Add(lifecycle.Service{
+			Name:  name,
+			Stage: stage,
+			Start: func(context.Context) error {
+				rec.add(name)
+				return nil
+			},
+		})
+	}
+	// Added out of start order: sorting the stages, not Add order, decides.
+	add("server", lifecycle.StageRoot)
+	add("consumer", 1)
+	add("pool", 0)
+
+	ready := make(chan struct{})
+	lc.OnReady(func() { close(ready) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := run(ctx, lc, failsafe)
+
+	recvOrFail(t, ready, "coordinator to become ready")
+	cancel()
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	want := []string{"pool", "consumer", "server"}
+	if got := rec.list(); !slices.Equal(got, want) {
+		t.Fatalf("start order = %v, want %v", got, want)
+	}
+}
+
+func TestRun_ServicesWithinAStageStartConcurrently(t *testing.T) {
+	lc := lifecycle.New()
+
+	const n = 3
+	arrived := make(chan struct{}, n)
+	release := make(chan struct{})
+	for i := range n {
+		lc.Add(lifecycle.Service{
+			Name:  fmt.Sprintf("svc-%d", i),
+			Stage: 0,
+			Start: func(context.Context) error {
+				arrived <- struct{}{}
+				<-release
+				return nil
+			},
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := run(ctx, lc, failsafe)
+
+	// Every member must reach its arrival send before any is released, which
+	// only holds if the stage starts them simultaneously.
+	for range n {
+		recvOrFail(t, arrived, "stage member arrival")
+	}
+	close(release)
+	cancel()
+
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestRun_StageBarrierBlocksTheNextStage(t *testing.T) {
+	lc := lifecycle.New()
+
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	lc.Add(lifecycle.Service{
+		Name:  "first",
+		Stage: 0,
+		Start: func(context.Context) error {
+			close(blocked)
+			<-release
+			return nil
+		},
+	})
+
+	var second atomic.Bool
+	lc.Add(lifecycle.Service{
+		Name:  "second",
+		Stage: 1,
+		Start: func(context.Context) error {
+			second.Store(true)
+			return nil
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := run(ctx, lc, failsafe)
+
+	recvOrFail(t, blocked, "stage 0 to start")
+	time.Sleep(20 * time.Millisecond)
+	if second.Load() {
+		t.Fatal("stage 1 started while stage 0 was still starting")
+	}
+
+	close(release)
+	cancel()
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !second.Load() {
+		t.Fatal("stage 1 never started")
+	}
+}
+
+func TestRun_DrainReversesStagesRootFirst(t *testing.T) {
+	lc := lifecycle.New()
+	rec := &recorder{}
+
+	lc.Add(lifecycle.Service{
+		Name:     "pool",
+		Stage:    0,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: func(context.Context) error { rec.add("pool"); return nil },
+	})
+	// A Start-less service still counts as started once its stage runs, so
+	// its Shutdown participates in the drain.
+	lc.Add(lifecycle.Service{
+		Name:     "flusher",
+		Stage:    1,
+		Shutdown: func(context.Context) error { rec.add("flusher"); return nil },
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "server",
+		Stage:    lifecycle.StageRoot,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: func(context.Context) error { rec.add("server"); return nil },
+	})
+
+	if err := lc.Run(cancelled(), failsafe); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	want := []string{"server", "flusher", "pool"}
+	if got := rec.list(); !slices.Equal(got, want) {
+		t.Fatalf("drain order = %v, want %v", got, want)
+	}
+}
+
+func TestRun_JoinsServiceShutdownErrorsWithNames(t *testing.T) {
+	lc := lifecycle.New()
+
+	poolErr := errors.New("pool close failed")
+	busErr := errors.New("bus close failed")
+	lc.Add(lifecycle.Service{
+		Name:     "pool",
+		Stage:    0,
+		Shutdown: func(context.Context) error { return poolErr },
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "bus",
+		Stage:    1,
+		Shutdown: func(context.Context) error { return busErr },
+	})
+
+	err := lc.Run(cancelled(), failsafe)
+	if !errors.Is(err, poolErr) || !errors.Is(err, busErr) {
+		t.Fatalf("error = %v, want both shutdown failures joined", err)
+	}
+	if !strings.Contains(err.Error(), "shutdown:") {
+		t.Errorf("error = %v, want the shutdown phase wrap", err)
+	}
+	if !strings.Contains(err.Error(), "pool:") || !strings.Contains(err.Error(), "bus:") {
+		t.Errorf("error = %v, want each failure labeled with its service name", err)
+	}
+}
+
+func TestRun_StageFailureSkipsLaterStagesAndUnwindsStartedOnly(t *testing.T) {
+	lc := lifecycle.New()
+	rec := &recorder{}
+	sentinel := errors.New("bus connect failed")
+
+	stopRecording := func(name string) func(context.Context) error {
+		return func(context.Context) error {
+			rec.add(name)
+			return nil
+		}
+	}
+
+	lc.Add(lifecycle.Service{
+		Name:     "pool",
+		Stage:    0,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: stopRecording("pool"),
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "bus",
+		Stage:    1,
+		Start:    func(context.Context) error { return sentinel },
+		Shutdown: stopRecording("bus"),
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "cache",
+		Stage:    1,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: stopRecording("cache"),
+	})
+
+	var serverStarted atomic.Bool
+	lc.Add(lifecycle.Service{
+		Name:  "server",
+		Stage: lifecycle.StageRoot,
+		Start: func(context.Context) error {
+			serverStarted.Store(true)
+			return nil
+		},
+		Shutdown: stopRecording("server"),
+	})
+
+	err := lc.Run(context.Background(), failsafe)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
+	}
+	if !strings.Contains(err.Error(), "startup:") || !strings.Contains(err.Error(), "bus:") {
+		t.Errorf("error = %v, want the startup wrap naming the failed service", err)
+	}
+	if serverStarted.Load() {
+		t.Error("a later stage started after an earlier stage failed")
+	}
+
+	// The failing stage finishes its concurrent starts, so cache is started
+	// and unwinds; bus failed and does not; server never ran.
+	want := []string{"cache", "pool"}
+	if got := rec.list(); !slices.Equal(got, want) {
+		t.Fatalf("unwind = %v, want %v (started services only, in reverse)", got, want)
+	}
+}
+
+func TestRun_HooksBracketTheServiceStages(t *testing.T) {
+	lc := lifecycle.New()
+	rec := &recorder{}
+
+	lc.OnStartup(func(context.Context) error {
+		rec.add("hook-up")
+		return nil
+	})
+	lc.OnShutdown(func(context.Context) error {
+		rec.add("hook-down")
+		return nil
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "svc",
+		Stage:    0,
+		Start:    func(context.Context) error { rec.add("svc-up"); return nil },
+		Shutdown: func(context.Context) error { rec.add("svc-down"); return nil },
+	})
+
+	if err := lc.Run(cancelled(), failsafe); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	want := []string{"hook-up", "svc-up", "svc-down", "hook-down"}
+	if got := rec.list(); !slices.Equal(got, want) {
+		t.Fatalf("sequence = %v, want %v", got, want)
+	}
+}
+
+func TestChecks_CollectsInStartOrderSkippingNil(t *testing.T) {
+	lc := lifecycle.New()
+
+	lc.Add(lifecycle.Service{
+		Name:  "server",
+		Stage: lifecycle.StageRoot,
+		Check: staticChecker(true),
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "pool",
+		Stage: 0,
+		Check: staticChecker(true),
+	})
+	lc.Add(lifecycle.Service{
+		Name:     "flusher",
+		Stage:    0,
+		Shutdown: func(context.Context) error { return nil },
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "bus",
+		Stage: 1,
+		Check: staticChecker(false),
+	})
+
+	checks := lc.Checks()
+	var names []string
+	for _, check := range checks {
+		names = append(names, check.Name)
+	}
+	want := []string{"pool", "bus", "server"}
+	if !slices.Equal(names, want) {
+		t.Fatalf("checks = %v, want %v", names, want)
+	}
+	if !checks[0].Checker.Ready() || checks[1].Checker.Ready() {
+		t.Error("checkers were not carried through")
+	}
+}
+
+func TestAdd_Validation(t *testing.T) {
+	valid := lifecycle.Service{
+		Name:  "svc",
+		Start: func(context.Context) error { return nil },
+	}
+
+	for _, tc := range []struct {
+		name string
+		want string
+		add  func(lc *lifecycle.Coordinator)
+	}{
+		{
+			name: "EmptyName",
+			want: "lifecycle: Add: empty service name",
+			add: func(lc *lifecycle.Coordinator) {
+				svc := valid
+				svc.Name = ""
+				lc.Add(svc)
+			},
+		},
+		{
+			name: "NegativeStage",
+			want: `lifecycle: Add: service "svc": negative stage -1`,
+			add: func(lc *lifecycle.Coordinator) {
+				svc := valid
+				svc.Stage = -1
+				lc.Add(svc)
+			},
+		},
+		{
+			name: "DeclaresNothing",
+			want: `lifecycle: Add: service "svc" declares nothing`,
+			add: func(lc *lifecycle.Coordinator) {
+				lc.Add(lifecycle.Service{Name: "svc"})
+			},
+		},
+		{
+			name: "DuplicateName",
+			want: `lifecycle: Add: duplicate service "svc"`,
+			add: func(lc *lifecycle.Coordinator) {
+				lc.Add(valid)
+				lc.Add(valid)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lc := lifecycle.New()
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("Add did not panic")
+				}
+				if r != tc.want {
+					t.Fatalf("panic = %v, want %q", r, tc.want)
+				}
+			}()
+			tc.add(lc)
+		})
+	}
+
+	t.Run("AfterRun", func(t *testing.T) {
+		lc := lifecycle.New()
+		if err := lc.Run(cancelled(), failsafe); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("Add after Run did not panic")
+			}
+			if want := "lifecycle: Add after Run"; r != want {
+				t.Fatalf("panic = %v, want %q", r, want)
+			}
+		}()
+		lc.Add(valid)
+	})
 }
