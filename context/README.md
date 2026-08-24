@@ -13,7 +13,7 @@ standard. This repository enhances the standard's dependency line to the standar
 
 ## Capability map
 
-All three packages are built; the code and each package's `doc.go` are authoritative for the
+All four packages are built; the code and each package's `doc.go` are authoritative for the
 API, and the landing zone documents the design.
 
 - **config** — layered configuration through the merge/finalize contract. Documented in
@@ -25,6 +25,11 @@ API, and the landing zone documents the design.
   principle.
 - **logging** — the `*slog.Logger` a process writes through. Documented in
   [Logging](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-core/logging.md).
+- **process** — the pre-infrastructure main sequence: the signal-derived root context,
+  pre-logger failure and usage reporting, and the exit-code convention the reporters return.
+  Documented alongside the
+  [lifecycle and context ownership](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/principles/lifecycle-and-context.md)
+  principle.
 
 The map is complete for the tier. The Core SDK grows only when a pattern proves process-level
 and universal; it never grows toward one application type or one external technology.
