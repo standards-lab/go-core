@@ -1,3 +1,3 @@
 module github.com/standards-lab/go-core
 
-go 1.26
+go 1.27

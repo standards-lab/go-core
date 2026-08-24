@@ -4,6 +4,24 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0] - 2026-08-24
+
+The pre-infrastructure main sequence is now a package. Every composition root in the standard
+carried the same signal wiring and exit-code convention inline; `process` holds it once, so the
+convention cannot drift between a program's binaries.
+
+### Added
+
+- `process` — the parts of a binary's main sequence that run before the program's own
+  infrastructure exists: `SignalContext` builds the signal-derived root context, `Fail` and
+  `Usage` report to a writer when no logger exists yet, and `ExitOK`/`ExitFailure`/`ExitUsage`
+  fix the exit-code convention the reporters return.
+
+### Changed
+
+- The module builds on Go 1.27 (from 1.26), aligning it with the rest of the standard's
+  modules.
+
 ## [v0.2.0] - 2026-08-21
 
 The lifecycle coordinator now starts and stops services in stages: a subsystem declares its

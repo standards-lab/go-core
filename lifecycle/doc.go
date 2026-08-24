@@ -26,8 +26,8 @@
 //
 // # Context ownership
 //
-// The caller owns the signal context: a composition root builds one with
-// signal.NotifyContext and passes it to Run. Run derives the run context —
+// The caller owns the signal context: a composition root builds one — the
+// process package's SignalContext — and passes it to Run. Run derives the run context —
 // cancelled by the signal, by a monitored failure, or when Run ends — and
 // passes it to every startup hook; work that outlives its hook keeps watching
 // that context. The coordinator installs no signal handlers of its own.
