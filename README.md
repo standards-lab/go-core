@@ -21,6 +21,9 @@ stable as the standard library, this repository depends on the standard library 
 - `lifecycle` — starts subsystems concurrently, tracks and reports readiness as subsystem status
   changes, and shuts down within a timeout.
 - `logging` — builds an `*slog.Logger` from a configuration that `config` loads.
+- `process` — the parts of a binary's main sequence that run before the program's own
+  infrastructure exists: the signal-derived root context, pre-logger failure reporting, and the
+  exit-code convention.
 
 ## Development
 
