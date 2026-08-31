@@ -1,6 +1,6 @@
 # go-core
 
-Core SDK for Standards Lab's Go Minimal standard: layered configuration, process lifecycle, and
+Core SDK for Standards Lab's Go Elemental standard: layered configuration, process lifecycle, and
 logging.
 
 `github.com/standards-lab/go-core` is a single Go module with the process-level packages every
@@ -9,10 +9,10 @@ program in the standard builds on.
 ## Standard
 
 `go-core` is the Core SDK of
-[Go Minimal](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/index.md), the
+[Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md), the
 minimal-dependency Go standard, and its design is documented on the standard's
-[go-core page](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-core/index.md).
-It enhances the standard's dependency line: where Go Minimal admits packages as idiomatic and
+[go-core page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-core/index.md).
+It enhances the standard's dependency line: where Go Elemental admits packages as idiomatic and
 stable as the standard library, this repository depends on the standard library alone.
 
 ## Packages
