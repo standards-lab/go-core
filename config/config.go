@@ -71,7 +71,7 @@ func (o Options) overlay(name, env string) string {
 }
 
 func (o Options) validate() error {
-	if probe := o.overlay("proble.json", "env"); strings.Contains(probe, "%!") {
+	if probe := o.overlay("probe.json", "env"); strings.Contains(probe, "%!") {
 		return fmt.Errorf("invalid overlay pattern %q", o.OverlayPattern)
 	}
 	return nil

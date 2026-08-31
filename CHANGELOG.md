@@ -4,6 +4,13 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `config`: the overlay-pattern probe filename typo (`proble.json` → `probe.json`); the probe is
+  a throwaway input to the format-verb check, so behavior is unchanged.
+
 ## [v0.3.0] - 2026-08-24
 
 The pre-infrastructure main sequence is now a package. Every composition root in the standard
@@ -65,3 +72,8 @@ depends on the standard library alone.
 - `logging` — construction of the process `*slog.Logger` from a configuration that takes part in the
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
+
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/standards-lab/go-core/compare/v0.2.0...v0.3.0
+[v0.2.0]: https://github.com/standards-lab/go-core/compare/v0.1.0...v0.2.0
+[v0.1.0]: https://github.com/standards-lab/go-core/releases/tag/v0.1.0
