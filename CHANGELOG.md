@@ -6,6 +6,14 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-09-07
+
+### Fixed
+
+- `process/processtest`: `Main` resolves the module root as the suite package's own module.
+  It listed modules, which under a multi-module `go.work` is every module, so a suite in a
+  workspace of sibling checkouts failed to build its program before any test ran.
+
 ## [v0.4.0] - 2026-09-07
 
 The integration toolkit beside `process`. A library whose infrastructure is exercised by
@@ -91,7 +99,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.4.1...HEAD
+[v0.4.1]: https://github.com/standards-lab/go-core/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/standards-lab/go-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-core/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/standards-lab/go-core/compare/v0.1.0...v0.2.0
