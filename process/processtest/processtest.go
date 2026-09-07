@@ -60,10 +60,12 @@ func run(m *testing.M, pkg string) (int, error) {
 	return m.Run(), nil
 }
 
-// moduleRoot resolves the module directory, the working directory the
-// program loads its files from.
+// moduleRoot resolves the directory of the module the suite's package
+// belongs to, the working directory the program loads its files from. It
+// asks for the current package's module rather than listing modules,
+// since under a multi-module workspace the list is every module.
 func moduleRoot() (string, error) {
-	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	out, err := exec.Command("go", "list", "-f", "{{.Module.Dir}}", ".").Output()
 	if err != nil {
 		return "", fmt.Errorf("locate module root: %w", err)
 	}
