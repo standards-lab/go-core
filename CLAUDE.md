@@ -2,8 +2,8 @@
 
 The Core SDK of Go Elemental, the Standards Lab organization's Go implementation of the
 Elemental Architecture: the common primitives useful across all Go Elemental application
-types — layered configuration,
-the process lifecycle, and the logger. Managed with the marathon workflow; start from
+types: layered configuration, the process lifecycle, the logger, and the pre-infrastructure
+main sequence with its integration toolkit. Managed with the marathon workflow; start from
 `context/README.md`.
 
 ## Design is documented in the landing zone
@@ -17,9 +17,9 @@ zone page in the same effort.
 ## Repository specifics
 
 - **Module layout** — one Go module rooted at `github.com/standards-lab/go-core`; each primitive
-  is a package (`config`, `lifecycle`, `logging`). No sub-modules.
-- **Dependencies** — the standard library alone; this repository enhances Go Elemental's
-  dependency line.
+  is a package, and the README lists them. No sub-modules.
+- **Dependencies** — the standard library alone, the enhancement the README's Standard section
+  states.
 - **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the landing zone
   (root `v<semver>` tags from `CHANGELOG.md`, co-located black-box tests, mise tasks).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
