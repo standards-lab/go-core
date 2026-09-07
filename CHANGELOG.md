@@ -6,6 +6,24 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-09-07
+
+The integration toolkit beside `process`. A library whose infrastructure is exercised by
+integration testing ships its toolkit beside it, and the reference service's harness proved
+the runner and the relay process-level: they move here from the service, their API as built.
+
+### Added
+
+- `process/processtest` — runs a program as the binary and drives it only through the seams a
+  terminal or an orchestrator uses: `Main` builds one main package per suite run with the race
+  detector, `Launch` runs it as a subprocess with a composed environment and captured output,
+  `Process.Await` waits on an observable condition and fails with the output if the process
+  exits first, `Process.Stop` interrupts it and returns the exit code, and `FreePort` and
+  `WaitFor` sit beside them. `Forwarder` is a loopback TCP relay between the process and a
+  backing service, the seam a test injects an outage through: `Sever` refuses new connections
+  and drops the open ones, `Restore` listens again on the same address. Hermetic: the package
+  proves itself on the unit tier against its own test program.
+
 ### Fixed
 
 - `config`: the overlay-pattern probe filename typo (`proble.json` → `probe.json`); the probe is
@@ -73,7 +91,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/standards-lab/go-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-core/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/standards-lab/go-core/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/standards-lab/go-core/releases/tag/v0.1.0
