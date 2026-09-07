@@ -24,6 +24,9 @@ stable as the standard library, this repository depends on the standard library 
 - `process` — the parts of a binary's main sequence that run before the program's own
   infrastructure exists: the signal-derived root context, pre-logger failure reporting, and the
   exit-code convention.
+- `process/processtest` — the integration toolkit: builds a program once per suite run, runs it
+  as a subprocess, waits on what a client observes, interrupts it and reads its exit code, and
+  relays a backing service's connection so a test can sever it.
 
 ## Development
 

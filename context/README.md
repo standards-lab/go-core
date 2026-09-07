@@ -14,7 +14,7 @@ standard. This repository enhances the standard's dependency line to the standar
 
 ## Capability map
 
-All four packages are built; the code and each package's `doc.go` are authoritative for the
+All five packages are built; the code and each package's `doc.go` are authoritative for the
 API, and the landing zone documents the design.
 
 - **config** — layered configuration through the merge/finalize contract. Documented in
@@ -31,6 +31,11 @@ API, and the landing zone documents the design.
   Documented alongside the
   [lifecycle and context ownership](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/principles/lifecycle-and-context.md)
   principle.
+- **process/processtest** — the integration toolkit beside `process`: the runner that builds a
+  program once per suite run and drives it as a subprocess through signals, its exit code, and
+  what a client observes, and the loopback relay a test severs to inject an outage. Built at
+  `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness; the landing
+  zone page is due in the docs pass.
 
 The map is complete for the tier. The Core SDK grows only when a pattern proves process-level
 and universal; it never grows toward one application type or one external technology.
