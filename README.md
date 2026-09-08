@@ -9,9 +9,9 @@ program in the standard builds on.
 ## Standard
 
 `go-core` is the Core SDK of
-[Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md), the
-minimal-dependency Go standard, and its design is documented on the standard's
-[go-core page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-core/index.md).
+[Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md), the
+minimal-dependency Go standard. This README and each package's `doc.go` document the
+repository; the standard's principles it enhances are stated below.
 It enhances the standard's dependency line: where Go Elemental admits packages as idiomatic and
 stable as the standard library, this repository depends on the standard library alone.
 
