@@ -1,10 +1,10 @@
 # go-core
 
-The Core SDK of Go Elemental, the Standards Lab organization's Go implementation of the
-Elemental Architecture: the common primitives useful across all Go Elemental application
-types: layered configuration, the process lifecycle, the logger, and the pre-infrastructure
-main sequence with its integration toolkit. Managed with the marathon workflow; start from
-`context/README.md`.
+go-core is the Core SDK of Go Elemental, the Standards Lab organization's Go implementation of
+the Elemental Architecture. It provides the common primitives every Go Elemental application
+type uses: layered configuration, the process lifecycle, the logger, and the pre-infrastructure
+main sequence with its integration toolkit. The repository is managed with the marathon
+workflow; start from `context/README.md`.
 
 ## Documentation lives in the repository
 

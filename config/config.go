@@ -17,8 +17,12 @@ const (
 
 // Config is the contract a configuration type's pointer implements to take
 // part in [Load]: Merge overlays another instance's set fields onto the
-// receiver, and Finalize composes its environment override names from the
-// prefix, applies defaults, reads the overrides, and validates.
+// receiver, and Finalize runs, in order:
+//
+//   - composes its environment override names from the prefix
+//   - applies defaults
+//   - reads the overrides
+//   - validates
 type Config[T any] interface {
 	*T
 	Merge(src *T)

@@ -6,7 +6,7 @@ import (
 )
 
 // New returns a logger writing to w: a JSON handler for [FormatJSON], a text
-// handler otherwise. New returns no error — Finalize is the validation point —
+// handler otherwise. New returns no error. Finalize is the validation point,
 // and an unparseable level falls back to info.
 func New(w io.Writer, cfg Config) *slog.Logger {
 	level, err := cfg.Level.Slog()

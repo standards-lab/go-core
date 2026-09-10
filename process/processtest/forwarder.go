@@ -8,13 +8,14 @@ import (
 )
 
 // Forwarder is a loopback TCP relay between the process and one of its
-// backing services, the seam a test injects an outage through: the process
-// is configured against the forwarder's address instead of the backing
-// service's, Sever refuses new connections and drops the open ones, and
-// Restore listens again on the same address so the process reconnects. It
-// relays bytes and knows nothing of the protocol, so any TCP-backed
-// service a process depends on takes the same seam: a database, a broker,
-// a cache. The process cannot tell it from the network.
+// backing services: the interposed connection a test uses to inject an
+// outage. The process is configured against the forwarder's address
+// instead of the backing service's; Sever refuses new connections and
+// drops the open ones, and Restore listens again on the same address so
+// the process reconnects. It relays bytes and knows nothing of the
+// protocol, so any TCP-backed service a process depends on goes through
+// the same kind of relay: a database, a broker, a cache. The process
+// cannot tell it from the network.
 type Forwarder struct {
 	target string
 
