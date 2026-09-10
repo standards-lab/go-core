@@ -83,11 +83,11 @@ type Process struct {
 // Launch runs the binary Main built, in the module root, with the parent's
 // environment and env appended as KEY=VALUE overrides, and returns without
 // waiting, so a test can start several processes at once. GORACE drops the
-// race runtime's one-second sleep at exit, which exists to catch a report
-// from a goroutine still running then; races during the run are reported
-// as they happen, and every Stop would otherwise cost the second. A process
-// still running at test cleanup is interrupted, and killed if it does not
-// exit within Failsafe.
+// race runtime's one-second sleep at exit. That sleep exists to catch a
+// report from a goroutine still running then, but races during the run are
+// reported as they happen, so every Stop would otherwise cost the second
+// unnecessarily. A process still running at test cleanup is interrupted,
+// and killed if it does not exit within Failsafe.
 func Launch(t testing.TB, env ...string) *Process {
 	t.Helper()
 	if binary == "" {

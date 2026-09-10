@@ -17,7 +17,7 @@
 // [Service], added with [Coordinator.Add]. Its Stage orders it against the
 // other services: numbered stages start ascending with a barrier between
 // them, services within a stage start concurrently, and [StageRoot] reserves
-// the request edge — started after every numbered stage, drained first. The
+// the request edge: started after every numbered stage, drained first. The
 // drain reverses the stages, shutting down only services whose Start
 // succeeded. Hooks carry no ordering and bracket the stages: OnStartup hooks
 // run before the first stage, OnShutdown hooks after the last drain stage. A
@@ -37,7 +37,7 @@
 // Run launches every startup hook concurrently and waits, then starts the
 // service stages. If a hook or a service returns an error, the coordinator
 // drains what did start and Run returns the joined failures wrapped
-// "startup:", each service failure labeled with its name — readiness never
+// "startup:", each service failure labeled with its name. Readiness never
 // flips, so a probe backed by [Coordinator.Ready] cannot report a partially
 // started process. On success the coordinator is ready and the OnReady hooks
 // run synchronously, in registration order. [Coordinator] satisfies
@@ -48,8 +48,8 @@
 //
 // # Running and monitors
 //
-// While running, Run blocks until the signal context is cancelled — the clean
-// path — or a monitored channel yields a non-nil error, which ends the run
+// While running, Run blocks until the signal context is cancelled (the clean
+// path) or a monitored channel yields a non-nil error, which ends the run
 // and joins Run's return wrapped "run:". A nil received error is ignored, and
 // a channel closing retires its watcher quietly: that is the expected end of
 // a source that stopped cleanly.
@@ -57,14 +57,14 @@
 // # Drain
 //
 // The drain runs the root stage first, the numbered stages descending, and
-// finally every shutdown hook — each phase concurrent within itself, every
-// participant passed a fresh drain context bounded by Run's timeout and
-// derived from context.Background, so cleanup has its whole budget
+// finally every shutdown hook. Each phase runs concurrent within itself, and
+// every participant is passed a fresh drain context bounded by Run's timeout
+// and derived from context.Background, so cleanup has its whole budget
 // regardless of the cancelled run context. Errors join Run's return wrapped
 // "shutdown:", service failures labeled by name. A drain that outlives the
 // timeout adds one error wrapping context.DeadlineExceeded while unfinished
-// work continues on the expired context — the coordinator cannot stop a
-// goroutine — and the remaining phases are still attempted, so participants
+// work continues on the expired context (the coordinator cannot stop a
+// goroutine), and the remaining phases are still attempted, so participants
 // that honor their context stop promptly. Run returns nil exactly when a
 // signal-driven exit drained cleanly.
 package lifecycle

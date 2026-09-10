@@ -1,7 +1,7 @@
 # go-core
 
-Core SDK for Standards Lab's Go Elemental standard: layered configuration, process lifecycle, and
-logging.
+go-core is the Core SDK for Standards Lab's Go Elemental standard. It provides layered
+configuration, process lifecycle, and logging.
 
 `github.com/standards-lab/go-core` is a single Go module with the process-level packages every
 program in the standard builds on.
@@ -24,9 +24,9 @@ stable as the standard library, this repository depends on the standard library 
 - `process` — the parts of a binary's main sequence that run before the program's own
   infrastructure exists: the signal-derived root context, pre-logger failure reporting, and the
   exit-code convention.
-- `process/processtest` — the integration toolkit: builds a program once per suite run, runs it
-  as a subprocess, waits on what a client observes, interrupts it and reads its exit code, and
-  relays a backing service's connection so a test can sever it.
+- `process/processtest` — the integration toolkit: it builds a program once per suite run and
+  runs it as a subprocess. It then waits on what a client observes, interrupts the process and
+  reads its exit code, and relays a backing service's connection so a test can sever it.
 
 ## Development
 

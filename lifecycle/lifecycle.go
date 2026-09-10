@@ -19,8 +19,13 @@ const StageRoot = math.MaxInt
 
 // Coordinator hosts a process's lifecycle. Services, hooks, and monitors are
 // declared while it waits; one blocking [Coordinator.Run] then owns the whole
-// sequence — the bracketing startup hooks, the service stages, readiness,
-// monitored running, and the timed drain.
+// sequence:
+//
+//   - the bracketing startup hooks
+//   - the service stages
+//   - readiness
+//   - monitored running
+//   - the timed drain
 type Coordinator struct {
 	mu         sync.Mutex
 	state      state
@@ -45,9 +50,13 @@ func New() *Coordinator {
 // its stage completes. The drain runs the stages in reverse: the root stage
 // first, then the numbered stages descending, joining every error. Services
 // order against each other through stages; hooks carry no ordering and
-// bracket the stages instead. Add panics on an empty or duplicate Name, a
-// negative Stage, a Service declaring none of Start, Shutdown, or Check, and
-// registration after Run — each a wiring mistake surfaced at cold start.
+// bracket the stages instead. Add panics on any of these, each a wiring
+// mistake surfaced at cold start:
+//
+//   - an empty or duplicate Name
+//   - a negative Stage
+//   - a Service declaring none of Start, Shutdown, or Check
+//   - registration after Run
 func (c *Coordinator) Add(svc Service) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -156,9 +165,9 @@ func (c *Coordinator) Checks() []Check {
 // stage by stage; a failure drains what did start and returns the
 // joined errors, with readiness never flipped. Otherwise it marks the
 // coordinator ready, invokes the OnReady hooks, and blocks until ctx is
-// cancelled or a monitored channel yields an error. It then drains — the
+// cancelled or a monitored channel yields an error. It then drains (the
 // root stage first, the numbered stages descending, and finally every
-// shutdown hook, all against a fresh context bounded by drainTimeout — and
+// shutdown hook, all against a fresh context bounded by drainTimeout), and
 // returns nil for a cancellation with a clean drain, or the joined startup,
 // run, and shutdown errors otherwise. Work still running when the drain
 // times out continues on the expired context, its late errors dropped. Run

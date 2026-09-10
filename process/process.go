@@ -26,7 +26,7 @@ func Fail(w io.Writer, msg string, err error) int {
 }
 
 // Usage reports a usage error, terminating the line, and returns ExitUsage.
-// Requested help routes through it too — one path for usage output, the Go
+// Requested help routes through it too: one path for usage output, the Go
 // toolchain's own convention.
 func Usage(w io.Writer, text string) int {
 	_, _ = fmt.Fprintln(w, text)
