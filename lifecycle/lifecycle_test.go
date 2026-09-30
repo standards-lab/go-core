@@ -912,3 +912,91 @@ func TestCoordinator_ZeroValueIsUsable(t *testing.T) {
 		t.Fatalf("sequence = %v, want %v", got, want)
 	}
 }
+
+// A cancellation a service returns from a context of its own is its failure,
+// not a consequence: with the run context live and nothing on record, it is
+// kept.
+func TestRun_StartupKeepsAnUnrelatedCancellation(t *testing.T) {
+	lc := lifecycle.New()
+	lc.Add(lifecycle.Service{
+		Name: "dial",
+		Start: func(context.Context) error {
+			own, cancel := context.WithCancel(context.Background())
+			cancel()
+			return fmt.Errorf("dial: %w", own.Err())
+		},
+	})
+
+	err := lc.Run(context.Background(), failsafe)
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "startup:") {
+		t.Fatalf("error = %v, want the startup failure wrapping context.Canceled", err)
+	}
+}
+
+// A signal during startup is the signal-driven exit: the Starts that honor
+// the run context return its cancellation, the started services drain, and
+// Run returns nil.
+func TestRun_SignalDuringStartupDrainsCleanly(t *testing.T) {
+	lc := lifecycle.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	drained := make(chan struct{})
+	lc.Add(lifecycle.Service{
+		Name:     "pool",
+		Stage:    0,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: func(context.Context) error { close(drained); return nil },
+	})
+	for _, name := range []string{"bus", "cache"} {
+		lc.Add(lifecycle.Service{
+			Name:  name,
+			Stage: 1,
+			Start: func(ctx context.Context) error {
+				cancel() // the signal arrives mid-startup
+				<-ctx.Done()
+				return fmt.Errorf("connect: %w", ctx.Err())
+			},
+		})
+	}
+	readied := false
+	lc.OnReady(func() { readied = true })
+
+	if err := lc.Run(ctx, failsafe); err != nil {
+		t.Fatalf("Run after a signal during startup = %v, want nil", err)
+	}
+	recvOrFail(t, drained, "the started service's drain")
+	if readied {
+		t.Error("OnReady hooks ran for a startup the signal cut short")
+	}
+}
+
+// A signal during startup does not mask a real failure: a Start whose error
+// is not a cancellation still fails the run.
+func TestRun_SignalDuringStartupKeepsARealFailure(t *testing.T) {
+	lc := lifecycle.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sentinel := errors.New("flush failed")
+
+	lc.Add(lifecycle.Service{
+		Name: "bus",
+		Start: func(ctx context.Context) error {
+			cancel()
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+	lc.Add(lifecycle.Service{
+		Name: "cache",
+		Start: func(ctx context.Context) error {
+			<-ctx.Done()
+			return sentinel
+		},
+	})
+
+	err := lc.Run(ctx, failsafe)
+	if !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "startup:") {
+		t.Fatalf("error = %v, want the startup failure wrapping the sentinel", err)
+	}
+}

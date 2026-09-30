@@ -24,17 +24,19 @@ contracts it states.
   the four files, and data after the top-level value. Every file decodes into the same type, so
   a stray or misspelled key in `config.json` or `secrets.json` now fails the load instead of
   being ignored.
-- **Breaking:** `config.EnvName` returns `""` when the prefix is empty, where it composed the
-  name from the parts alone; an empty name reads as no override, so an empty prefix disables
-  every override without a guard. `logging.NewEnv` drops its own guard accordingly.
-- `config.Load` fails an environment value containing a path separator or `..`, and an
+- **Breaking:** `config.EnvName` returns `""` when the prefix is empty, or empty once sanitized,
+  where it composed the name from the parts alone; an empty name reads as no override, so an
+  empty prefix disables every override without a guard, and a whitespace-only `EnvPrefix` no
+  longer derives `ENV` as `EnvVar`. `logging.NewEnv` drops its own guard accordingly.
+- **Breaking:** `config.Load` fails an environment value containing `/`, `\`, or `..`, and an
   `OverlayPattern` that drops the stem or the environment, which would resolve both overlays,
   or every environment, to one file.
-- `lifecycle.Coordinator.Run` panics on a drain timeout that is not positive, which would time
-  out every drain.
+- **Breaking:** `lifecycle.Coordinator.Run` panics on a drain timeout that is not positive,
+  which would time out every drain.
 - `lifecycle`: the zero `Coordinator` is ready to use; `New` remains.
 - `lifecycle`: the first startup failure cancels the run context at once, so the rest of its
-  phase can stop early; the cancellations that follow from it are dropped from Run's error.
+  phase can stop early; the errors wrapping `context.Canceled` returned once the run context is
+  cancelled and a failure is on record are its consequence and are dropped from Run's error.
 - `process/processtest`: `Launch` appends its race option to the parent's `GORACE` instead of
   replacing it.
 - Package documentation is trimmed to the contracts it states.
@@ -43,12 +45,17 @@ contracts it states.
 
 - `lifecycle`: a startup failure drained with the run context still live, so work a started
   service left running on it kept running through the drain.
+- `lifecycle`: a signal during startup made `Run` return the cancellations of the Starts that
+  honored it; a startup cut short only by the signal context's cancellation now drains as a
+  clean exit, and `Run` returns nil when the drain is clean.
+- `config`: an empty file fails its load as `empty file` rather than a bare `EOF`, and malformed
+  data after the top-level value keeps the decoder's error.
 - `process/processtest`: `Stop` failed the test when the process had exited on its own and was
   reaped before `Exited` reported it.
 - `process/processtest`: `Forwarder` dialed the backing service in its accept loop, so a target
   that never answered stalled every later connection and `Sever`.
 - `process/processtest`: `Forwarder.Restore` without a prior `Sever` failed on the address in
-  use; it is now a no-op while listening.
+  use; it is now a no-op while listening, and concurrent calls restore once.
 - `config`: a number in exponent form for a `Duration` no longer reports itself as a fraction.
 
 ### Removed

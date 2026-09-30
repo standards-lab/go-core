@@ -12,6 +12,10 @@ import (
 type Forwarder struct {
 	target string
 
+	// restoring serializes Restore's check and listen, so two concurrent
+	// Restores cannot both find the forwarder severed.
+	restoring sync.Mutex
+
 	mu        sync.Mutex
 	listener  net.Listener
 	listening bool
@@ -109,7 +113,8 @@ func (f *Forwarder) relay(down net.Conn) {
 	<-done
 }
 
-// Sever refuses new connections and drops the relayed ones.
+// Sever refuses new connections and drops the relayed ones; a relay still
+// dialing the target finishes within Failsafe.
 func (f *Forwarder) Sever() {
 	f.mu.Lock()
 	l := f.listener
@@ -135,6 +140,8 @@ func (f *Forwarder) Sever() {
 // a no-op.
 func (f *Forwarder) Restore(t testing.TB) {
 	t.Helper()
+	f.restoring.Lock()
+	defer f.restoring.Unlock()
 	f.mu.Lock()
 	listening := f.listening
 	f.mu.Unlock()

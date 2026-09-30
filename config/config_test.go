@@ -328,11 +328,35 @@ func TestLoad_UnknownKeyFails(t *testing.T) {
 }
 
 func TestLoad_TrailingDataFails(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "config.json", `{"host":"base"} {}`)
+	for _, tc := range []struct{ name, body, want string }{
+		{"value", `{"host":"base"} {}`, "data after top-level value"},
+		{"malformed", `{"host":"base"} x`, "invalid character 'x'"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "config.json", tc.body)
 
-	if _, err := config.Load[testConfig](config.Options{Dir: dir}); err == nil {
-		t.Fatal("Load returned nil for data after the top-level value")
+			_, err := config.Load[testConfig](config.Options{Dir: dir})
+			if err == nil {
+				t.Fatal("Load returned nil for data after the top-level value")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// An empty file is named as one, not reported as a bare EOF.
+func TestLoad_EmptyFileFails(t *testing.T) {
+	for _, body := range []string{"", " \n"} {
+		dir := t.TempDir()
+		writeFile(t, dir, "config.json", body)
+
+		_, err := config.Load[testConfig](config.Options{Dir: dir})
+		if err == nil || !strings.Contains(err.Error(), "empty file") {
+			t.Errorf("Load of %q = %v, want an empty-file error", body, err)
+		}
 	}
 }
 

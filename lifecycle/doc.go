@@ -38,11 +38,15 @@
 // service stages. The first hook or service to return an error cancels the
 // run context, so the rest of its phase can stop early; the coordinator then
 // drains what did start and Run returns the joined failures wrapped
-// "startup:", each service failure labeled with its name, without the
-// cancellations the first failure caused. Readiness never flips, so a probe
-// backed by [Coordinator.Ready] cannot report a partially started process.
-// On success the coordinator is ready and the OnReady hooks run
-// synchronously, in registration order. [Coordinator] satisfies
+// "startup:", each service failure labeled with its name. The cancellations
+// that wrap context.Canceled, returned once the run context is cancelled and
+// a failure is on record, are the first failure's consequence and are
+// dropped. A signal during startup is the signal-driven exit, not a failure:
+// when every startup error wraps context.Canceled and the signal context is
+// cancelled, Run drains and returns only the drain's errors. Readiness never
+// flips, so a probe backed by [Coordinator.Ready] cannot report a partially
+// started process. On success the coordinator is ready and the OnReady hooks
+// run synchronously, in registration order. [Coordinator] satisfies
 // [ReadinessChecker], the contract a /readyz endpoint consumes; readiness is
 // non-monotonic, false again the moment draining begins. [Coordinator.Checks]
 // exposes the services' named checks in start order for a probe aggregate to
@@ -66,7 +70,7 @@
 // "shutdown:", service failures labeled by name. A drain that outlives the
 // timeout adds one error wrapping context.DeadlineExceeded while unfinished
 // work continues on the expired context, its late errors dropped (the
-// coordinator cannot stop a goroutine), and the remaining phases are still attempted, so participants
-// that honor their context stop promptly. Run returns nil exactly when a
-// signal-driven exit drained cleanly.
+// coordinator cannot stop a goroutine), and the remaining phases are still
+// attempted, so participants that honor their context stop promptly. Run
+// returns nil exactly when a signal-driven exit drained cleanly.
 package lifecycle

@@ -143,16 +143,23 @@ func Load[T any, PT Config[T]](opts Options) (PT, error) {
 	return cfg, nil
 }
 
-// decode unmarshals one JSON value into v, rejecting keys v does not declare
-// and anything after the value.
+// decode unmarshals one JSON value into v, rejecting an empty file, keys v
+// does not declare, and anything after the value.
 func decode(data []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return errors.New("empty file")
+		}
 		return err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("invalid character after top-level value")
+	switch _, err := dec.Token(); {
+	case errors.Is(err, io.EOF):
+		return nil
+	case err != nil:
+		return fmt.Errorf("after top-level value: %w", err)
+	default:
+		return errors.New("data after top-level value")
 	}
-	return nil
 }

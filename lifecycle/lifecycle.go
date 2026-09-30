@@ -143,9 +143,10 @@ func (c *Coordinator) Checks() []Check {
 }
 
 // Run drives startup, readiness, the run, and a drain bounded by
-// drainTimeout, blocking until done. It returns nil for a cancellation with
-// a clean drain, else the joined startup, run, and shutdown errors. A second
-// call, or a drainTimeout that is not positive, panics.
+// drainTimeout, blocking until done. It returns nil for a cancellation of
+// ctx with a clean drain, a startup that cancellation cut short included,
+// else the joined startup, run, and shutdown errors. A second call, or a
+// drainTimeout that is not positive, panics.
 func (c *Coordinator) Run(
 	ctx context.Context,
 	drainTimeout time.Duration,
@@ -164,12 +165,14 @@ func (c *Coordinator) Run(
 	runCtx, fail := context.WithCancelCause(ctx)
 	defer fail(nil)
 
-	if err := c.startup(runCtx, fail); err != nil {
-		return errors.Join(err, c.drain(drainTimeout))
-	}
-
-	if ctx.Err() != nil {
+	failed := c.startup(runCtx, fail)
+	// A signal before or during startup ends the run like one after it: a
+	// startup cut short only by that cancellation drains as a clean exit.
+	if ctx.Err() != nil && failed.only(context.Canceled) {
 		return c.drain(drainTimeout)
+	}
+	if err := failed.join(); err != nil {
+		return errors.Join(fmt.Errorf("startup: %w", err), c.drain(drainTimeout))
 	}
 
 	c.setState(stateRunning)
@@ -261,18 +264,15 @@ func (c *Coordinator) shutdown(timeout time.Duration) error {
 	return nil
 }
 
-// startup runs the hooks, then the stages. The first failure cancels ctx,
-// so its siblings in the phase stop early, and the cancellations they
-// return in consequence are dropped from the joined error.
-func (c *Coordinator) startup(ctx context.Context, fail context.CancelCauseFunc) error {
-	var failed failures
+// startup runs the hooks, then the stages, and returns what failed. The
+// first failure cancels ctx, so its siblings in the phase stop early, and
+// the cancellations they return in consequence are not recorded.
+func (c *Coordinator) startup(ctx context.Context, fail context.CancelCauseFunc) *failures {
+	failed := &failures{}
 	record := func(err error) {
-		if err == nil ||
-			errors.Is(err, context.Canceled) && failed.join() != nil {
-			return
+		if failed.recordUnlessConsequent(ctx, err) {
+			fail(err)
 		}
-		failed.record(err)
-		fail(err)
 	}
 
 	phases := [][]func(context.Context) error{c.onStartup}
@@ -285,11 +285,11 @@ func (c *Coordinator) startup(ctx context.Context, fail context.CancelCauseFunc)
 	}
 	for _, phase := range phases {
 		<-launch(ctx, phase, record)
-		if err := failed.join(); err != nil {
-			return fmt.Errorf("startup: %w", err)
+		if failed.any() {
+			break
 		}
 	}
-	return nil
+	return failed
 }
 
 // failures collects the errors of a phase's concurrent participants.
@@ -305,6 +305,43 @@ func (f *failures) record(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.errs = append(f.errs, err)
+}
+
+// recordUnlessConsequent records err and reports true, unless err is nil
+// or a cancellation consequent on a failure already recorded: it wraps
+// context.Canceled, ctx is cancelled, and a failure is on record. The check
+// and the record hold one lock, so two failures cannot both see none.
+func (f *failures) recordUnlessConsequent(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil && len(f.errs) > 0 {
+		return false
+	}
+	f.errs = append(f.errs, err)
+	return true
+}
+
+// any reports whether a failure is on record.
+func (f *failures) any() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.errs) > 0
+}
+
+// only reports whether every recorded failure wraps target; with none on
+// record it is true.
+func (f *failures) only(target error) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, err := range f.errs {
+		if !errors.Is(err, target) {
+			return false
+		}
+	}
+	return true
 }
 
 func (f *failures) join() error {
