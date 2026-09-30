@@ -143,6 +143,17 @@ func TestDuration_UnmarshalFractionalNumberRejected(t *testing.T) {
 	}
 }
 
+func TestDuration_UnmarshalExponentRejected(t *testing.T) {
+	var h holder
+	err := json.Unmarshal([]byte(`{"timeout":1e9}`), &h)
+	if err == nil {
+		t.Fatal("Unmarshal returned nil for an exponent-form number")
+	}
+	if strings.Contains(err.Error(), "fraction") {
+		t.Errorf("error = %v, want it not to call an exponent a fraction", err)
+	}
+}
+
 func TestDuration_UnmarshalNegativeString(t *testing.T) {
 	var h holder
 	if err := json.Unmarshal([]byte(`{"timeout":"-5s"}`), &h); err != nil {

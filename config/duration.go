@@ -7,9 +7,8 @@ import (
 	"time"
 )
 
-// Duration is a time.Duration that takes part in JSON configuration: it
-// unmarshals from the string form time.ParseDuration accepts ("1m30s") or
-// from a bare integer number of nanoseconds, and marshals as the string form.
+// Duration is a time.Duration that reads from JSON as "1m30s" or integer
+// nanoseconds, and writes as the string form.
 type Duration time.Duration
 
 // Duration returns the value as a time.Duration.
@@ -17,7 +16,6 @@ func (d Duration) Duration() time.Duration {
 	return time.Duration(d)
 }
 
-// String returns the value in time.Duration's string form.
 func (d Duration) String() string {
 	return time.Duration(d).String()
 }
@@ -42,9 +40,9 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).String())
 }
 
-// UnmarshalJSON decodes a duration string, a bare integer number of
-// nanoseconds, or null, which leaves the value unchanged. A fractional number
-// is rejected toward the string form.
+// UnmarshalJSON decodes a duration string or an integer number of
+// nanoseconds; null leaves the value unchanged, and any other number is
+// rejected.
 func (d *Duration) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -60,7 +58,7 @@ func (d *Duration) UnmarshalJSON(data []byte) error {
 	case json.Number:
 		n, err := v.Int64()
 		if err != nil {
-			return fmt.Errorf("invalid duration %s: a bare number is integer nanoseconds; use the string form (e.g. %q) for fractions", data, "1.5s")
+			return fmt.Errorf("invalid duration %s: a number must be integer nanoseconds; use the string form (e.g. %q) otherwise", data, "1.5s")
 		}
 		*d = Duration(n)
 		return nil

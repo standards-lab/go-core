@@ -53,10 +53,8 @@ func (c *testConfig) Finalize(envPrefix string) error {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
-	if envPrefix != "" {
-		if v := os.Getenv(config.EnvName(envPrefix, "host")); v != "" {
-			c.Host = v
-		}
+	if v := os.Getenv(config.EnvName(envPrefix, "host")); v != "" {
+		c.Host = v
 	}
 	if c.Port < 0 {
 		return fmt.Errorf("invalid port: %d", c.Port)
@@ -197,7 +195,13 @@ func TestLoad_CustomFilenameAndPattern(t *testing.T) {
 }
 
 func TestLoad_InvalidOverlayPattern(t *testing.T) {
-	for _, pattern := range []string{"%s.json", "config.%s.%s.%s.json"} {
+	for _, pattern := range []string{
+		"%s.json",
+		"config.%s.%s.%s.json",
+		"%[1]s.json",     // drops the environment: the overlay is the base
+		"%[2]s.json",     // drops the stem: both overlays are one file
+		"env.%[2]s.json", // a literal "env" does not stand in for the value
+	} {
 		t.Run(pattern, func(t *testing.T) {
 			_, err := config.Load[testConfig](config.Options{
 				Dir:            t.TempDir(),
@@ -301,5 +305,50 @@ func TestLoad_FinalizeError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "finalize config") {
 		t.Errorf("error = %v, want it wrapped with \"finalize config\"", err)
+	}
+}
+
+// Every layer decodes into the same T, so a key T does not declare is a typo
+// or a stale setting, in whichever file it appears.
+func TestLoad_UnknownKeyFails(t *testing.T) {
+	for _, file := range []string{"config.json", "secrets.json"} {
+		t.Run(file, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, file, `{"host":"base","hots":"typo"}`)
+
+			_, err := config.Load[testConfig](config.Options{Dir: dir})
+			if err == nil {
+				t.Fatal("Load returned nil for an undeclared key")
+			}
+			if !strings.Contains(err.Error(), "parse") || !strings.Contains(err.Error(), `"hots"`) {
+				t.Errorf("error = %v, want a parse error naming the key", err)
+			}
+		})
+	}
+}
+
+func TestLoad_TrailingDataFails(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.json", `{"host":"base"} {}`)
+
+	if _, err := config.Load[testConfig](config.Options{Dir: dir}); err == nil {
+		t.Fatal("Load returned nil for data after the top-level value")
+	}
+}
+
+// The environment value becomes part of a file name, so one that could
+// reach outside Dir fails instead of reading there.
+func TestLoad_EnvValueWithPathFails(t *testing.T) {
+	for _, env := range []string{"../prod", "a/b", `a\b`, ".."} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv(envSelector, env)
+			_, err := config.Load[testConfig](config.Options{Dir: t.TempDir(), EnvVar: envSelector})
+			if err == nil {
+				t.Fatal("Load returned nil for an environment value naming a path")
+			}
+			if !strings.Contains(err.Error(), "invalid environment") {
+				t.Errorf("error = %v, want it to reject the environment value", err)
+			}
+		})
 	}
 }

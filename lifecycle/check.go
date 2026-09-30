@@ -7,9 +7,8 @@ type ReadinessChecker interface {
 	Ready() bool
 }
 
-// Check pairs a readiness check with the name a probe reports for it. A
-// Check with a nil Checker reports not ready, so a subsystem that failed to
-// construct fails the probe instead of vanishing from it.
+// Check pairs a readiness check with the name a probe reports for it; a
+// probe treats a nil Checker as not ready.
 type Check struct {
 	Name    string
 	Checker ReadinessChecker

@@ -9,7 +9,6 @@ const (
 	FormatJSON Format = "json"
 )
 
-// String returns the format's string value.
 func (f Format) String() string {
 	return string(f)
 }

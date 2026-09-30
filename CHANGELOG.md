@@ -6,6 +6,56 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-09-30
+
+The closing review of the storage suite: correctness fixes across the lifecycle, the loader,
+and the integration toolkit; a stricter configuration load; and documentation cut to the
+contracts it states.
+
+### Added
+
+- `config.SetFromEnv` — the generic form of `SetDurationFromEnv`: it applies one environment
+  override to a tri-state (pointer) field through a parse function such as `strconv.Atoi`.
+  `SetDurationFromEnv` is now its `Duration` form.
+
+### Changed
+
+- **Breaking:** `config.Load` rejects a key the configuration type does not declare, in any of
+  the four files, and data after the top-level value. Every file decodes into the same type, so
+  a stray or misspelled key in `config.json` or `secrets.json` now fails the load instead of
+  being ignored.
+- **Breaking:** `config.EnvName` returns `""` when the prefix is empty, where it composed the
+  name from the parts alone; an empty name reads as no override, so an empty prefix disables
+  every override without a guard. `logging.NewEnv` drops its own guard accordingly.
+- `config.Load` fails an environment value containing a path separator or `..`, and an
+  `OverlayPattern` that drops the stem or the environment, which would resolve both overlays,
+  or every environment, to one file.
+- `lifecycle.Coordinator.Run` panics on a drain timeout that is not positive, which would time
+  out every drain.
+- `lifecycle`: the zero `Coordinator` is ready to use; `New` remains.
+- `lifecycle`: the first startup failure cancels the run context at once, so the rest of its
+  phase can stop early; the cancellations that follow from it are dropped from Run's error.
+- `process/processtest`: `Launch` appends its race option to the parent's `GORACE` instead of
+  replacing it.
+- Package documentation is trimmed to the contracts it states.
+
+### Fixed
+
+- `lifecycle`: a startup failure drained with the run context still live, so work a started
+  service left running on it kept running through the drain.
+- `process/processtest`: `Stop` failed the test when the process had exited on its own and was
+  reaped before `Exited` reported it.
+- `process/processtest`: `Forwarder` dialed the backing service in its accept loop, so a target
+  that never answered stalled every later connection and `Sever`.
+- `process/processtest`: `Forwarder.Restore` without a prior `Sever` failed on the address in
+  use; it is now a no-op while listening.
+- `config`: a number in exponent form for a `Duration` no longer reports itself as a fraction.
+
+### Removed
+
+- **Breaking:** `processtest.Forwarder.Close`, identical to `Sever`; `Forward` registers the
+  cleanup, and a test that severs early calls `Sever`.
+
 ## [v0.4.1] - 2026-09-07
 
 ### Fixed
@@ -99,7 +149,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.5.0...HEAD
+[v0.5.0]: https://github.com/standards-lab/go-core/compare/v0.4.1...v0.5.0
 [v0.4.1]: https://github.com/standards-lab/go-core/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/standards-lab/go-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-core/compare/v0.2.0...v0.3.0

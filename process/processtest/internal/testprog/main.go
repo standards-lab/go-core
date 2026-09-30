@@ -3,7 +3,8 @@
 // the code its environment names, so the runner is proved against a real
 // subprocess without a service behind it.
 //
-// TESTPROG_ADDR is the address to listen on; empty listens on none.
+// It reports the GORACE it runs with. TESTPROG_ADDR is the address to
+// listen on; empty listens on none.
 // TESTPROG_EXIT is the exit code, 0 by default. TESTPROG_EXIT_AT_ONCE=1
 // exits with that code before waiting for the signal.
 package main
@@ -24,6 +25,7 @@ func main() {
 func run() int {
 	code, _ := strconv.Atoi(os.Getenv("TESTPROG_EXIT"))
 	fmt.Println("testprog started")
+	fmt.Println("testprog GORACE=" + os.Getenv("GORACE"))
 	if os.Getenv("TESTPROG_EXIT_AT_ONCE") == "1" {
 		fmt.Fprintln(os.Stderr, "testprog exiting at once")
 		return code

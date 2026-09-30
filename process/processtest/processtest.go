@@ -1,6 +1,7 @@
 package processtest
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -80,14 +81,10 @@ type Process struct {
 	code   int
 }
 
-// Launch runs the binary Main built, in the module root, with the parent's
-// environment and env appended as KEY=VALUE overrides, and returns without
-// waiting, so a test can start several processes at once. GORACE drops the
-// race runtime's one-second sleep at exit. That sleep exists to catch a
-// report from a goroutine still running then, but races during the run are
-// reported as they happen, so every Stop would otherwise cost the second
-// unnecessarily. A process still running at test cleanup is interrupted,
-// and killed if it does not exit within Failsafe.
+// Launch starts the binary Main built in the module root, with the parent's
+// environment plus env's KEY=VALUE overrides, and returns without waiting.
+// At test cleanup a process still running is interrupted, then killed after
+// Failsafe.
 func Launch(t testing.TB, env ...string) *Process {
 	t.Helper()
 	if binary == "" {
@@ -95,7 +92,10 @@ func Launch(t testing.TB, env ...string) *Process {
 	}
 	cmd := exec.Command(binary)
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GORACE=atexit_sleep_ms=0")
+	// Races report as they happen, so the race runtime's one-second sleep
+	// at exit only slows every Stop; the parent's GORACE options stay.
+	gorace := strings.TrimSpace(os.Getenv("GORACE") + " atexit_sleep_ms=0")
+	cmd.Env = append(os.Environ(), "GORACE="+gorace)
 	cmd.Env = append(cmd.Env, env...)
 	out := &output{}
 	cmd.Stdout, cmd.Stderr = out, out
@@ -106,11 +106,8 @@ func Launch(t testing.TB, env ...string) *Process {
 	p := &Process{cmd: cmd, out: out, exited: make(chan struct{})}
 	go func() {
 		defer close(p.exited)
-		err := cmd.Wait()
+		_ = cmd.Wait()
 		p.code = cmd.ProcessState.ExitCode()
-		if err != nil && p.code < 0 {
-			p.code = -1
-		}
 	}()
 	t.Cleanup(func() {
 		if p.Exited() {
@@ -135,17 +132,17 @@ func Launch(t testing.TB, env ...string) *Process {
 // output.
 func (p *Process) Await(t testing.TB, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(Failsafe)
-	for time.Now().Before(deadline) {
-		if p.Exited() {
-			t.Fatalf("process exited with %d before %s:\n%s", p.code, what, p.Output())
-		}
-		if cond() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	var exited bool
+	held := poll(func() bool {
+		exited = p.Exited()
+		return exited || cond()
+	})
+	switch {
+	case exited:
+		t.Fatalf("process exited with %d before %s:\n%s", p.code, what, p.Output())
+	case !held:
+		t.Fatalf("%s not observed within %s:\n%s", what, Failsafe, p.Output())
 	}
-	t.Fatalf("%s not observed within %s:\n%s", what, Failsafe, p.Output())
 }
 
 // Output is everything the process has written so far, stdout and stderr
@@ -160,7 +157,9 @@ func (p *Process) Stop(t testing.TB) int {
 	if p.Exited() {
 		return p.code
 	}
-	if err := p.cmd.Process.Signal(syscall.SIGINT); err != nil {
+	// A process that exited on its own may be reaped before Exited reports it.
+	err := p.cmd.Process.Signal(syscall.SIGINT)
+	if err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Fatalf("interrupt process: %v", err)
 	}
 	return p.Wait(t)
@@ -226,16 +225,26 @@ func FreePort(t testing.TB) int {
 	return port
 }
 
-// WaitFor polls fn until it returns true or Failsafe elapses, failing the
-// test with what. It is Await for a condition no single process owns.
+// WaitFor polls fn until it returns true, failing the test with what if
+// Failsafe elapses first. It is Await for a condition no single process
+// owns.
 func WaitFor(t testing.TB, what string, fn func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(Failsafe)
-	for time.Now().Before(deadline) {
-		if fn() {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+	if !poll(fn) {
+		t.Fatalf("timed out waiting for %s", what)
 	}
-	t.Fatalf("timed out waiting for %s", what)
+}
+
+// poll calls cond until it holds or Failsafe elapses, reporting which.
+func poll(cond func() bool) bool {
+	deadline := time.Now().Add(Failsafe)
+	for {
+		if cond() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }

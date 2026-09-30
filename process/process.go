@@ -17,24 +17,21 @@ const (
 	ExitUsage   = 2
 )
 
-// Fail reports a runtime failure as "msg: err" and returns ExitFailure. It
-// owns the write-error discard for failures that happen before a logger
-// exists.
+// Fail writes "msg: err" to w and returns ExitFailure.
 func Fail(w io.Writer, msg string, err error) int {
 	_, _ = fmt.Fprintf(w, "%s: %v\n", msg, err)
 	return ExitFailure
 }
 
-// Usage reports a usage error, terminating the line, and returns ExitUsage.
-// Requested help routes through it too: one path for usage output, the Go
-// toolchain's own convention.
+// Usage writes text as a line to w and returns ExitUsage; help goes through it too.
 func Usage(w io.Writer, text string) int {
 	_, _ = fmt.Fprintln(w, text)
 	return ExitUsage
 }
 
 // SignalContext returns a context cancelled on SIGINT or SIGTERM, and the
-// stop function that releases the signal registration.
+// stop function that releases the signal registration. Call stop once the
+// context is done, so a second signal terminates the process at once.
 func SignalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(
 		context.Background(),

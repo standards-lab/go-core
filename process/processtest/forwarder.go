@@ -7,33 +7,27 @@ import (
 	"testing"
 )
 
-// Forwarder is a loopback TCP relay between the process and one of its
-// backing services: the interposed connection a test uses to inject an
-// outage. The process is configured against the forwarder's address
-// instead of the backing service's; Sever refuses new connections and
-// drops the open ones, and Restore listens again on the same address so
-// the process reconnects. It relays bytes and knows nothing of the
-// protocol, so any TCP-backed service a process depends on goes through
-// the same kind of relay: a database, a broker, a cache. The process
-// cannot tell it from the network.
+// Forwarder is a loopback TCP relay between the process and a backing
+// service, the connection a test severs to inject an outage.
 type Forwarder struct {
 	target string
 
-	mu       sync.Mutex
-	listener net.Listener
-	conns    map[net.Conn]struct{}
-	wg       sync.WaitGroup
+	mu        sync.Mutex
+	listener  net.Listener
+	listening bool
+	conns     map[net.Conn]struct{}
+	wg        sync.WaitGroup
 }
 
 // Forward starts relaying to target, host:port, on an ephemeral loopback
-// port; the relay is closed at test cleanup.
+// port; the relay is severed at test cleanup.
 func Forward(t testing.TB, target string) *Forwarder {
 	t.Helper()
 	f := &Forwarder{target: target, conns: map[net.Conn]struct{}{}}
 	if err := f.listen(""); err != nil {
 		t.Fatalf("forwarder: %v", err)
 	}
-	t.Cleanup(f.Close)
+	t.Cleanup(f.Sever)
 	return f
 }
 
@@ -55,12 +49,15 @@ func (f *Forwarder) listen(addr string) error {
 	}
 	f.mu.Lock()
 	f.listener = l
+	f.listening = true
 	f.mu.Unlock()
 	f.wg.Add(1)
 	go f.accept(l)
 	return nil
 }
 
+// accept tracks each connection and hands it to a relay, which dials the
+// target, so an unresponsive target never stalls the loop or Sever.
 func (f *Forwarder) accept(l net.Listener) {
 	defer f.wg.Done()
 	for {
@@ -68,13 +65,8 @@ func (f *Forwarder) accept(l net.Listener) {
 		if err != nil {
 			return
 		}
-		up, err := net.Dial("tcp", f.target)
-		if err != nil {
-			_ = c.Close()
-			continue
-		}
-		f.track(c, up)
-		go f.relay(c, up)
+		f.track(c)
+		go f.relay(c)
 	}
 }
 
@@ -95,8 +87,16 @@ func (f *Forwarder) untrack(conns ...net.Conn) {
 	}
 }
 
-// relay copies both directions until either side closes.
-func (f *Forwarder) relay(down, up net.Conn) {
+// relay dials the target and copies both directions until either side
+// closes. A connection Sever drops while the dial is in flight fails the
+// copy at once, which closes the upstream too.
+func (f *Forwarder) relay(down net.Conn) {
+	up, err := net.DialTimeout("tcp", f.target, Failsafe)
+	if err != nil {
+		f.untrack(down)
+		return
+	}
+	f.track(up)
 	done := make(chan struct{}, 2)
 	pipe := func(dst, src net.Conn) {
 		_, _ = io.Copy(dst, src)
@@ -109,16 +109,15 @@ func (f *Forwarder) relay(down, up net.Conn) {
 	<-done
 }
 
-// Sever is the outage: the listener closes, so new connections are refused,
-// and every relayed connection is dropped, so in-flight and pooled
-// connections fail on their next use. The accept loop is waited for before
-// the drop, so a connection accepted as the listener closed is tracked and
-// dropped with the rest. The address stays reserved for Restore.
+// Sever refuses new connections and drops the relayed ones.
 func (f *Forwarder) Sever() {
 	f.mu.Lock()
 	l := f.listener
+	f.listening = false
 	f.mu.Unlock()
 	_ = l.Close()
+	// Wait for the accept loop, so a connection accepted as the listener
+	// closed is tracked and dropped with the rest.
 	f.wg.Wait()
 
 	f.mu.Lock()
@@ -132,15 +131,18 @@ func (f *Forwarder) Sever() {
 	}
 }
 
-// Restore ends the outage: the forwarder listens again on the address it
-// had, and the process's next connection attempt reaches the backing service.
+// Restore listens again on the forwarder's address; while listening, it is
+// a no-op.
 func (f *Forwarder) Restore(t testing.TB) {
 	t.Helper()
+	f.mu.Lock()
+	listening := f.listening
+	f.mu.Unlock()
+	if listening {
+		return
+	}
 	addr := f.Addr()
 	if err := f.listen(addr); err != nil {
 		t.Fatalf("forwarder restore on %s: %v", addr, err)
 	}
 }
-
-// Close severs and releases the forwarder.
-func (f *Forwarder) Close() { f.Sever() }

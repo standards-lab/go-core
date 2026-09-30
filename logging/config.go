@@ -30,12 +30,8 @@ func (c *Config) Merge(src *Config) {
 	}
 }
 
-// Finalize runs, in order:
-//
-//   - normalizes the values (trimming and lower-casing)
-//   - applies defaults (info, text)
-//   - applies the environment overrides named by Env
-//   - validates
+// Finalize normalizes, applies defaults and the envPrefix-named overrides,
+// then validates.
 func (c *Config) Finalize(envPrefix string) error {
 	c.Env = NewEnv(envPrefix)
 	c.normalize()

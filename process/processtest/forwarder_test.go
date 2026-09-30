@@ -89,3 +89,14 @@ func TestForwarder_SeverDropsOpenConnections(t *testing.T) {
 		t.Fatal("open connection survived the outage")
 	}
 }
+
+// Restore is the end of an outage; with none in progress it changes nothing.
+func TestForwarder_RestoreWhileListeningIsANoOp(t *testing.T) {
+	f := processtest.Forward(t, echo(t))
+	addr := f.Addr()
+
+	f.Restore(t)
+	if got, err := roundTrip(t, addr, "still"); err != nil || got != "still\n" {
+		t.Fatalf("relay after a no-op restore = %q, %v", got, err)
+	}
+}

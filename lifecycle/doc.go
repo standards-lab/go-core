@@ -6,10 +6,9 @@
 // [Coordinator.OnReady], [Coordinator.Monitor] — declare what starting,
 // draining, becoming ready, and runtime failure mean for this service; nothing
 // executes. [Coordinator.Run] then drives the whole sequence and returns one
-// joined error. Internally the coordinator moves WAITING → STARTING → RUNNING
-// → DRAINING → STOPPED; registration is legal only while waiting, Run exactly
-// once, and each violation panics — a late registration is a programming
-// error, not a runtime condition.
+// joined error. Registration is legal only before Run, Run exactly once and
+// with a positive drain timeout, and each violation panics: it is a wiring
+// mistake, not a runtime condition.
 //
 // # Services and hooks
 //
@@ -27,20 +26,23 @@
 // # Context ownership
 //
 // The caller owns the signal context: a composition root builds one — the
-// process package's SignalContext — and passes it to Run. Run derives the run context —
-// cancelled by the signal, by a monitored failure, or when Run ends — and
-// passes it to every startup hook; work that outlives its hook keeps watching
-// that context. The coordinator installs no signal handlers of its own.
+// process package's SignalContext — and passes it to Run. Run derives the run
+// context, cancelled by the signal, by a startup or monitored failure, or when
+// Run ends, and passes it to every startup hook and service Start; work that
+// outlives its call keeps watching that context. The coordinator installs no
+// signal handlers of its own.
 //
 // # Startup and readiness
 //
 // Run launches every startup hook concurrently and waits, then starts the
-// service stages. If a hook or a service returns an error, the coordinator
+// service stages. The first hook or service to return an error cancels the
+// run context, so the rest of its phase can stop early; the coordinator then
 // drains what did start and Run returns the joined failures wrapped
-// "startup:", each service failure labeled with its name. Readiness never
-// flips, so a probe backed by [Coordinator.Ready] cannot report a partially
-// started process. On success the coordinator is ready and the OnReady hooks
-// run synchronously, in registration order. [Coordinator] satisfies
+// "startup:", each service failure labeled with its name, without the
+// cancellations the first failure caused. Readiness never flips, so a probe
+// backed by [Coordinator.Ready] cannot report a partially started process.
+// On success the coordinator is ready and the OnReady hooks run
+// synchronously, in registration order. [Coordinator] satisfies
 // [ReadinessChecker], the contract a /readyz endpoint consumes; readiness is
 // non-monotonic, false again the moment draining begins. [Coordinator.Checks]
 // exposes the services' named checks in start order for a probe aggregate to
@@ -63,8 +65,8 @@
 // regardless of the cancelled run context. Errors join Run's return wrapped
 // "shutdown:", service failures labeled by name. A drain that outlives the
 // timeout adds one error wrapping context.DeadlineExceeded while unfinished
-// work continues on the expired context (the coordinator cannot stop a
-// goroutine), and the remaining phases are still attempted, so participants
+// work continues on the expired context, its late errors dropped (the
+// coordinator cannot stop a goroutine), and the remaining phases are still attempted, so participants
 // that honor their context stop promptly. Run returns nil exactly when a
 // signal-driven exit drained cleanly.
 package lifecycle

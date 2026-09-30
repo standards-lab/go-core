@@ -810,3 +810,105 @@ func TestAdd_Validation(t *testing.T) {
 		lc.Add(valid)
 	})
 }
+
+// A startup failure cancels the run context before the drain, so work a
+// started service left running on it stops rather than outliving the drain.
+func TestRun_StartupFailureCancelsRunContextBeforeDrain(t *testing.T) {
+	lc := lifecycle.New()
+
+	var runCtx context.Context
+	runErr := make(chan error, 1)
+	lc.Add(lifecycle.Service{
+		Name:  "pool",
+		Stage: 0,
+		Start: func(ctx context.Context) error {
+			runCtx = ctx
+			return nil
+		},
+		Shutdown: func(context.Context) error {
+			runErr <- runCtx.Err()
+			return nil
+		},
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "bus",
+		Stage: 1,
+		Start: func(context.Context) error { return errors.New("bus connect failed") },
+	})
+
+	if err := lc.Run(context.Background(), failsafe); err == nil {
+		t.Fatal("Run returned nil for a failing stage")
+	}
+	if err := recvOrFail(t, runErr, "pool shutdown"); err == nil {
+		t.Error("run context was live while the startup failure drained")
+	}
+}
+
+// The first failure in a stage cancels its siblings, and the cancellation
+// they return is the failure's consequence, not a failure of its own.
+func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
+	lc := lifecycle.New()
+	sentinel := errors.New("bus connect failed")
+
+	lc.Add(lifecycle.Service{
+		Name:  "bus",
+		Stage: 0,
+		Start: func(context.Context) error { return sentinel },
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "cache",
+		Stage: 0,
+		Start: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- lc.Run(context.Background(), failsafe) }()
+	err := recvOrFail(t, done, "Run to return")
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want the sibling's consequent cancellation dropped", err)
+	}
+}
+
+// A drain timeout that is not positive would time out every drain; it is a
+// wiring mistake like a late registration.
+func TestRun_NonPositiveDrainTimeoutPanics(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		t.Run(timeout.String(), func(t *testing.T) {
+			lc := lifecycle.New()
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("Run did not panic")
+				}
+				want := fmt.Sprintf("lifecycle: Run: drain timeout %v is not positive", timeout)
+				if r != want {
+					t.Fatalf("panic = %v, want %q", r, want)
+				}
+			}()
+			_ = lc.Run(cancelled(), timeout)
+		})
+	}
+}
+
+func TestCoordinator_ZeroValueIsUsable(t *testing.T) {
+	var lc lifecycle.Coordinator
+	rec := &recorder{}
+	lc.Add(lifecycle.Service{
+		Name:     "svc",
+		Start:    func(context.Context) error { rec.add("up"); return nil },
+		Shutdown: func(context.Context) error { rec.add("down"); return nil },
+	})
+
+	if err := lc.Run(cancelled(), failsafe); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got, want := rec.list(), []string{"up", "down"}; !slices.Equal(got, want) {
+		t.Fatalf("sequence = %v, want %v", got, want)
+	}
+}
