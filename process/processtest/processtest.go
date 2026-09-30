@@ -83,8 +83,8 @@ type Process struct {
 
 // Launch starts the binary Main built in the module root, with the parent's
 // environment plus env's KEY=VALUE overrides, and returns without waiting.
-// At test cleanup a process still running is interrupted, then killed after
-// Failsafe.
+// At test cleanup, a process still running is interrupted, then killed
+// after Failsafe.
 func Launch(t testing.TB, env ...string) *Process {
 	t.Helper()
 	if binary == "" {
@@ -150,8 +150,8 @@ func (p *Process) Await(t testing.TB, what string, cond func() bool) {
 func (p *Process) Output() string { return p.out.String() }
 
 // Stop interrupts the process, the signal a terminal or an orchestrator
-// sends, waits for it to exit, and returns its exit code; a process still
-// running after Failsafe is killed and the test fails.
+// sends, waits for it to exit, and returns its exit code. A process still
+// running after Failsafe is killed, and the test fails.
 func (p *Process) Stop(t testing.TB) int {
 	t.Helper()
 	if p.Exited() {

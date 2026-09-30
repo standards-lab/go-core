@@ -33,7 +33,9 @@ type Options struct {
 	// Dir is the directory the files are read from; "." when empty.
 	Dir string
 	// EnvPrefix is passed to Finalize to name the environment overrides, and
-	// derives EnvVar when that is empty; empty disables both.
+	// derives EnvVar when that is empty. An empty EnvPrefix disables the
+	// overrides and the derivation; an EnvVar set explicitly still selects the
+	// overlays.
 	EnvPrefix string
 	// EnvVar names the variable whose value selects the overlay environment;
 	// empty derives <PREFIX>_ENV from EnvPrefix. An unset or empty value

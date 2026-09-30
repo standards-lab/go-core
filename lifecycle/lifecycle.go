@@ -143,10 +143,10 @@ func (c *Coordinator) Checks() []Check {
 }
 
 // Run drives startup, readiness, the run, and a drain bounded by
-// drainTimeout, blocking until done. It returns nil for a cancellation of
-// ctx with a clean drain, a startup that cancellation cut short included,
-// else the joined startup, run, and shutdown errors. A second call, or a
-// drainTimeout that is not positive, panics.
+// drainTimeout, blocking until done. It returns nil when a cancellation of
+// ctx ends the run, including one that cuts startup short, and the drain is
+// clean; otherwise it returns the joined startup, run, and shutdown errors.
+// A second call, or a drainTimeout that is not positive, panics.
 func (c *Coordinator) Run(
 	ctx context.Context,
 	drainTimeout time.Duration,

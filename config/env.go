@@ -26,10 +26,9 @@ func EnvName(prefix string, parts ...string) string {
 	return strings.Join(segments, "_")
 }
 
-// SetFromEnv reads the environment variable name and, when it is set, parses
-// it with parse and points dest at the result. An unset or empty variable,
-// or an empty name, leaves dest untouched; a parse failure is an error naming
-// the variable.
+// SetFromEnv parses the environment variable name with parse and points dest
+// at the result. An unset or empty variable, or an empty name, leaves dest
+// untouched; a parse failure returns an error naming the variable.
 func SetFromEnv[T any](dest **T, name string, parse func(string) (T, error)) error {
 	v := os.Getenv(name)
 	if v == "" {

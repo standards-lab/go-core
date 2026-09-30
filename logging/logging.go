@@ -5,8 +5,9 @@ import (
 	"log/slog"
 )
 
-// New returns a logger writing to w: a JSON handler for [FormatJSON], a text
-// handler otherwise; a level Finalize would reject falls back to info.
+// New returns a logger writing to w, with a JSON handler for [FormatJSON]
+// and a text handler otherwise. A level Finalize would reject falls back to
+// info.
 func New(w io.Writer, cfg Config) *slog.Logger {
 	level, err := cfg.Level.Slog()
 	if err != nil {

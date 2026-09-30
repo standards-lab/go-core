@@ -136,8 +136,8 @@ func (f *Forwarder) Sever() {
 	}
 }
 
-// Restore listens again on the forwarder's address; while listening, it is
-// a no-op.
+// Restore listens again on the forwarder's address. It is a no-op while the
+// forwarder is listening.
 func (f *Forwarder) Restore(t testing.TB) {
 	t.Helper()
 	f.restoring.Lock()

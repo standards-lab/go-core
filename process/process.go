@@ -23,7 +23,8 @@ func Fail(w io.Writer, msg string, err error) int {
 	return ExitFailure
 }
 
-// Usage writes text as a line to w and returns ExitUsage; help goes through it too.
+// Usage writes text as a line to w and returns ExitUsage. Requested help goes
+// through it too.
 func Usage(w io.Writer, text string) int {
 	_, _ = fmt.Fprintln(w, text)
 	return ExitUsage

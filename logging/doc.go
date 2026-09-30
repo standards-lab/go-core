@@ -1,6 +1,16 @@
 // Package logging constructs the *slog.Logger a process writes through, from a
 // configuration that takes part in the layered load.
 //
+// The package exports:
+//
+//   - [Config], the logger's configuration, loaded with the config package
+//   - [Env] and [NewEnv], the environment override names Config reads
+//   - [Level] and its constants [LevelDebug], [LevelInfo], [LevelWarn], and
+//     [LevelError], the minimum level the logger emits
+//   - [Format] and its constants [FormatText] and [FormatJSON], the handler
+//     the logger writes through
+//   - [New], which constructs the logger
+//
 // # Configuration
 //
 // [Config] holds a [Level] and a [Format] and implements the config package's
