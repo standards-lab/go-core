@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,8 @@ func TestEnvName(t *testing.T) {
 		{"prefix only", "app", nil, "APP"},
 		{"empty part dropped", "app", []string{"", "host"}, "APP_HOST"},
 		{"whitespace trimmed", "app", []string{"  db  ", "host"}, "APP_DB_HOST"},
-		{"empty prefix dropped", "", []string{"db"}, "DB"},
+		{"empty prefix composes no name", "", []string{"db"}, ""},
+		{"separator-only prefix composes no name", " - ", []string{"db"}, ""},
 		{"all empty", "", nil, ""},
 		{"space becomes separator", "app", []string{"db host"}, "APP_DB_HOST"},
 		{"hyphen becomes separator", "app", []string{"read-timeout"}, "APP_READ_TIMEOUT"},
@@ -79,6 +81,46 @@ func TestSetDurationFromEnv(t *testing.T) {
 		}
 		if got := err.Error(); !strings.Contains(got, name) {
 			t.Errorf("error = %q, want it to name %s", got, name)
+		}
+		if dest != nil {
+			t.Errorf("dest = %v after a failed parse, want nil", dest)
+		}
+	})
+}
+
+func TestSetFromEnv(t *testing.T) {
+	const name = "TEST_SET_FROM_ENV"
+
+	t.Run("set value parses", func(t *testing.T) {
+		t.Setenv(name, "42")
+		var dest *int
+		if err := config.SetFromEnv(&dest, name, strconv.Atoi); err != nil {
+			t.Fatalf("SetFromEnv: %v", err)
+		}
+		if dest == nil || *dest != 42 {
+			t.Errorf("dest = %v, want 42", dest)
+		}
+	})
+
+	t.Run("unset or empty name is a no-op", func(t *testing.T) {
+		prior := 7
+		dest := &prior
+		for _, n := range []string{name, ""} {
+			if err := config.SetFromEnv(&dest, n, strconv.Atoi); err != nil {
+				t.Fatalf("SetFromEnv(%q): %v", n, err)
+			}
+		}
+		if dest != &prior {
+			t.Error("dest reassigned with nothing to apply, want untouched")
+		}
+	})
+
+	t.Run("parse failure names the variable", func(t *testing.T) {
+		t.Setenv(name, "many")
+		var dest *int
+		err := config.SetFromEnv(&dest, name, strconv.Atoi)
+		if err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("error = %v, want a parse failure naming %s", err, name)
 		}
 		if dest != nil {
 			t.Errorf("dest = %v after a failed parse, want nil", dest)

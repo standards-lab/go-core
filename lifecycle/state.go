@@ -1,11 +1,13 @@
 package lifecycle
 
-type state string
+type state int
 
+// stateWaiting is the zero value, so a zero Coordinator accepts
+// registrations.
 const (
-	stateWaiting  state = "WAITING"
-	stateStarting state = "STARTING"
-	stateRunning  state = "RUNNING"
-	stateDraining state = "DRAINING"
-	stateStopped  state = "STOPPED"
+	stateWaiting state = iota
+	stateStarting
+	stateRunning
+	stateDraining
+	stateStopped
 )

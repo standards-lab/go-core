@@ -15,7 +15,6 @@ const (
 	LevelError Level = "error"
 )
 
-// String returns the level's string value.
 func (l Level) String() string {
 	return string(l)
 }

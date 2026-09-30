@@ -67,6 +67,28 @@ func TestProcess_WaitReportsOwnExit(t *testing.T) {
 	}
 }
 
+// Launch adds its race option to the parent's GORACE rather than replacing
+// it, so a suite's own race settings reach the program.
+func TestLaunch_KeepsTheParentsGORACE(t *testing.T) {
+	t.Setenv("GORACE", "halt_on_error=1")
+	p := processtest.Launch(t, "TESTPROG_EXIT_AT_ONCE=1")
+	p.Wait(t)
+
+	if want := "testprog GORACE=halt_on_error=1 atexit_sleep_ms=0"; !strings.Contains(p.Output(), want) {
+		t.Errorf("output lacks %q:\n%s", want, p.Output())
+	}
+}
+
+// Stop on a process that already exited on its own returns its code.
+func TestProcess_StopAfterOwnExit(t *testing.T) {
+	p := processtest.Launch(t, "TESTPROG_EXIT_AT_ONCE=1", "TESTPROG_EXIT=2")
+	processtest.WaitFor(t, "exit", p.Exited)
+
+	if code := p.Stop(t); code != 2 {
+		t.Errorf("Stop = %d, want 2", code)
+	}
+}
+
 // Two launches are two processes, each with its own output.
 func TestProcess_LaunchSeveral(t *testing.T) {
 	a := processtest.Launch(t, "TESTPROG_EXIT=1")

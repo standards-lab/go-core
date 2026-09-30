@@ -810,3 +810,193 @@ func TestAdd_Validation(t *testing.T) {
 		lc.Add(valid)
 	})
 }
+
+// A startup failure cancels the run context before the drain, so work a
+// started service left running on it stops rather than outliving the drain.
+func TestRun_StartupFailureCancelsRunContextBeforeDrain(t *testing.T) {
+	lc := lifecycle.New()
+
+	var runCtx context.Context
+	runErr := make(chan error, 1)
+	lc.Add(lifecycle.Service{
+		Name:  "pool",
+		Stage: 0,
+		Start: func(ctx context.Context) error {
+			runCtx = ctx
+			return nil
+		},
+		Shutdown: func(context.Context) error {
+			runErr <- runCtx.Err()
+			return nil
+		},
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "bus",
+		Stage: 1,
+		Start: func(context.Context) error { return errors.New("bus connect failed") },
+	})
+
+	if err := lc.Run(context.Background(), failsafe); err == nil {
+		t.Fatal("Run returned nil for a failing stage")
+	}
+	if err := recvOrFail(t, runErr, "pool shutdown"); err == nil {
+		t.Error("run context was live while the startup failure drained")
+	}
+}
+
+// The first failure in a stage cancels its siblings, and the cancellation
+// they return is the failure's consequence, not a failure of its own.
+func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
+	lc := lifecycle.New()
+	sentinel := errors.New("bus connect failed")
+
+	lc.Add(lifecycle.Service{
+		Name:  "bus",
+		Stage: 0,
+		Start: func(context.Context) error { return sentinel },
+	})
+	lc.Add(lifecycle.Service{
+		Name:  "cache",
+		Stage: 0,
+		Start: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- lc.Run(context.Background(), failsafe) }()
+	err := recvOrFail(t, done, "Run to return")
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want the sibling's consequent cancellation dropped", err)
+	}
+}
+
+// A drain timeout that is not positive would time out every drain; it is a
+// wiring mistake like a late registration.
+func TestRun_NonPositiveDrainTimeoutPanics(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		t.Run(timeout.String(), func(t *testing.T) {
+			lc := lifecycle.New()
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("Run did not panic")
+				}
+				want := fmt.Sprintf("lifecycle: Run: drain timeout %v is not positive", timeout)
+				if r != want {
+					t.Fatalf("panic = %v, want %q", r, want)
+				}
+			}()
+			_ = lc.Run(cancelled(), timeout)
+		})
+	}
+}
+
+func TestCoordinator_ZeroValueIsUsable(t *testing.T) {
+	var lc lifecycle.Coordinator
+	rec := &recorder{}
+	lc.Add(lifecycle.Service{
+		Name:     "svc",
+		Start:    func(context.Context) error { rec.add("up"); return nil },
+		Shutdown: func(context.Context) error { rec.add("down"); return nil },
+	})
+
+	if err := lc.Run(cancelled(), failsafe); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got, want := rec.list(), []string{"up", "down"}; !slices.Equal(got, want) {
+		t.Fatalf("sequence = %v, want %v", got, want)
+	}
+}
+
+// A cancellation a service returns from a context of its own is its failure,
+// not a consequence: with the run context live and nothing on record, it is
+// kept.
+func TestRun_StartupKeepsAnUnrelatedCancellation(t *testing.T) {
+	lc := lifecycle.New()
+	lc.Add(lifecycle.Service{
+		Name: "dial",
+		Start: func(context.Context) error {
+			own, cancel := context.WithCancel(context.Background())
+			cancel()
+			return fmt.Errorf("dial: %w", own.Err())
+		},
+	})
+
+	err := lc.Run(context.Background(), failsafe)
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "startup:") {
+		t.Fatalf("error = %v, want the startup failure wrapping context.Canceled", err)
+	}
+}
+
+// A signal during startup is the signal-driven exit: the Starts that honor
+// the run context return its cancellation, the started services drain, and
+// Run returns nil.
+func TestRun_SignalDuringStartupDrainsCleanly(t *testing.T) {
+	lc := lifecycle.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	drained := make(chan struct{})
+	lc.Add(lifecycle.Service{
+		Name:     "pool",
+		Stage:    0,
+		Start:    func(context.Context) error { return nil },
+		Shutdown: func(context.Context) error { close(drained); return nil },
+	})
+	for _, name := range []string{"bus", "cache"} {
+		lc.Add(lifecycle.Service{
+			Name:  name,
+			Stage: 1,
+			Start: func(ctx context.Context) error {
+				cancel() // the signal arrives mid-startup
+				<-ctx.Done()
+				return fmt.Errorf("connect: %w", ctx.Err())
+			},
+		})
+	}
+	readied := false
+	lc.OnReady(func() { readied = true })
+
+	if err := lc.Run(ctx, failsafe); err != nil {
+		t.Fatalf("Run after a signal during startup = %v, want nil", err)
+	}
+	recvOrFail(t, drained, "the started service's drain")
+	if readied {
+		t.Error("OnReady hooks ran for a startup the signal cut short")
+	}
+}
+
+// A signal during startup does not mask a real failure: a Start whose error
+// is not a cancellation still fails the run.
+func TestRun_SignalDuringStartupKeepsARealFailure(t *testing.T) {
+	lc := lifecycle.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sentinel := errors.New("flush failed")
+
+	lc.Add(lifecycle.Service{
+		Name: "bus",
+		Start: func(ctx context.Context) error {
+			cancel()
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+	lc.Add(lifecycle.Service{
+		Name: "cache",
+		Start: func(ctx context.Context) error {
+			<-ctx.Done()
+			return sentinel
+		},
+	})
+
+	err := lc.Run(ctx, failsafe)
+	if !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "startup:") {
+		t.Fatalf("error = %v, want the startup failure wrapping the sentinel", err)
+	}
+}

@@ -17,15 +17,8 @@ import (
 // upward from 0.
 const StageRoot = math.MaxInt
 
-// Coordinator hosts a process's lifecycle. Services, hooks, and monitors are
-// declared while it waits; one blocking [Coordinator.Run] then owns the whole
-// sequence:
-//
-//   - the bracketing startup hooks
-//   - the service stages
-//   - readiness
-//   - monitored running
-//   - the timed drain
+// Coordinator hosts a process's lifecycle: declare services, hooks, and
+// monitors, then call Run once. The zero value is ready to use.
 type Coordinator struct {
 	mu         sync.Mutex
 	state      state
@@ -38,25 +31,12 @@ type Coordinator struct {
 
 // New returns a Coordinator awaiting registrations and [Coordinator.Run].
 func New() *Coordinator {
-	return &Coordinator{
-		state:  stateWaiting,
-		stages: make(map[int][]*service),
-	}
+	return &Coordinator{}
 }
 
-// Add declares svc on the coordinator. [Coordinator.Run] starts the services
-// stage by stage — numbered stages ascending, [StageRoot] last — with every
-// service in a stage started concurrently and a failure ending startup once
-// its stage completes. The drain runs the stages in reverse: the root stage
-// first, then the numbered stages descending, joining every error. Services
-// order against each other through stages; hooks carry no ordering and
-// bracket the stages instead. Add panics on any of these, each a wiring
-// mistake surfaced at cold start:
-//
-//   - an empty or duplicate Name
-//   - a negative Stage
-//   - a Service declaring none of Start, Shutdown, or Check
-//   - registration after Run
+// Add declares svc; Run starts and drains it with its stage. Add panics on
+// an empty or duplicate Name, a negative Stage, a Service declaring nothing,
+// or a call after Run.
 func (c *Coordinator) Add(svc Service) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -80,6 +60,9 @@ func (c *Coordinator) Add(svc Service) {
 				panic(fmt.Sprintf("lifecycle: Add: duplicate service %q", svc.Name))
 			}
 		}
+	}
+	if c.stages == nil {
+		c.stages = make(map[int][]*service)
 	}
 	c.stages[svc.Stage] = append(c.stages[svc.Stage], &service{Service: svc})
 }
@@ -110,8 +93,8 @@ func (c *Coordinator) OnShutdown(fn func(context.Context) error) {
 }
 
 // OnReady registers a hook [Coordinator.Run] invokes synchronously, in
-// registration order, once every startup hook has succeeded. Registration
-// after Run panics.
+// registration order, once startup has completed: every startup hook and
+// every service stage succeeded. Registration after Run panics.
 func (c *Coordinator) OnReady(fn func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -134,8 +117,7 @@ func (c *Coordinator) Monitor(errs <-chan error) {
 	c.monitors = append(c.monitors, errs)
 }
 
-// Ready reports whether the coordinator is running: true once every startup
-// hook has succeeded, and false again the moment draining begins.
+// Ready reports whether startup has completed and draining has not begun.
 func (c *Coordinator) Ready() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -160,22 +142,18 @@ func (c *Coordinator) Checks() []Check {
 	return checks
 }
 
-// Run drives the lifecycle and blocks until it ends. It launches the startup
-// hooks concurrently and, once every hook has succeeded, starts the services
-// stage by stage; a failure drains what did start and returns the
-// joined errors, with readiness never flipped. Otherwise it marks the
-// coordinator ready, invokes the OnReady hooks, and blocks until ctx is
-// cancelled or a monitored channel yields an error. It then drains (the
-// root stage first, the numbered stages descending, and finally every
-// shutdown hook, all against a fresh context bounded by drainTimeout), and
-// returns nil for a cancellation with a clean drain, or the joined startup,
-// run, and shutdown errors otherwise. Work still running when the drain
-// times out continues on the expired context, its late errors dropped. Run
-// is legal exactly once; a second call panics.
+// Run drives startup, readiness, the run, and a drain bounded by
+// drainTimeout, blocking until done. It returns nil when a cancellation of
+// ctx ends the run, including one that cuts startup short, and the drain is
+// clean; otherwise it returns the joined startup, run, and shutdown errors.
+// A second call, or a drainTimeout that is not positive, panics.
 func (c *Coordinator) Run(
 	ctx context.Context,
 	drainTimeout time.Duration,
 ) error {
+	if drainTimeout <= 0 {
+		panic(fmt.Sprintf("lifecycle: Run: drain timeout %v is not positive", drainTimeout))
+	}
 	c.mu.Lock()
 	if c.state != stateWaiting {
 		c.mu.Unlock()
@@ -187,12 +165,14 @@ func (c *Coordinator) Run(
 	runCtx, fail := context.WithCancelCause(ctx)
 	defer fail(nil)
 
-	if err := c.startup(runCtx); err != nil {
-		return errors.Join(err, c.drain(drainTimeout))
-	}
-
-	if ctx.Err() != nil {
+	failed := c.startup(runCtx, fail)
+	// A signal before or during startup ends the run like one after it: a
+	// startup cut short only by that cancellation drains as a clean exit.
+	if ctx.Err() != nil && failed.only(context.Canceled) {
 		return c.drain(drainTimeout)
+	}
+	if err := failed.join(); err != nil {
+		return errors.Join(fmt.Errorf("startup: %w", err), c.drain(drainTimeout))
 	}
 
 	c.setState(stateRunning)
@@ -214,10 +194,7 @@ func (c *Coordinator) Run(
 func (c *Coordinator) drain(timeout time.Duration) error {
 	c.setState(stateDraining)
 
-	var err error
-	if len(c.onShutdown) > 0 || len(c.stages) > 0 {
-		err = c.shutdown(timeout)
-	}
+	err := c.shutdown(timeout)
 	c.setState(stateStopped)
 	return err
 }
@@ -253,16 +230,7 @@ func (c *Coordinator) shutdown(timeout time.Duration) error {
 	drainCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	var mu sync.Mutex
-	var failed []error
-	record := func(err error) {
-		if err != nil {
-			mu.Lock()
-			failed = append(failed, err)
-			mu.Unlock()
-		}
-	}
-
+	var failed failures
 	timedOut := false
 	await := func(done <-chan struct{}) {
 		select {
@@ -273,7 +241,7 @@ func (c *Coordinator) shutdown(timeout time.Duration) error {
 			default:
 				if !timedOut {
 					timedOut = true
-					record(fmt.Errorf(
+					failed.record(fmt.Errorf(
 						"drain timeout after %v: %w", timeout, drainCtx.Err(),
 					))
 				}
@@ -286,45 +254,100 @@ func (c *Coordinator) shutdown(timeout time.Duration) error {
 		for _, svc := range c.stages[stage] {
 			shutdowns = append(shutdowns, svc.shutdown)
 		}
-		await(launch(drainCtx, shutdowns, record))
+		await(launch(drainCtx, shutdowns, failed.record))
 	}
-	await(launch(drainCtx, c.onShutdown, record))
+	await(launch(drainCtx, c.onShutdown, failed.record))
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(failed) > 0 {
-		return fmt.Errorf("shutdown: %w", errors.Join(failed...))
+	if err := failed.join(); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
 }
 
-func (c *Coordinator) startup(ctx context.Context) error {
-	var mu sync.Mutex
-	var failed []error
+// startup runs the hooks, then the stages, and returns what failed. The
+// first failure cancels ctx, so its siblings in the phase stop early, and
+// the cancellations they return in consequence are not recorded.
+func (c *Coordinator) startup(ctx context.Context, fail context.CancelCauseFunc) *failures {
+	failed := &failures{}
 	record := func(err error) {
-		if err != nil {
-			mu.Lock()
-			failed = append(failed, err)
-			mu.Unlock()
+		if failed.recordUnlessConsequent(ctx, err) {
+			fail(err)
 		}
 	}
 
-	<-launch(ctx, c.onStartup, record)
-	if len(failed) > 0 {
-		return fmt.Errorf("startup: %w", errors.Join(failed...))
-	}
-
+	phases := [][]func(context.Context) error{c.onStartup}
 	for _, stage := range slices.Sorted(maps.Keys(c.stages)) {
 		var starts []func(context.Context) error
 		for _, svc := range c.stages[stage] {
 			starts = append(starts, svc.start)
 		}
-		<-launch(ctx, starts, record)
-		if len(failed) > 0 {
-			return fmt.Errorf("startup: %w", errors.Join(failed...))
+		phases = append(phases, starts)
+	}
+	for _, phase := range phases {
+		<-launch(ctx, phase, record)
+		if failed.any() {
+			break
 		}
 	}
-	return nil
+	return failed
+}
+
+// failures collects the errors of a phase's concurrent participants.
+type failures struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+func (f *failures) record(err error) {
+	if err == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.errs = append(f.errs, err)
+}
+
+// recordUnlessConsequent records err and reports true, unless err is nil
+// or a cancellation consequent on a failure already recorded: it wraps
+// context.Canceled, ctx is cancelled, and a failure is on record. The check
+// and the record hold one lock, so two failures cannot both see none.
+func (f *failures) recordUnlessConsequent(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil && len(f.errs) > 0 {
+		return false
+	}
+	f.errs = append(f.errs, err)
+	return true
+}
+
+// any reports whether a failure is on record.
+func (f *failures) any() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.errs) > 0
+}
+
+// only reports whether every recorded failure wraps target; with none on
+// record it is true.
+func (f *failures) only(target error) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, err := range f.errs {
+		if !errors.Is(err, target) {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *failures) join() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return errors.Join(f.errs...)
 }
 
 func (c *Coordinator) watch(

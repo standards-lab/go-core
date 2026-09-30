@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/standards-lab/go-core/process/processtest"
@@ -87,5 +88,33 @@ func TestForwarder_SeverDropsOpenConnections(t *testing.T) {
 	f.Sever()
 	if _, err := bufio.NewReader(c).ReadString('\n'); err == nil {
 		t.Fatal("open connection survived the outage")
+	}
+}
+
+// Restore is the end of an outage; with none in progress it changes nothing.
+func TestForwarder_RestoreWhileListeningIsANoOp(t *testing.T) {
+	f := processtest.Forward(t, echo(t))
+	addr := f.Addr()
+
+	f.Restore(t)
+	if got, err := roundTrip(t, addr, "still"); err != nil || got != "still\n" {
+		t.Fatalf("relay after a no-op restore = %q, %v", got, err)
+	}
+}
+
+// Concurrent Restores after a Sever end one outage: one listens, the rest
+// find it listening, and none fails on the address in use.
+func TestForwarder_ConcurrentRestores(t *testing.T) {
+	f := processtest.Forward(t, echo(t))
+	addr := f.Addr()
+	f.Sever()
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { f.Restore(t) })
+	}
+	wg.Wait()
+	if got, err := roundTrip(t, addr, "once"); err != nil || got != "once\n" {
+		t.Fatalf("relay after concurrent restores = %q, %v", got, err)
 	}
 }

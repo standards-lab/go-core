@@ -4,4 +4,12 @@
 // and the exit-code convention the reporters return. A composition root
 // composes its run function from it, so the convention cannot drift between
 // a program's binaries.
+//
+// The package exports:
+//
+//   - [ExitOK], [ExitFailure], and [ExitUsage], the exit codes
+//   - [Fail], which reports a runtime failure and returns ExitFailure
+//   - [Usage], which reports a usage error or help and returns ExitUsage
+//   - [SignalContext], which returns the root context SIGINT or SIGTERM
+//     cancels
 package process

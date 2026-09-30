@@ -6,6 +6,64 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-09-30
+
+The closing review of the storage suite: correctness fixes across the lifecycle, the loader,
+and the integration toolkit; a stricter configuration load; and documentation that states
+each contract once, on its symbol, with each package comment listing the exports.
+
+### Added
+
+- `config.SetFromEnv` applies one environment override to a tri-state (pointer) field through a
+  parse function such as `strconv.Atoi`. `SetDurationFromEnv` is now its `Duration` form.
+
+### Changed
+
+- **Breaking:** `config.Load` rejects, in any of the four files, a key the configuration type
+  does not declare and data after the top-level value. Every file decodes into the same type, so
+  a stray or misspelled key in `config.json` or `secrets.json` now fails the load instead of
+  being ignored.
+- **Breaking:** `config.EnvName` returns `""` when the prefix is empty or empty once sanitized;
+  it previously composed the name from the parts alone. An empty name reads as no override, so
+  an empty prefix disables every override without a guard, and a whitespace-only `EnvPrefix` no
+  longer derives `ENV` as `EnvVar`. `logging.NewEnv` drops its own guard accordingly.
+- **Breaking:** `config.Load` fails an environment value containing `/`, `\`, or `..`. It also
+  fails an `OverlayPattern` that drops the stem or the environment, which would resolve both
+  overlays, or every environment, to one file.
+- **Breaking:** `lifecycle.Coordinator.Run` panics on a drain timeout that is not positive,
+  which would time out every drain.
+- `lifecycle`: the zero `Coordinator` is ready to use; `New` remains.
+- `lifecycle`: the first startup failure cancels the run context at once, so the rest of its
+  phase can stop early. `Run` drops from its error the errors that wrap `context.Canceled` and
+  arrive once the run context is cancelled and a failure is on record: they are consequences of
+  the first failure.
+- `process/processtest`: `Launch` appends its race option to the parent's `GORACE` instead of
+  replacing it.
+- Each package comment lists the package's exports, and each contract is stated once, on its
+  symbol.
+
+### Fixed
+
+- `lifecycle`: a startup failure drained with the run context still live, so work a started
+  service left running on it kept running through the drain.
+- `lifecycle`: a signal during startup made `Run` return the cancellations of the Starts that
+  honored it. A startup cut short only by the signal context's cancellation now drains as a
+  clean exit, and `Run` returns nil when the drain is clean.
+- `config`: an empty file fails its load as `empty file` rather than a bare `EOF`, and malformed
+  data after the top-level value keeps the decoder's error.
+- `process/processtest`: `Stop` failed the test when the process had exited on its own and was
+  reaped before `Exited` reported it.
+- `process/processtest`: `Forwarder` dialed the backing service in its accept loop, so a target
+  that never answered stalled every later connection and `Sever`.
+- `process/processtest`: `Forwarder.Restore` without a prior `Sever` failed on the address in
+  use. It is now a no-op while the forwarder is listening, and concurrent calls restore once.
+- `config`: a number in exponent form for a `Duration` no longer reports itself as a fraction.
+
+### Removed
+
+- **Breaking:** `processtest.Forwarder.Close`, which was identical to `Sever`. `Forward`
+  registers the cleanup, and a test that severs early calls `Sever`.
+
 ## [v0.4.1] - 2026-09-07
 
 ### Fixed
@@ -99,7 +157,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.5.0...HEAD
+[v0.5.0]: https://github.com/standards-lab/go-core/compare/v0.4.1...v0.5.0
 [v0.4.1]: https://github.com/standards-lab/go-core/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/standards-lab/go-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-core/compare/v0.2.0...v0.3.0
