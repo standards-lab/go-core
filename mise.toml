@@ -2,6 +2,29 @@
 go = "1.27.1"
 golangci-lint = "2.14.0"
 
+[env]
+# The repository's Go modules, as directories; tasks run in each one.
+GO_MODULES = "."
+
+[tasks.check]
+description = "Build, vet, format, fix, tidy, test, and lint every module; writes nothing"
+run = '''
+set -eu
+export GOWORK=off
+for mod in $GO_MODULES; do
+  echo "check: $mod"
+  cd "$MISE_PROJECT_ROOT/$mod"
+  go build ./...
+  go vet ./...
+  unformatted=$(gofmt -l .)
+  if [ -n "$unformatted" ]; then echo "gofmt: unformatted files:"; echo "$unformatted"; exit 1; fi
+  go fix -diff ./...
+  go mod tidy -diff
+  go test -race ./...
+  golangci-lint run ./...
+done
+'''
+
 [tasks.build]
 description = "Build the module"
 run = "go build ./..."
