@@ -34,12 +34,13 @@
 //
 // # Context ownership
 //
-// The caller owns the signal context: a composition root builds one — the
-// process package's SignalContext — and passes it to Run. Run derives the run
-// context, which is cancelled by the signal, by a startup or monitored
-// failure, or when Run ends. Run passes the run context to every startup hook
-// and service Start; work that outlives its call keeps watching that context.
-// The coordinator installs no signal handlers of its own.
+// The caller owns the signal context: the application's entrypoint builds
+// one — the process package's SignalContext — and passes it through the
+// composition root's run call to Run. Run derives the run context, which is
+// cancelled by the signal, by a startup or monitored failure, or when Run
+// ends. Run passes the run context to every startup hook and service Start;
+// work that outlives its call keeps watching that context. The coordinator
+// installs no signal handlers of its own.
 //
 // # Startup and readiness
 //
