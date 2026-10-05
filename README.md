@@ -35,7 +35,7 @@ Tasks run through [mise](https://mise.jdx.dev):
 ```
 mise run check      # build, vet, format, fix, tidy, test, and lint; writes nothing
 mise run currency   # report requirements, Go, tools, and actions behind their latest
-mise run upgrade    # upgrade requirements and tools to their latest
+mise run upgrade    # upgrade the go directive, requirements, and tools to their latest
 ```
 
 ## License
