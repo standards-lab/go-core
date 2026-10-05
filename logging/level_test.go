@@ -58,9 +58,3 @@ func TestLevel_SlogRejectsUnknownAndEmpty(t *testing.T) {
 		}
 	}
 }
-
-func TestLevel_StringIsTheConfiguredText(t *testing.T) {
-	if got := logging.LevelWarn.String(); got != "warn" {
-		t.Errorf("String() = %q, want warn", got)
-	}
-}

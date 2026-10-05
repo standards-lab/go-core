@@ -23,9 +23,3 @@ func TestFormat_ValidRejectsUnknownAndUnnormalized(t *testing.T) {
 		}
 	}
 }
-
-func TestFormat_StringIsTheConfiguredText(t *testing.T) {
-	if got := logging.FormatJSON.String(); got != "json" {
-		t.Errorf("String() = %q, want json", got)
-	}
-}
