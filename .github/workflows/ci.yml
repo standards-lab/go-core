@@ -7,35 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.27"
+      - uses: jdx/mise-action@v5.1.1
 
-      - name: go vet
-        run: go vet ./...
-
-      - name: gofmt
-        run: |
-          unformatted=$(gofmt -l .)
-          [ -z "$unformatted" ] || { echo "$unformatted"; exit 1; }
-
-      - name: go mod tidy -diff
-        run: go mod tidy -diff
-
-      - name: go test -race
-        run: go test -race ./...
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.13.2
+      - name: mise run check
+        run: mise run check

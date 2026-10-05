@@ -237,8 +237,7 @@ func TestRun_MonitorFailureDrains(t *testing.T) {
 	ready := make(chan struct{})
 	lc.OnReady(func() { close(ready) })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	done := run(ctx, lc, failsafe)
 
 	recvOrFail(t, ready, "coordinator to become ready")
