@@ -3,6 +3,7 @@
 The judgement calls the standards-reviewer applies to go-core, beyond what `mise run check` enforces.
 
 - A change that alters documented behavior updates the README and the affected `doc.go` in the same change.
+- A new package joins go-core only when its pattern is process-level and universal, never for one application type or one external technology.
 - `architecture/standards/go-elemental/principles/dependencies.md`: the bottom-up line and no provider in a base, at `go.mod`.
 - `architecture/standards/go-elemental/principles/tests-and-docs.md`: the doc.go inventory of every package, and the harness rules `process/processtest` realizes.
 - `architecture/standards/go-elemental/principles/topology-and-naming.md`: the root module and its packages.
