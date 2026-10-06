@@ -23,5 +23,4 @@ are authoritative for the API.
 - **process/processtest** — the integration toolkit beside `process`, promoted from the
   reference service's harness.
 
-The map is complete for the tier. The Core SDK grows only when a pattern proves process-level
-and universal; it never grows toward one application type or one external technology.
+The map is complete for the tier.
