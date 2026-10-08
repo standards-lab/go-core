@@ -1,14 +1,14 @@
 # goal · go-core-graph
 
-- **State:** brief ready
-- **Task:** go-web-sdk
-- **Branch:** go-web-sdk
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] go-core
 2. [x] go-storage
-3. [ ] go-web-sdk
+3. [x] go-web-sdk
 4. [ ] go-web-sdk-template
 5. [ ] go-web-service
 
@@ -85,10 +85,6 @@ Door          two-way until tagged; one-way at the v0.15.0 tag, since a publishe
               can't be withdrawn
 Release       v0.15.0 (go-web-sdk, base module); middleware/rate-limit untagged
 ```
-
-## Progress
-
-slices 2/2 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
