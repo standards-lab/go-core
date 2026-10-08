@@ -105,7 +105,7 @@ Release       template/v0.12.0 (go-web-sdk-template, template module)
 
 ## Progress
 
-slices 3/3 committed · standards ✓ · spec ✓ · editor —
+slices 3/3 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -191,6 +191,26 @@ slices 3/3 committed · standards ✓ · spec ✓ · editor —
   first and returns its error unwrapped, so error text and order stay.
 - go-web-sdk-template: code and tests set the timeout as a promoted literal key; the check's
   go fix (embedlit) rejects the nested form.
+- go-web-sdk-template: Go moves 1.27.1 → 1.27.2, released after planning; currency must exit 0,
+  and the upgrade slice takes a patch that needs no adaptation.
+- go-web-sdk-template: Run builds from Config, Logger, Server, and Nodes.Reactors. Every node Run
+  reads with Get is a root, so a Replace cannot leave it unbuilt.
+- go-web-sdk-template: Run logs a Build failure as "service failed" through a logger it builds
+  outside the graph from cfg.Log, since the logger node may be what failed.
+- go-web-sdk-template: server.go's defineServer defines Readiness, Router, and Server; app.go
+  holds App, Nodes, New, Graph, Nodes, and Run.
+- go-web-sdk-template: the reactor roots are an exported Nodes.Reactors []graph.Ref, which
+  defineReactors fills.
+- go-web-sdk-template: the integration suite is byte-for-byte unchanged except the harness's
+  Ready comment; the unit tests pin /readyz's exact checks.
+- go-web-sdk-template: a package-main test pins the config-load failure by calling cmd/server's
+  run. A missing config.json does not fail the load, so the test writes a rejected key.
+- go-web-sdk-template: the standards review made the top-layer pin observe a real Run's Build
+  rather than copy Run's roots, and added TestRun_BuildFailureExitsOne.
+- go-web-sdk-template: graph_test.go keeps its small helpers in the file rather than in an
+  internal apptest package.
+- go-web-sdk-template: context/scaffolding-cli.md names a Nodes field and defineInfrastructure in
+  place of the removed layer structs.
 
 ## Pending edits
 
@@ -208,18 +228,18 @@ slices 3/3 committed · standards ✓ · spec ✓ · editor —
   graph-backed `lifecycle` with `Coordinator.Exec` as the one-shot form, and
   `processtest.Run(t, Cmd{Args, Stdin, Env}) Result{Stdout, Stderr, Code}` as the one-shot
   runner go-cli-sdk-template's integration suite uses.
-- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — both take go-web-sdk
-  v0.15.0. The health handler's node passes a lifecycle.Readiness node's value to
-  web.RegisterHealth as a web.Doctor, in place of lc. The sweeper reports runtime failures by
-  implementing lifecycle.Monitored. Telemetry becomes a layer-0 node whose value implements
-  Starter and Stopper.
-- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — a *web.Server node's
-  value is inferred as a Subsystem and Monitored, so the composition root drops
-  lc.Monitor(server.Err()), which would watch the channel twice.
-- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — /readyz lists "lifecycle"
-  and then the ReadinessChecker nodes in layer then definition order, not stage order. "/readyz
-  answering as today" holds only if the graph's layers keep the old stage order, so each task's
-  tests pin the order.
+- coordinator · roadmap: go-web-service task — takes go-web-sdk v0.15.0. The router's node
+  passes a lifecycle.Readiness node's value to web.RegisterHealth as a web.Doctor, in place of
+  lc, as template/v0.12.0 does. The sweeper reports runtime failures by implementing
+  lifecycle.Monitored. Telemetry becomes a layer-0 node whose value implements Starter and
+  Stopper.
+- coordinator · roadmap: go-web-service task — a *web.Server node's value is inferred as a
+  Subsystem and Monitored, so the composition root drops lc.Monitor(server.Err()), which would
+  watch the channel twice. template/v0.12.0 already drops it.
+- coordinator · roadmap: go-web-service task — /readyz lists "lifecycle" and then the
+  ReadinessChecker nodes in layer then definition order, not stage order. "/readyz answering as
+  today" holds only if the graph's layers keep the old stage order, so the task's tests pin the
+  order. template/v0.12.0 pins its checks as exactly ["lifecycle"].
 - coordinator · roadmap: middleware/rate-limit — its main carries untagged go-core v0.6.0, httprate
   v0.16.1, and the go-web-sdk v0.14.0 requirement. Its next release dates them and can move to
   go-web-sdk v0.15.0.
@@ -237,3 +257,19 @@ slices 3/3 committed · standards ✓ · spec ✓ · editor —
 - coordinator · roadmap: go-web-service task — its Config meets the same lifecycle.Config
   embedding points as the template (by value, untagged, promoted literal key), and its
   stageSchema and stageReactors become Build roots with the server After each.
+- architecture · go-elemental/principles/topology-and-naming.md: the composition-root paragraph
+  names `stages.go` and layer files that construct their layers. Under template/v0.12.0 each
+  layer file defines its layer's nodes on go-core's dependency graph in its define function and
+  owns its mount; `app.go` holds the `Nodes` value (one handle per node), `New` (describes the
+  graph, cannot fail), and `Run` (builds it and runs it under the Coordinator); `server.go`
+  defines the readiness node, the router, and the server. Extending the application means
+  defining a node in a layer's define function, and a reactor's node also joins
+  `Nodes.Reactors`.
+- coordinator · roadmap: go-web-service task — its `internal/app` takes template/v0.12.0's
+  layout: an exported `Nodes`, a define function per layer file, `defineServer` in `server.go`,
+  `Nodes.Reactors` as Build roots, `Run` building from every node it reads with Get, and a Build
+  failure logged through a logger built outside the graph. The template moved to Go 1.27.2; the
+  task's currency check decides its own Go pin.
+- architecture · go-elemental/principles/lifecycle-and-context.md: "The wiring rule" — under
+  the graph, a composition root's wiring defects panic during Run's Build ("graph: " panics),
+  not at New; a constructor's error returns from Build and the service exits 1.
