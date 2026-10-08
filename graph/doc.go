@@ -3,7 +3,8 @@
 // what its roots reach and returns it as a [System] of [Dependency] values
 // in computed layers. The package knows nothing of lifecycles: a consumer
 // that runs a System, starting its layers in order and stopping them in
-// reverse, reads each node's part from its value.
+// reverse, reads each node's part from its value, as the lifecycle package's
+// Coordinator does.
 //
 // The package exports:
 //

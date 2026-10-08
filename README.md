@@ -18,8 +18,8 @@ stable as the standard library, this repository depends on the standard library 
 ## Packages
 
 - `config` — loads configuration in layers: a base file, an environment overlay, and secrets.
-- `lifecycle` — starts subsystems in stages, tracks and reports readiness as subsystem status
-  changes, and drains them in reverse within a timeout.
+- `lifecycle` — runs a built `graph` System: starts its layers in order, tracks and reports
+  readiness, and shuts them down in reverse within a timeout.
 - `logging` — builds an `*slog.Logger` from a configuration that `config` loads.
 - `process` — the parts of a binary's main sequence that run before the program's own
   infrastructure exists: the signal-derived root context, pre-logger failure reporting, and the
