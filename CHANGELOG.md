@@ -65,6 +65,12 @@ by the interfaces the value implements. Hand-numbered stages and function fields
 - **Breaking:** `lifecycle`: a `Run` whose context ended before startup starts and stops
   nothing.
 
+### Fixed
+
+- `lifecycle.Coordinator.Run` reports a monitored failure that wraps `context.Canceled` as a
+  `run:` failure. v0.5.0 read the run context's cause and took such a failure for the clean
+  stop.
+
 ### Removed
 
 - **Breaking:** `lifecycle.Coordinator.Add` and `lifecycle.Service`. A participant is a graph

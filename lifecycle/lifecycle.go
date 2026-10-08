@@ -75,7 +75,7 @@ func (c *Coordinator) OnReady(fn func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state != stateWaiting {
-		panic("lifecycle: OnReady after Run")
+		panic("lifecycle: OnReady after Exec or Run")
 	}
 	c.onReady = append(c.onReady, fn)
 }
@@ -90,7 +90,7 @@ func (c *Coordinator) Monitor(errs <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state != stateWaiting {
-		panic("lifecycle: Monitor after Run")
+		panic("lifecycle: Monitor after Exec or Run")
 	}
 	c.monitors = append(c.monitors, errs)
 }
@@ -113,15 +113,15 @@ func (c *Coordinator) Checks() []Check {
 
 // Exec starts the System, runs fn under the run context, and shuts the
 // System down. Exec keeps Run's runtime contract: the Coordinator is ready
-// and its OnReady hooks have run when fn starts, and it is not ready once
+// and its OnReady hooks have run when fn starts, it is not ready once
 // shutdown begins, and a monitored failure ends fn's context. It returns
 // fn's error joined with the monitored failure, wrapped "run:", and the
-// shutdown's. When
-// startup fails, or ctx ends before startup completes, fn does not run and
-// Exec returns the startup error, or ctx's, wrapped "startup:" and joined
-// with the shutdown's. A second call to Exec or [Coordinator.Run] panics.
+// shutdown's. When startup fails, or ctx ends before startup completes, fn
+// does not run and Exec returns the startup error, or ctx's, wrapped
+// "startup:" and joined with the shutdown's. A second call to Exec or
+// [Coordinator.Run] panics.
 func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) error {
-	return c.execute(ctx, "Exec", false, func(runCtx context.Context, _ context.CancelCauseFunc, monitored func() error) error {
+	return c.execute(ctx, "Exec", false, func(runCtx context.Context, monitored func() error) error {
 		err := fn(runCtx)
 		if m := monitored(); m != nil {
 			return errors.Join(err, fmt.Errorf("run: %w", m))
@@ -138,10 +138,10 @@ func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) 
 // a monitored failure returns it wrapped "run:", each joined with the
 // shutdown's. A second call to Run or [Coordinator.Exec] panics.
 func (c *Coordinator) Run(ctx context.Context) error {
-	return c.execute(ctx, "Run", true, func(runCtx context.Context, _ context.CancelCauseFunc, _ func() error) error {
+	return c.execute(ctx, "Run", true, func(runCtx context.Context, monitored func() error) error {
 		<-runCtx.Done()
-		if cause := context.Cause(runCtx); !errors.Is(cause, context.Canceled) {
-			return fmt.Errorf("run: %w", cause)
+		if m := monitored(); m != nil {
+			return fmt.Errorf("run: %w", m)
 		}
 		return nil
 	})
@@ -152,16 +152,15 @@ func (c *Coordinator) Run(ctx context.Context) error {
 // under it, and once every layer has started, flips ready, runs the
 // OnReady hooks in registration order, starts watching the monitored
 // channels, and runs body. It shuts down on every path, cancelling the run
-// context first. body receives the run context, the function that cancels
-// it with a cause, and a function reporting the first monitored failure,
-// nil when none has occurred. A startup that ctx's end cut
-// short returns only the shutdown's error when cutShortIsClean; otherwise
-// it is a startup failure like any other.
+// context first. body receives the run context and a function reporting
+// the first monitored failure, nil when none has occurred. A startup that
+// ctx's end cut short returns only the shutdown's error when
+// cutShortIsClean; otherwise it is a startup failure like any other.
 func (c *Coordinator) execute(
 	ctx context.Context,
 	op string,
 	cutShortIsClean bool,
-	body func(context.Context, context.CancelCauseFunc, func() error) error,
+	body func(context.Context, func() error) error,
 ) error {
 	c.claim(op)
 
@@ -184,7 +183,7 @@ func (c *Coordinator) execute(
 		fn()
 	}
 	monitored := c.watch(runCtx, fail)
-	err := body(runCtx, fail, monitored)
+	err := body(runCtx, monitored)
 	return errors.Join(err, c.shutdown(fail, &e))
 }
 

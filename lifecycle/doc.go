@@ -51,8 +51,8 @@
 // # Context ownership
 //
 // The caller owns the signal context: the application's entrypoint builds
-// one — the process package's SignalContext — and passes it to Exec or Run.
-// The Coordinator derives the run context from it, which is cancelled by
+// one — the process package's SignalContext — and passes it through the
+// composition root's run call to Exec or Run. The Coordinator derives the run context from it, which is cancelled by
 // the signal, by a startup or monitored failure, or when shutdown begins.
 // Every Start, and Exec's function, receives the run context; work that
 // outlives its call keeps watching that context. The coordinator installs no

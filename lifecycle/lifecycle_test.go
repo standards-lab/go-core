@@ -549,7 +549,7 @@ func TestRegistration_PanicsAfterRun(t *testing.T) {
 		{"Monitor", func() { lc.Monitor(make(chan error)) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mustPanic(t, "lifecycle: "+tc.name+" after Run", tc.call)
+			mustPanic(t, "lifecycle: "+tc.name+" after Exec or Run", tc.call)
 		})
 	}
 }
@@ -1079,7 +1079,7 @@ func TestExec_ShutdownOverrunStillAttemptsLowerLayers(t *testing.T) {
 	}}, base)
 	top := node(g, &fake{name: "top", r: &r, stop: func(context.Context) error { return errTop }}, hang)
 
-	err := coordinator(t, 20*time.Millisecond, g, top).Exec(context.Background(), noop)
+	err := coordinator(t, 100*time.Millisecond, g, top).Exec(context.Background(), noop)
 	// Past the deadline shutdown no longer waits on a layer, so base's
 	// shutdown may begin after Exec returns; it must begin.
 	recvOrFail(t, baseStopped, "base's shutdown")

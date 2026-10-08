@@ -60,18 +60,6 @@ func newWebService() *webService {
 	return w
 }
 
-// layerOf returns the index of the layer holding name in sys, or -1.
-func layerOf(sys *graph.System, name string) int {
-	for i, layer := range sys.Layers() {
-		for _, d := range layer {
-			if d.Name == name {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 func TestLayers_WebServiceStageOrder(t *testing.T) {
 	w := newWebService()
 	// The reactors are a root: nothing uses their value, and the server

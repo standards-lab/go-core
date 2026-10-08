@@ -3,6 +3,7 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,25 @@ func TestRun_MonitoredValueIsReadAfterStartup(t *testing.T) {
 
 	if err := recvOrFail(t, done, "Run to return"); !errors.Is(err, sentinel) {
 		t.Fatalf("Run = %v, want the failure on the channel Start created", err)
+	}
+}
+
+// A monitored failure that wraps context.Canceled is still a failure: Run
+// tells it from the clean stop by its source, not by its error.
+func TestRun_MonitoredCancellationIsAFailure(t *testing.T) {
+	errs := make(source, 1)
+	g := graph.New()
+	lc := coordinator(t, failsafe, g, value(g, "source", errs))
+
+	ready := make(chan struct{})
+	lc.OnReady(func() { close(ready) })
+	done := run(t.Context(), lc)
+	recvOrFail(t, ready, "coordinator to become ready")
+
+	errs <- fmt.Errorf("stream: %w", context.Canceled)
+
+	err := recvOrFail(t, done, "Run to return")
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "run: stream:") {
+		t.Fatalf("Run = %v, want the monitored cancellation wrapped \"run:\"", err)
 	}
 }

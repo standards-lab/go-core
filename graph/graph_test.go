@@ -26,14 +26,19 @@ func names(sys *graph.System) [][]string {
 
 // contains reports whether a node named name is in sys.
 func contains(sys *graph.System, name string) bool {
-	for _, layer := range sys.Layers() {
+	return layerOf(sys, name) >= 0
+}
+
+// layerOf returns the index of the layer holding name in sys, or -1.
+func layerOf(sys *graph.System, name string) int {
+	for i, layer := range sys.Layers() {
 		for _, d := range layer {
 			if d.Name == name {
-				return true
+				return i
 			}
 		}
 	}
-	return false
+	return -1
 }
 
 // dependency returns the Dependency named name in sys, failing the test
