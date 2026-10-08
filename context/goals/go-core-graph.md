@@ -76,7 +76,7 @@ Release       v0.6.0 (go-core, root)
 
 ## Progress
 
-slices 4/6 committed · standards — · spec — · editor —
+slices 5/6 committed · standards — · spec — · editor —
 
 ## Decisions
 
