@@ -88,7 +88,7 @@ Release       v0.15.0 (go-web-sdk, base module); middleware/rate-limit untagged
 
 ## Progress
 
-slices 2/2 committed · standards ✓ · spec ✓ · editor —
+slices 2/2 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -140,11 +140,26 @@ slices 2/2 committed · standards ✓ · spec ✓ · editor —
   typed-nil detection.
 - go-web-sdk: middleware/rate-limit takes go-core v0.6.0 and httprate v0.16.1 on main, untagged,
   with httprate's IPv4-mapped bucketing change under its [Unreleased].
+- go-web-sdk: test Coordinators use a fixed 2s ShutdownTimeout, since New panics on a Config that
+  hasn't passed Finalize and Finalize reads the environment.
+- go-web-sdk: "reads the Doctor on every request" means each request reads the check's current
+  state. v0.6.0 fixes Checks at New, so the v0.14.0 case of a check registered after
+  RegisterHealth no longer exists.
+- go-web-sdk: the compile-time proofs for Doctor, Subsystem, and Monitored live in health.go and
+  server.go, not in tests.
+- go-web-sdk: the CHANGELOG's v0.15.0 section is dated and linked, as v0.14.0's release prep was,
+  with an empty [Unreleased] above it.
+- go-web-sdk: the standards review corrected rate-limit's CHANGELOG: under httprate v0.16.0 every
+  IPv4-mapped client shared one counter, because its /64 prefix is ::, rather than having its own
+  key. ratelimit.New's godoc states the v0.16.1 keying, and
+  TestNew_IPv4MappedClientSharesItsIPv4Budget pins it.
+- go-web-sdk: middleware/rate-limit still requires go-web-sdk v0.14.0; moving it to v0.15.0 waits
+  on the v0.15.0 tag.
 
 ## Pending edits
 
-- coordinator · roadmap: go-web-sdk task — RegisterHealth takes an interface with Ready() and
-  Checks(), satisfied by both the Coordinator and lifecycle.Readiness.
+- coordinator · roadmap: go-web-sdk task — RegisterHealth takes `web.Doctor`, an interface with
+  Ready() and Checks() that both the Coordinator and lifecycle.Readiness satisfy.
 - coordinator · roadmap: go-web-service task — sdk.Waker implements Ready() bool but isn't a
   Check today; as its own node, inferred Checks would add a "wake" entry to /readyz, against
   "/readyz answering as today". Its plan decides.
@@ -157,10 +172,21 @@ slices 2/2 committed · standards ✓ · spec ✓ · editor —
   graph-backed `lifecycle` with `Coordinator.Exec` as the one-shot form, and
   `processtest.Run(t, Cmd{Args, Stdin, Env}) Result{Stdout, Stderr, Code}` as the one-shot
   runner go-cli-sdk-template's integration suite uses.
-- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — the health handler's node
-  uses a lifecycle.Readiness node; the server and the sweeper report runtime failures by
-  implementing lifecycle.Monitored; telemetry becomes a layer-0 node whose value implements
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — both take go-web-sdk
+  v0.15.0. The health handler's node passes a lifecycle.Readiness node's value to
+  web.RegisterHealth as a web.Doctor, in place of lc. The sweeper reports runtime failures by
+  implementing lifecycle.Monitored. Telemetry becomes a layer-0 node whose value implements
   Starter and Stopper.
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — a *web.Server node's
+  value is inferred as a Subsystem and Monitored, so the composition root drops
+  lc.Monitor(server.Err()), which would watch the channel twice.
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — /readyz lists "lifecycle"
+  and then the ReadinessChecker nodes in layer then definition order, not stage order. "/readyz
+  answering as today" holds only if the graph's layers keep the old stage order, so each task's
+  tests pin the order.
+- coordinator · roadmap: middleware/rate-limit — its main carries untagged go-core v0.6.0, httprate
+  v0.16.1, and the go-web-sdk v0.14.0 requirement. Its next release dates them and can move to
+  go-web-sdk v0.15.0.
 - coordinator · roadmap: v1.messaging core-reactor — go-core v0.6.0 already ships
   lifecycle.Monitored, found by type assertion and read once startup completes, and infers
   Checks from ReadinessChecker. Drop Monitored from the task's additions; a value implementing
