@@ -88,7 +88,7 @@ Release       v0.15.0 (go-web-sdk, base module); middleware/rate-limit untagged
 
 ## Progress
 
-slices 0/2 committed · standards — · spec — · editor —
+slices 1/2 committed · standards — · spec — · editor —
 
 ## Decisions
 
