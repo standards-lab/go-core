@@ -6,6 +6,8 @@
 //   - [Starter] and [Stopper], the single-method interfaces a dependency's
 //     value implements to take part in startup and in shutdown, and
 //     [Subsystem], which embeds both
+//   - [Monitored], the interface a dependency's value implements to report
+//     runtime failures on a channel the Coordinator watches
 //   - [Config], the Coordinator's configuration, with [Config.Merge] and
 //     [Config.Finalize], and [Env], the environment-variable name Finalize
 //     reads, composed by [NewEnv]
@@ -100,11 +102,19 @@
 //
 // Exec runs its function under the run context once every layer has
 // started, and its error joins Exec's return. Run blocks until the signal
-// context is cancelled (the clean path) or a monitored channel yields a
-// non-nil error, which ends the run and joins Run's return wrapped "run:".
-// Run ignores a nil received error, and a channel closing retires its
-// watcher quietly: that is the expected end of a source that stopped
-// cleanly.
+// context is cancelled (the clean path) or a monitored channel fails.
+//
+// The monitored channels are those registered with [Coordinator.Monitor]
+// and the Err channel of every value in the System that implements
+// [Monitored], found by [New] in layer order and, within a layer,
+// definition order. Exec and Run alike watch them once startup has
+// completed: an Err channel is read then, so a value may create it in
+// Start. The first non-nil error any of them yields cancels the run
+// context, ending Exec's function or Run's serving, and joins Exec's or
+// Run's return wrapped "run:". A nil received error is ignored, and a
+// channel closing retires its watcher quietly: that is the expected end of
+// a source that stopped cleanly. A nil channel never yields, so it is not
+// watched.
 //
 // # Shutdown
 //

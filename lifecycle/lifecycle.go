@@ -18,6 +18,9 @@ type Coordinator struct {
 	sys     *graph.System
 	timeout time.Duration
 	checks  []Check
+	// monitored are the System's [Monitored] values, in layer then
+	// definition order; their channels are read once startup completes.
+	monitored []Monitored
 
 	mu       sync.Mutex
 	state    state
@@ -26,7 +29,8 @@ type Coordinator struct {
 }
 
 // New returns a Coordinator for sys, shutting down within
-// cfg.ShutdownTimeout, and binds every [Readiness] in sys to it. It panics
+// cfg.ShutdownTimeout, binds every [Readiness] in sys to it, and watches
+// every [Monitored] value in sys as [Coordinator.Monitor] would. It panics
 // on a nil sys, a ShutdownTimeout that is not positive, as an unfinalized
 // Config's is, or a Readiness already bound to another Coordinator: each is
 // a wiring mistake.
@@ -49,6 +53,9 @@ func New(sys *graph.System, cfg Config) *Coordinator {
 				bind = append(bind, d)
 			case ReadinessChecker:
 				c.checks = append(c.checks, Check{Name: d.Name, Checker: v})
+			}
+			if v, ok := d.Value.(Monitored); ok {
+				c.monitored = append(c.monitored, v)
 			}
 		}
 	}
@@ -73,10 +80,12 @@ func (c *Coordinator) OnReady(fn func()) {
 	c.onReady = append(c.onReady, fn)
 }
 
-// Monitor registers a channel [Coordinator.Run] watches while running: the
-// first non-nil error received ends the run and joins Run's return. A nil
-// error is ignored, and a closed channel retires quietly — the expected end of
-// a source that stopped cleanly. Registration after Exec or Run panics.
+// Monitor registers a channel [Coordinator.Exec] and [Coordinator.Run]
+// watch once startup has completed, alongside the System's [Monitored]
+// values: the first non-nil error received ends the run and joins the
+// return wrapped "run:". A nil error is ignored, and a closed channel
+// retires quietly — the expected end of a source that stopped cleanly.
+// Registration after Exec or Run panics.
 func (c *Coordinator) Monitor(errs <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -105,13 +114,19 @@ func (c *Coordinator) Checks() []Check {
 // Exec starts the System, runs fn under the run context, and shuts the
 // System down. Exec keeps Run's runtime contract: the Coordinator is ready
 // and its OnReady hooks have run when fn starts, and it is not ready once
-// shutdown begins. It returns fn's error joined with the shutdown's. When
+// shutdown begins, and a monitored failure ends fn's context. It returns
+// fn's error joined with the monitored failure, wrapped "run:", and the
+// shutdown's. When
 // startup fails, or ctx ends before startup completes, fn does not run and
 // Exec returns the startup error, or ctx's, wrapped "startup:" and joined
 // with the shutdown's. A second call to Exec or [Coordinator.Run] panics.
 func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) error {
-	return c.execute(ctx, "Exec", false, func(runCtx context.Context, _ context.CancelCauseFunc) error {
-		return fn(runCtx)
+	return c.execute(ctx, "Exec", false, func(runCtx context.Context, _ context.CancelCauseFunc, monitored func() error) error {
+		err := fn(runCtx)
+		if m := monitored(); m != nil {
+			return errors.Join(err, fmt.Errorf("run: %w", m))
+		}
+		return err
 	})
 }
 
@@ -123,8 +138,7 @@ func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) 
 // a monitored failure returns it wrapped "run:", each joined with the
 // shutdown's. A second call to Run or [Coordinator.Exec] panics.
 func (c *Coordinator) Run(ctx context.Context) error {
-	return c.execute(ctx, "Run", true, func(runCtx context.Context, fail context.CancelCauseFunc) error {
-		c.watch(runCtx, fail)
+	return c.execute(ctx, "Run", true, func(runCtx context.Context, _ context.CancelCauseFunc, _ func() error) error {
 		<-runCtx.Done()
 		if cause := context.Cause(runCtx); !errors.Is(cause, context.Canceled) {
 			return fmt.Errorf("run: %w", cause)
@@ -136,16 +150,18 @@ func (c *Coordinator) Run(ctx context.Context) error {
 // execute is the runtime path Exec and Run share: it claims the
 // Coordinator for op, derives the run context from ctx, starts the layers
 // under it, and once every layer has started, flips ready, runs the
-// OnReady hooks in registration order, and runs body. It shuts down on every
-// path, cancelling the run context first. body receives the run context and
-// the function that cancels it with a cause. A startup that ctx's end cut
+// OnReady hooks in registration order, starts watching the monitored
+// channels, and runs body. It shuts down on every path, cancelling the run
+// context first. body receives the run context, the function that cancels
+// it with a cause, and a function reporting the first monitored failure,
+// nil when none has occurred. A startup that ctx's end cut
 // short returns only the shutdown's error when cutShortIsClean; otherwise
 // it is a startup failure like any other.
 func (c *Coordinator) execute(
 	ctx context.Context,
 	op string,
 	cutShortIsClean bool,
-	body func(context.Context, context.CancelCauseFunc) error,
+	body func(context.Context, context.CancelCauseFunc, func() error) error,
 ) error {
 	c.claim(op)
 
@@ -167,7 +183,8 @@ func (c *Coordinator) execute(
 	for _, fn := range c.onReady {
 		fn()
 	}
-	err := body(runCtx, fail)
+	monitored := c.watch(runCtx, fail)
+	err := body(runCtx, fail, monitored)
 	return errors.Join(err, c.shutdown(fail, &e))
 }
 
@@ -230,13 +247,29 @@ func (c *Coordinator) setState(s state) {
 	c.mu.Unlock()
 }
 
-// watch watches every monitored channel until ctx ends, failing the run
-// with the first non-nil error any of them yields.
+// watch watches every channel registered with [Coordinator.Monitor] and
+// every [Monitored] value's Err channel, read now that startup has
+// completed, until ctx ends. The first non-nil error any of them yields
+// fails the run. A nil channel never yields, so it is not watched. watch
+// returns a function reporting the first monitored failure, nil until one
+// occurs.
 func (c *Coordinator) watch(
 	ctx context.Context,
 	fail context.CancelCauseFunc,
-) {
-	for _, ch := range c.monitors {
+) func() error {
+	channels := slices.Clone(c.monitors)
+	for _, m := range c.monitored {
+		channels = append(channels, m.Err())
+	}
+
+	var (
+		mu    sync.Mutex
+		first error
+	)
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
 		go func() {
 			for {
 				select {
@@ -245,7 +278,14 @@ func (c *Coordinator) watch(
 						return
 					}
 					if err != nil {
-						fail(err)
+						// Recording and failing under one lock keeps the
+						// failure reported the run's cause.
+						mu.Lock()
+						if first == nil {
+							first = err
+							fail(err)
+						}
+						mu.Unlock()
 						return
 					}
 				case <-ctx.Done():
@@ -253,5 +293,10 @@ func (c *Coordinator) watch(
 				}
 			}
 		}()
+	}
+	return func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		return first
 	}
 }
