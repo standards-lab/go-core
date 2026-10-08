@@ -8,44 +8,82 @@
 
 1. [x] go-core
 2. [x] go-storage
-3. [ ] go-web-sdk
+3. [x] go-web-sdk
 4. [ ] go-web-sdk-template
 5. [ ] go-web-service
 
-## Task brief · go-storage
+## Task brief · go-web-sdk
 
 ```
-## Task brief · go-core-graph · go-storage
-Problem       go-storage requires go-core v0.5.0, whose lifecycle.Service, Add, and stages
-              v0.6.0 retires. go-web-sdk-template and go-web-service can't move onto the
-              graph while go-storage pins the old lifecycle and documents registration
-              through it.
+## Task brief · go-core-graph · go-web-sdk
+Problem       go-web-sdk requires go-core v0.5.0, whose lifecycle.Service, Add, stages, and
+              OnStartup v0.6.0 retires. RegisterHealth takes only a *lifecycle.Coordinator,
+              which exists only after Build, so a health handler's graph node can't call it.
+              Its doc example and tests are written against the stage table. The template and
+              go-web-service can't move onto the graph until go-web-sdk takes v0.6.0 and
+              RegisterHealth accepts the lifecycle.Readiness their handler node uses.
 Behaviors
-  1. go-storage builds and its check passes on go-core v0.6.0, required by name
-     (the proxy's version list doesn't show v0.6.0 yet).
-  2. *Store is proven at compile time to satisfy lifecycle.Subsystem (Starter and
-     Stopper) and lifecycle.ReadinessChecker; the lifecycle.Service shape test is gone.
-     go-storage's tests import neither graph nor a Coordinator.
-  3. Store's existing start, ready, and shutdown tests pass unchanged, including
-     Shutdown after a failed Start, which v0.6.0's Coordinator now calls.
-  4. The package doc and README show Store as a graph node whose value the
-     Coordinator starts, checks for readiness, and stops; no example uses
-     lifecycle.Service or lc.Add.
-  5. go-storage's exported API is unchanged.
-  6. azureblob takes azcore v1.23.3; its go-storage requirement and tags are unchanged.
-  7. The CHANGELOG's v0.5.0 section records the go-core v0.6.0 requirement as
-     breaking for importers still on lifecycle.Service, and that Shutdown now
-     follows a failed Start under the Coordinator.
-Test seams    lifecycle interface assertions on *Store; Store's Start/Ready/Shutdown tests
+  1. Both modules build and the check passes on go-core v0.6.0. middleware/rate-limit
+     also takes httprate v0.16.1, and currency reports nothing.
+  2. web.Doctor is an exported interface that embeds lifecycle.ReadinessChecker and adds
+     Checks() []lifecycle.Check. Compile-time proofs show *lifecycle.Coordinator and
+     *lifecycle.Readiness both satisfy it.
+  3. RegisterHealth(m, d Doctor, notReady) mounts GET /healthz and GET /readyz. A caller
+     that passes a *lifecycle.Coordinator compiles unchanged.
+  4. RegisterHealth panics at wiring on a nil Doctor, with a message naming the fix.
+  5. /healthz answers as in v0.14.0: 200, application/json, Cache-Control no-store,
+     {"status":"ok"}. Any other method gets 405.
+  6. /readyz answers as in v0.14.0:
+     - When every check is ready: 200, application/json, no-store,
+       {"status":"ready","checks":[...]}, with "lifecycle" first and then the Doctor's checks.
+     - Otherwise: 503, application/problem+json, no-store. The default problem is
+       about:blank, "Service Unavailable", detail "one or more readiness checks failed",
+       instance = the path. The checks member lists every entry. The caller's Type, Title,
+       Detail and Extras show through; its Status and any "checks" it sets are replaced.
+     - A nil Checker is not ready. Readiness with zero checks is ready and sends no checks
+       member.
+  7. RegisterHealth reads the Doctor on every request:
+     - Given an unbound lifecycle.Readiness inside a node constructor during Build, /readyz
+       reports only "lifecycle": false.
+     - Once New binds it, /readyz reports "lifecycle" and then the System's
+       ReadinessChecker nodes, named by node, in layer then definition order. Nothing else
+       registers anything.
+  8. Over a graph Run with a lifecycle.Readiness node:
+     - /readyz is 503 while a Starter blocks startup, 200 once OnReady fires, and 503
+       after Run returns.
+     - /healthz is 200 throughout.
+  9. *web.Server as a node's value is a lifecycle.Subsystem and a lifecycle.Monitored
+     (compile-time proof). It adds no entry to /readyz.
+ 10. The package doc's lifecycle section shows the Server as a graph node's value. The
+     Coordinator starts it, stops it, and watches its Err without a Monitor call.
+     RegisterHealth is shown over a lifecycle.Readiness node's value. No example, godoc or
+     README text names lifecycle.Service, Add, a stage, the root stage, or a service added
+     after the call. The doc's list of exported names includes Doctor.
+ 11. The base module's CHANGELOG v0.15.0 section records:
+     - the go-core v0.6.0 requirement, as breaking for importers still on
+       lifecycle.Service;
+     - that RegisterHealth takes a Doctor, so a Readiness node's value works, and panics on
+       a nil Doctor;
+     - that the checks after "lifecycle" follow the System's layer order.
+     rate-limit's [Unreleased] records go-core v0.6.0 and httprate v0.16.1's bucketing
+     change: an IPv4-mapped IPv6 address shares the IPv4 address's counter.
+Test seams    RegisterHealth over an http.ServeMux, probed by GET; compile-time interface
+              assertions on Coordinator, Readiness, and Server
 Slices
-  1. upgrade: go-core v0.6.0 by name, azcore v1.23.3; done when currency exits 0
-     (go-core unreported until the proxy lists it) and the check passes
-  2. graph registration: interface proof replaces the Service test; package doc,
-     README, CHANGELOG v0.5.0
-Out of scope  releasing azureblob; go-web-sdk, template, and go-web-service adoption;
-              implementing Monitored on Store; architecture page edits (goal sync)
-Door          two-way until tagged; one-way at the v0.5.0 tag
-Release       v0.5.0 (go-storage, root)
+  1. upgrade: go-core v0.6.0 in both modules, httprate v0.16.1 in rate-limit. The existing
+     tests move onto graph, New(sys, cfg), and Run(ctx), keeping their v0.14.0 assertions:
+     a blocking Starter node replaces OnStartup, and a Readiness node over a late-defined
+     checker replaces the Add regression. Done when currency exits 0 and the check passes
+     (behaviors 1, 5, 6, 8).
+  2. Doctor: RegisterHealth takes web.Doctor and panics on nil; the interface and Server
+     proofs; package doc, Server and webtest godoc, README wording; both CHANGELOG
+     sections (behaviors 2-4, 7, 9-11).
+Out of scope  tagging middleware/rate-limit; changes to Liveness, Readiness, or the probe
+              bodies; typed-nil detection; Doctor in go-core; the template's and
+              go-web-service's adoption; architecture page edits (goal sync)
+Door          two-way until tagged; one-way at the v0.15.0 tag, since a published version
+              can't be withdrawn
+Release       v0.15.0 (go-web-sdk, base module); middleware/rate-limit untagged
 ```
 
 ## Decisions
@@ -91,11 +129,33 @@ Release       v0.5.0 (go-storage, root)
 - go-storage: doc.go's example builds the azureblob client inside the Store's node, for brevity.
 - go-storage: doc.go and README say the Coordinator lists Store's readiness in Checks, not runs it.
 - go-storage: azureblob's CHANGELOG omits the azcore v1.23.3 bump, as it omitted the earlier one.
+- go-web-sdk: RegisterHealth takes `web.Doctor`, an exported interface embedding
+  lifecycle.ReadinessChecker plus Checks() []lifecycle.Check, which *lifecycle.Coordinator and
+  *lifecycle.Readiness both satisfy; ReadinessReporter and an unnamed interface were rejected.
+- go-web-sdk: RegisterHealth panics at wiring on a nil Doctor interface value, naming the fix; no
+  typed-nil detection.
+- go-web-sdk: middleware/rate-limit takes go-core v0.6.0 and httprate v0.16.1 on main, untagged,
+  with httprate's IPv4-mapped bucketing change under its [Unreleased].
+- go-web-sdk: test Coordinators use a fixed 2s ShutdownTimeout, since New panics on a Config that
+  hasn't passed Finalize and Finalize reads the environment.
+- go-web-sdk: "reads the Doctor on every request" means each request reads the check's current
+  state. v0.6.0 fixes Checks at New, so the v0.14.0 case of a check registered after
+  RegisterHealth no longer exists.
+- go-web-sdk: the compile-time proofs for Doctor, Subsystem, and Monitored live in health.go and
+  server.go, not in tests.
+- go-web-sdk: the CHANGELOG's v0.15.0 section is dated and linked, as v0.14.0's release prep was,
+  with an empty [Unreleased] above it.
+- go-web-sdk: the standards review corrected rate-limit's CHANGELOG: under httprate v0.16.0 every
+  IPv4-mapped client shared one counter, because its /64 prefix is ::, rather than having its own
+  key. ratelimit.New's godoc states the v0.16.1 keying, and
+  TestNew_IPv4MappedClientSharesItsIPv4Budget pins it.
+- go-web-sdk: middleware/rate-limit still requires go-web-sdk v0.14.0; moving it to v0.15.0 waits
+  on the v0.15.0 tag.
 
 ## Pending edits
 
-- coordinator · roadmap: go-web-sdk task — RegisterHealth takes an interface with Ready() and
-  Checks(), satisfied by both the Coordinator and lifecycle.Readiness.
+- coordinator · roadmap: go-web-sdk task — RegisterHealth takes `web.Doctor`, an interface with
+  Ready() and Checks() that both the Coordinator and lifecycle.Readiness satisfy.
 - coordinator · roadmap: go-web-service task — sdk.Waker implements Ready() bool but isn't a
   Check today; as its own node, inferred Checks would add a "wake" entry to /readyz, against
   "/readyz answering as today". Its plan decides.
@@ -108,10 +168,21 @@ Release       v0.5.0 (go-storage, root)
   graph-backed `lifecycle` with `Coordinator.Exec` as the one-shot form, and
   `processtest.Run(t, Cmd{Args, Stdin, Env}) Result{Stdout, Stderr, Code}` as the one-shot
   runner go-cli-sdk-template's integration suite uses.
-- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — the health handler's node
-  uses a lifecycle.Readiness node; the server and the sweeper report runtime failures by
-  implementing lifecycle.Monitored; telemetry becomes a layer-0 node whose value implements
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — both take go-web-sdk
+  v0.15.0. The health handler's node passes a lifecycle.Readiness node's value to
+  web.RegisterHealth as a web.Doctor, in place of lc. The sweeper reports runtime failures by
+  implementing lifecycle.Monitored. Telemetry becomes a layer-0 node whose value implements
   Starter and Stopper.
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — a *web.Server node's
+  value is inferred as a Subsystem and Monitored, so the composition root drops
+  lc.Monitor(server.Err()), which would watch the channel twice.
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — /readyz lists "lifecycle"
+  and then the ReadinessChecker nodes in layer then definition order, not stage order. "/readyz
+  answering as today" holds only if the graph's layers keep the old stage order, so each task's
+  tests pin the order.
+- coordinator · roadmap: middleware/rate-limit — its main carries untagged go-core v0.6.0, httprate
+  v0.16.1, and the go-web-sdk v0.14.0 requirement. Its next release dates them and can move to
+  go-web-sdk v0.15.0.
 - coordinator · roadmap: v1.messaging core-reactor — go-core v0.6.0 already ships
   lifecycle.Monitored, found by type assertion and read once startup completes, and infers
   Checks from ReadinessChecker. Drop Monitored from the task's additions; a value implementing
