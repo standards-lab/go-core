@@ -105,7 +105,7 @@ Release       template/v0.12.0 (go-web-sdk-template, template module)
 
 ## Progress
 
-slices 3/3 committed · standards ✓ · spec — · editor —
+slices 3/3 committed · standards ✓ · spec ✓ · editor —
 
 ## Decisions
 
