@@ -1,15 +1,15 @@
 # goal · go-core-graph
 
-- **State:** brief ready
-- **Task:** go-web-sdk-template
-- **Branch:** go-web-sdk-template
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] go-core
 2. [x] go-storage
 3. [x] go-web-sdk
-4. [ ] go-web-sdk-template
+4. [x] go-web-sdk-template
 5. [ ] go-web-service
 
 ## Task brief · go-web-sdk-template
@@ -102,10 +102,6 @@ Out of scope  go-web-service's move, telemetry, sweeper; a test-only root hook o
 Door          two-way until tagged; one-way at the template/v0.12.0 tag
 Release       template/v0.12.0 (go-web-sdk-template, template module)
 ```
-
-## Progress
-
-slices 3/3 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
