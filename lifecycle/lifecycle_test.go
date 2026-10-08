@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/standards-lab/go-core/config"
+	"github.com/standards-lab/go-core/graph"
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
@@ -34,46 +36,215 @@ func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
 	}
 }
 
+// recorder collects events, in the order they happen, across goroutines.
+type recorder struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (r *recorder) record(event string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, event)
+}
+
+func (r *recorder) list() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.events)
+}
+
+// sameSet reports whether got holds exactly want, in any order.
+func sameSet(got []string, want ...string) bool {
+	return len(got) == len(want) &&
+		slices.Equal(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want)))
+}
+
+// phased reports whether got is exactly phases, in order, each phase's
+// events in any order among themselves: a layer starts and stops
+// concurrently, and the layers one after another.
+func phased(got []string, phases ...[]string) bool {
+	for _, phase := range phases {
+		if len(got) < len(phase) || !sameSet(got[:len(phase)], phase...) {
+			return false
+		}
+		got = got[len(phase):]
+	}
+	return len(got) == 0
+}
+
+// fake is a Subsystem that records "start name" and "stop name" on r, when
+// r is set, then runs its optional start and stop behaviour; nil behaviour
+// succeeds.
+type fake struct {
+	name        string
+	r           *recorder
+	start, stop func(context.Context) error
+}
+
+func (f *fake) Start(ctx context.Context) error {
+	if f.r != nil {
+		f.r.record("start " + f.name)
+	}
+	if f.start != nil {
+		return f.start(ctx)
+	}
+	return nil
+}
+
+func (f *fake) Shutdown(ctx context.Context) error {
+	if f.r != nil {
+		f.r.record("stop " + f.name)
+	}
+	if f.stop != nil {
+		return f.stop(ctx)
+	}
+	return nil
+}
+
+// starter is a start-only participant: a Starter and not a Stopper.
+type starter func(context.Context) error
+
+func (s starter) Start(ctx context.Context) error { return s(ctx) }
+
+// stopper is a stop-only participant: a Stopper and not a Starter.
+type stopper func(context.Context) error
+
+func (s stopper) Shutdown(ctx context.Context) error { return s(ctx) }
+
+// node defines f on g under f's name, using deps, so f sits one layer
+// above the highest of them.
+func node(g *graph.Graph, f *fake, deps ...graph.Ref) *graph.Node[*fake] {
+	return value(g, f.name, f, deps...)
+}
+
+// value defines v on g under name, using deps, so v sits one layer above
+// the highest of them.
+func value[T any](g *graph.Graph, name string, v T, deps ...graph.Ref) *graph.Node[T] {
+	return g.Define(name, func(s *graph.Scope) (T, error) {
+		for _, d := range deps {
+			use(s, d)
+		}
+		return v, nil
+	})
+}
+
+// use uses d through s, for each node type these tests define: a Use, unlike
+// an After, brings d into the System.
+func use(s *graph.Scope, d graph.Ref) {
+	switch n := d.(type) {
+	case *graph.Node[*fake]:
+		s.Use(n)
+	case *graph.Node[starter]:
+		s.Use(n)
+	case *graph.Node[stopper]:
+		s.Use(n)
+	default:
+		panic(fmt.Sprintf("use: unexpected node type %T", d))
+	}
+}
+
+// coordinator builds g from roots and returns a Coordinator for the System
+// that shuts down within timeout, failing the test on a build error.
+func coordinator(
+	t *testing.T,
+	timeout time.Duration,
+	g *graph.Graph,
+	roots ...graph.Ref,
+) *lifecycle.Coordinator {
+	t.Helper()
+	sys, err := g.Build(roots...)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return lifecycle.New(sys, lifecycle.Config{ShutdownTimeout: config.Duration(timeout)})
+}
+
 // run starts Run on its own goroutine and returns the channel its result
 // lands on.
-func run(ctx context.Context, lc *lifecycle.Coordinator, drainTimeout time.Duration) <-chan error {
+func run(ctx context.Context, lc *lifecycle.Coordinator) <-chan error {
 	done := make(chan error, 1)
-	go func() { done <- lc.Run(ctx, drainTimeout) }()
+	go func() { done <- lc.Run(ctx) }()
 	return done
 }
 
-// cancelled returns a context that is already cancelled, so Run drains
-// immediately after startup without blocking.
+// runThrough runs lc until it becomes ready, then stops it: an OnReady hook
+// cancels Run's context, so Run shuts down immediately after startup.
+func runThrough(lc *lifecycle.Coordinator) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lc.OnReady(cancel)
+	return lc.Run(ctx)
+}
+
+// cancelled returns a context that is already cancelled.
 func cancelled() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	return ctx
 }
 
-func TestRun_StartupHooksRunConcurrently(t *testing.T) {
-	lc := lifecycle.New()
+// noop is an Exec function that succeeds.
+func noop(context.Context) error { return nil }
 
+// mustPanic fails the test unless fn panics with exactly want.
+func mustPanic(t *testing.T, want string, fn func()) {
+	t.Helper()
+	defer func() {
+		t.Helper()
+		if r := recover(); r != want {
+			t.Errorf("panic = %v, want %q", r, want)
+		}
+	}()
+	fn()
+}
+
+func TestNew_PanicsOnWiringMistakes(t *testing.T) {
+	sys, err := graph.New().Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	mustPanic(t, "lifecycle: New: nil System", func() {
+		lifecycle.New(nil, lifecycle.Config{ShutdownTimeout: config.Duration(time.Second)})
+	})
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		t.Run(timeout.String(), func(t *testing.T) {
+			want := fmt.Sprintf(
+				"lifecycle: New: shutdown timeout %v is not positive; finalize the Config",
+				config.Duration(timeout),
+			)
+			mustPanic(t, want, func() {
+				lifecycle.New(sys, lifecycle.Config{ShutdownTimeout: config.Duration(timeout)})
+			})
+		})
+	}
+}
+
+func TestRun_LayerStartsConcurrently(t *testing.T) {
 	const n = 5
 	arrived := make(chan struct{}, n)
 	release := make(chan struct{})
 	var count atomic.Int64
 
-	for range n {
-		lc.OnStartup(func(context.Context) error {
+	g := graph.New()
+	var roots []graph.Ref
+	for i := range n {
+		roots = append(roots, value(g, fmt.Sprintf("svc-%d", i), starter(func(context.Context) error {
 			count.Add(1)
 			arrived <- struct{}{}
 			<-release
 			return nil
-		})
+		})))
 	}
+	lc := coordinator(t, failsafe, g, roots...)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
+	done := run(ctx, lc)
 
-	// Every hook must reach its arrival send before any is released, which only
-	// holds if they run simultaneously rather than one after another.
+	// Every participant must reach its arrival send before any is released,
+	// which only holds if the layer starts them simultaneously.
 	for range n {
-		recvOrFail(t, arrived, "startup hook arrival")
+		recvOrFail(t, arrived, "layer member arrival")
 	}
 	close(release)
 	cancel()
@@ -82,20 +253,20 @@ func TestRun_StartupHooksRunConcurrently(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if got := count.Load(); got != n {
-		t.Fatalf("ran %d startup hooks, want %d", got, n)
+		t.Fatalf("started %d participants, want %d", got, n)
 	}
 }
 
 func TestRun_ReadyLifecycle(t *testing.T) {
-	lc := lifecycle.New()
-
 	started := make(chan struct{})
 	release := make(chan struct{})
-	lc.OnStartup(func(context.Context) error {
+	g := graph.New()
+	svc := value(g, "svc", starter(func(context.Context) error {
 		close(started)
 		<-release
 		return nil
-	})
+	}))
+	lc := coordinator(t, failsafe, g, svc)
 
 	// OnReady observes readiness from inside the hook: the flip must precede
 	// the ready hooks.
@@ -107,11 +278,11 @@ func TestRun_ReadyLifecycle(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
+	done := run(ctx, lc)
 
-	recvOrFail(t, started, "startup hook to start")
+	recvOrFail(t, started, "the participant's Start")
 	if lc.Ready() {
-		t.Fatal("Ready() is true while a startup hook is still running")
+		t.Fatal("Ready() is true while a Start is still running")
 	}
 
 	close(release)
@@ -132,29 +303,32 @@ func TestRun_ReadyLifecycle(t *testing.T) {
 }
 
 func TestRun_StartupFailureNeverReady(t *testing.T) {
-	lc := lifecycle.New()
-
 	sentinel := errors.New("db connect failed")
-	lc.OnStartup(func(context.Context) error { return sentinel })
+	var failedStopped, drained atomic.Bool
+	g := graph.New()
+	db := node(g, &fake{
+		name:  "db",
+		start: func(context.Context) error { return sentinel },
+		stop:  func(context.Context) error { failedStopped.Store(true); return nil },
+	})
+	flusher := value(g, "flusher", stopper(func(context.Context) error {
+		drained.Store(true)
+		return nil
+	}))
+	lc := coordinator(t, failsafe, g, db, flusher)
 
 	var wasReady atomic.Bool
 	lc.OnReady(func() { wasReady.Store(true) })
 
-	var drained atomic.Bool
-	lc.OnShutdown(func(context.Context) error {
-		drained.Store(true)
-		return nil
-	})
-
-	err := lc.Run(context.Background(), failsafe)
+	err := lc.Run(context.Background())
 	if err == nil {
-		t.Fatal("Run returned nil for a failing startup hook")
+		t.Fatal("Run returned nil for a failing Start")
 	}
 	if !errors.Is(err, sentinel) {
 		t.Errorf("error = %v, want errors.Is(err, sentinel)", err)
 	}
-	if !strings.Contains(err.Error(), "startup:") {
-		t.Errorf("error = %v, want the startup phase wrap", err)
+	if !strings.Contains(err.Error(), "startup:") || !strings.Contains(err.Error(), "db:") {
+		t.Errorf("error = %v, want the startup wrap naming the failed participant", err)
 	}
 	if wasReady.Load() {
 		t.Error("OnReady hooks ran despite a startup failure")
@@ -163,48 +337,52 @@ func TestRun_StartupFailureNeverReady(t *testing.T) {
 		t.Error("Ready() is true after a startup failure")
 	}
 	if !drained.Load() {
-		t.Error("shutdown hooks did not drain the partial start")
+		t.Error("the failing layer's Stopper was not shut down")
+	}
+	if !failedStopped.Load() {
+		t.Error("the participant whose Start failed was not shut down")
 	}
 }
 
 func TestRun_JoinsAllStartupFailures(t *testing.T) {
-	lc := lifecycle.New()
-
 	first := errors.New("first subsystem failed")
 	second := errors.New("second subsystem failed")
-	lc.OnStartup(func(context.Context) error { return first })
-	lc.OnStartup(func(context.Context) error { return second })
+	g := graph.New()
+	a := value(g, "a", starter(func(context.Context) error { return first }))
+	b := value(g, "b", starter(func(context.Context) error { return second }))
 
-	err := lc.Run(context.Background(), failsafe)
+	err := coordinator(t, failsafe, g, a, b).Run(context.Background())
 	if !errors.Is(err, first) || !errors.Is(err, second) {
 		t.Fatalf("error = %v, want both startup failures joined", err)
 	}
 }
 
-func TestRun_CancelReturnsNilAndDrains(t *testing.T) {
-	lc := lifecycle.New()
-
-	// The startup hook captures the run context; the shutdown hook observes
-	// both contexts at drain time. The chain is race-free: the startup
-	// goroutine completes before Run launches the shutdown goroutine.
+func TestRun_CancelReturnsNilAndShutsDown(t *testing.T) {
+	// Start captures the run context; Shutdown observes both contexts at
+	// shutdown. The chain is race-free: the Start goroutine completes before
+	// the shutdown goroutine launches.
 	var runCtx context.Context
-	lc.OnStartup(func(ctx context.Context) error {
-		runCtx = ctx
-		return nil
-	})
-
-	type observation struct{ runErr, drainErr error }
+	type observation struct{ runErr, shutdownErr error }
 	obs := make(chan observation, 1)
-	lc.OnShutdown(func(drainCtx context.Context) error {
-		obs <- observation{runErr: runCtx.Err(), drainErr: drainCtx.Err()}
-		return nil
+	g := graph.New()
+	svc := node(g, &fake{
+		name: "svc",
+		start: func(ctx context.Context) error {
+			runCtx = ctx
+			return nil
+		},
+		stop: func(ctx context.Context) error {
+			obs <- observation{runErr: runCtx.Err(), shutdownErr: ctx.Err()}
+			return nil
+		},
 	})
+	lc := coordinator(t, failsafe, g, svc)
 
 	ready := make(chan struct{})
 	lc.OnReady(func() { close(ready) })
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
+	done := run(ctx, lc)
 
 	recvOrFail(t, ready, "coordinator to become ready")
 	cancel()
@@ -213,32 +391,31 @@ func TestRun_CancelReturnsNilAndDrains(t *testing.T) {
 		t.Fatalf("Run after a clean cancel: %v", err)
 	}
 
-	o := recvOrFail(t, obs, "shutdown hook invocation")
+	o := recvOrFail(t, obs, "Shutdown invocation")
 	if o.runErr == nil {
-		t.Error("run context was not cancelled when the shutdown hook ran")
+		t.Error("run context was not cancelled when Shutdown ran")
 	}
-	if o.drainErr != nil {
-		t.Errorf("drain context was already cancelled when the hook ran: %v", o.drainErr)
+	if o.shutdownErr != nil {
+		t.Errorf("shutdown context was already cancelled when Shutdown ran: %v", o.shutdownErr)
 	}
 }
 
-func TestRun_MonitorFailureDrains(t *testing.T) {
-	lc := lifecycle.New()
+func TestRun_MonitorFailureShutsDown(t *testing.T) {
+	var drained atomic.Bool
+	g := graph.New()
+	flusher := value(g, "flusher", stopper(func(context.Context) error {
+		drained.Store(true)
+		return nil
+	}))
+	lc := coordinator(t, failsafe, g, flusher)
 
 	errs := make(chan error, 1)
 	lc.Monitor(errs)
 
-	var drained atomic.Bool
-	lc.OnShutdown(func(context.Context) error {
-		drained.Store(true)
-		return nil
-	})
-
 	ready := make(chan struct{})
 	lc.OnReady(func() { close(ready) })
 
-	ctx := t.Context()
-	done := run(ctx, lc, failsafe)
+	done := run(t.Context(), lc)
 
 	recvOrFail(t, ready, "coordinator to become ready")
 
@@ -253,7 +430,7 @@ func TestRun_MonitorFailureDrains(t *testing.T) {
 		t.Errorf("error = %v, want the run phase wrap", err)
 	}
 	if !drained.Load() {
-		t.Error("shutdown hooks did not run after a monitor failure")
+		t.Error("Stopper did not run after a monitor failure")
 	}
 	if lc.Ready() {
 		t.Error("Ready() is true after a monitor failure")
@@ -261,7 +438,7 @@ func TestRun_MonitorFailureDrains(t *testing.T) {
 }
 
 func TestRun_MonitorIgnoresNilAndClose(t *testing.T) {
-	lc := lifecycle.New()
+	lc := coordinator(t, failsafe, graph.New())
 
 	errs := make(chan error)
 	lc.Monitor(errs)
@@ -270,7 +447,7 @@ func TestRun_MonitorIgnoresNilAndClose(t *testing.T) {
 	lc.OnReady(func() { close(ready) })
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
+	done := run(ctx, lc)
 
 	recvOrFail(t, ready, "coordinator to become ready")
 
@@ -290,44 +467,43 @@ func TestRun_MonitorIgnoresNilAndClose(t *testing.T) {
 	}
 }
 
-func TestRun_PreCancelledContextDrainsWithoutReady(t *testing.T) {
-	lc := lifecycle.New()
+// A context ended before Run is the clean stop before any layer begins:
+// nothing starts, so nothing shuts down.
+func TestRun_PreCancelledContextStartsNothing(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	a := node(g, &fake{name: "a", r: &r})
+	lc := coordinator(t, failsafe, g, a)
 
 	var wasReady atomic.Bool
 	lc.OnReady(func() { wasReady.Store(true) })
 
-	var drained atomic.Bool
-	lc.OnShutdown(func(context.Context) error {
-		drained.Store(true)
-		return nil
-	})
-
-	if err := lc.Run(cancelled(), failsafe); err != nil {
+	if err := lc.Run(cancelled()); err != nil {
 		t.Fatalf("Run with a pre-cancelled context: %v", err)
 	}
 	if wasReady.Load() {
 		t.Error("OnReady hooks ran under a pre-cancelled context")
 	}
-	if !drained.Load() {
-		t.Error("shutdown hooks did not run under a pre-cancelled context")
+	if got := r.list(); len(got) != 0 {
+		t.Errorf("events = %q, want nothing started or stopped", got)
 	}
 }
 
-func TestRun_DrainTimeout(t *testing.T) {
-	lc := lifecycle.New()
-
-	// The hook outlives the timeout; releasing it only at cleanup keeps the
-	// hooks-done path closed, so the drain must end via the deadline.
+func TestRun_ShutdownTimeout(t *testing.T) {
+	// Shutdown outlives the timeout; releasing it only at cleanup keeps the
+	// layer-done path closed, so shutdown must end via the deadline.
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	lc.OnShutdown(func(context.Context) error {
+	g := graph.New()
+	svc := value(g, "svc", stopper(func(context.Context) error {
 		<-release
 		return nil
-	})
+	}))
+	lc := coordinator(t, 20*time.Millisecond, g, svc)
 
-	err := lc.Run(cancelled(), 20*time.Millisecond)
+	err := runThrough(lc)
 	if err == nil {
-		t.Fatal("Run returned nil for a shutdown hook that outlived the timeout")
+		t.Fatal("Run returned nil for a Shutdown that outlived the timeout")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("error = %v, want errors.Is(err, context.DeadlineExceeded)", err)
@@ -336,263 +512,18 @@ func TestRun_DrainTimeout(t *testing.T) {
 		t.Errorf("error = %v, want the drain timeout description", err)
 	}
 	if lc.Ready() {
-		t.Error("Ready() is true while a shutdown hook straggles past the timeout")
+		t.Error("Ready() is true while a Shutdown straggles past the timeout")
 	}
 }
 
-func TestRun_JoinsShutdownHookErrors(t *testing.T) {
-	lc := lifecycle.New()
-
-	sentinel := errors.New("close failed")
-	lc.OnShutdown(func(context.Context) error { return sentinel })
-
-	err := lc.Run(cancelled(), failsafe)
-	if !errors.Is(err, sentinel) {
-		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
-	}
-	if !strings.Contains(err.Error(), "shutdown:") {
-		t.Errorf("error = %v, want the shutdown phase wrap", err)
-	}
-}
-
-func TestRegistration_PanicsAfterRun(t *testing.T) {
-	lc := lifecycle.New()
-	if err := lc.Run(cancelled(), failsafe); err != nil {
-		t.Fatalf("Run with no hooks: %v", err)
-	}
-
-	for _, tc := range []struct {
-		name string
-		call func()
-	}{
-		{"OnStartup", func() { lc.OnStartup(func(context.Context) error { return nil }) }},
-		{"OnShutdown", func() { lc.OnShutdown(func(context.Context) error { return nil }) }},
-		{"OnReady", func() { lc.OnReady(func() {}) }},
-		{"Monitor", func() { lc.Monitor(make(chan error)) }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			defer func() {
-				r := recover()
-				if r == nil {
-					t.Fatalf("%s after Run did not panic", tc.name)
-				}
-				if want := "lifecycle: " + tc.name + " after Run"; r != want {
-					t.Fatalf("panic = %v, want %q", r, want)
-				}
-			}()
-			tc.call()
-		})
-	}
-}
-
-func TestRun_CalledTwicePanics(t *testing.T) {
-	lc := lifecycle.New()
-	if err := lc.Run(cancelled(), failsafe); err != nil {
-		t.Fatalf("first Run: %v", err)
-	}
-
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("a second Run did not panic")
-		}
-		if want := "lifecycle: Run called twice"; r != want {
-			t.Fatalf("panic = %v, want %q", r, want)
-		}
-	}()
-	_ = lc.Run(cancelled(), failsafe)
-}
-
-// recorder collects ordered step labels from hooks and services across
-// goroutines.
-type recorder struct {
-	mu    sync.Mutex
-	steps []string
-}
-
-func (r *recorder) add(step string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.steps = append(r.steps, step)
-}
-
-func (r *recorder) list() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return slices.Clone(r.steps)
-}
-
-// staticChecker reports a fixed readiness.
-type staticChecker bool
-
-func (s staticChecker) Ready() bool { return bool(s) }
-
-func TestRun_StagesStartInOrderRootLast(t *testing.T) {
-	lc := lifecycle.New()
-	rec := &recorder{}
-
-	add := func(name string, stage int) {
-		lc.Add(lifecycle.Service{
-			Name:  name,
-			Stage: stage,
-			Start: func(context.Context) error {
-				rec.add(name)
-				return nil
-			},
-		})
-	}
-	// Added out of start order: sorting the stages, not Add order, decides.
-	add("server", lifecycle.StageRoot)
-	add("consumer", 1)
-	add("pool", 0)
-
-	ready := make(chan struct{})
-	lc.OnReady(func() { close(ready) })
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
-
-	recvOrFail(t, ready, "coordinator to become ready")
-	cancel()
-	if err := recvOrFail(t, done, "Run to return"); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	want := []string{"pool", "consumer", "server"}
-	if got := rec.list(); !slices.Equal(got, want) {
-		t.Fatalf("start order = %v, want %v", got, want)
-	}
-}
-
-func TestRun_ServicesWithinAStageStartConcurrently(t *testing.T) {
-	lc := lifecycle.New()
-
-	const n = 3
-	arrived := make(chan struct{}, n)
-	release := make(chan struct{})
-	for i := range n {
-		lc.Add(lifecycle.Service{
-			Name:  fmt.Sprintf("svc-%d", i),
-			Stage: 0,
-			Start: func(context.Context) error {
-				arrived <- struct{}{}
-				<-release
-				return nil
-			},
-		})
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
-
-	// Every member must reach its arrival send before any is released, which
-	// only holds if the stage starts them simultaneously.
-	for range n {
-		recvOrFail(t, arrived, "stage member arrival")
-	}
-	close(release)
-	cancel()
-
-	if err := recvOrFail(t, done, "Run to return"); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-}
-
-func TestRun_StageBarrierBlocksTheNextStage(t *testing.T) {
-	lc := lifecycle.New()
-
-	blocked := make(chan struct{})
-	release := make(chan struct{})
-	lc.Add(lifecycle.Service{
-		Name:  "first",
-		Stage: 0,
-		Start: func(context.Context) error {
-			close(blocked)
-			<-release
-			return nil
-		},
-	})
-
-	var second atomic.Bool
-	lc.Add(lifecycle.Service{
-		Name:  "second",
-		Stage: 1,
-		Start: func(context.Context) error {
-			second.Store(true)
-			return nil
-		},
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := run(ctx, lc, failsafe)
-
-	recvOrFail(t, blocked, "stage 0 to start")
-	time.Sleep(20 * time.Millisecond)
-	if second.Load() {
-		t.Fatal("stage 1 started while stage 0 was still starting")
-	}
-
-	close(release)
-	cancel()
-	if err := recvOrFail(t, done, "Run to return"); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if !second.Load() {
-		t.Fatal("stage 1 never started")
-	}
-}
-
-func TestRun_DrainReversesStagesRootFirst(t *testing.T) {
-	lc := lifecycle.New()
-	rec := &recorder{}
-
-	lc.Add(lifecycle.Service{
-		Name:     "pool",
-		Stage:    0,
-		Start:    func(context.Context) error { return nil },
-		Shutdown: func(context.Context) error { rec.add("pool"); return nil },
-	})
-	// A Start-less service still counts as started once its stage runs, so
-	// its Shutdown participates in the drain.
-	lc.Add(lifecycle.Service{
-		Name:     "flusher",
-		Stage:    1,
-		Shutdown: func(context.Context) error { rec.add("flusher"); return nil },
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "server",
-		Stage:    lifecycle.StageRoot,
-		Start:    func(context.Context) error { return nil },
-		Shutdown: func(context.Context) error { rec.add("server"); return nil },
-	})
-
-	if err := lc.Run(cancelled(), failsafe); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	want := []string{"server", "flusher", "pool"}
-	if got := rec.list(); !slices.Equal(got, want) {
-		t.Fatalf("drain order = %v, want %v", got, want)
-	}
-}
-
-func TestRun_JoinsServiceShutdownErrorsWithNames(t *testing.T) {
-	lc := lifecycle.New()
-
+func TestRun_JoinsShutdownErrorsWithNames(t *testing.T) {
 	poolErr := errors.New("pool close failed")
 	busErr := errors.New("bus close failed")
-	lc.Add(lifecycle.Service{
-		Name:     "pool",
-		Stage:    0,
-		Shutdown: func(context.Context) error { return poolErr },
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "bus",
-		Stage:    1,
-		Shutdown: func(context.Context) error { return busErr },
-	})
+	g := graph.New()
+	pool := value(g, "pool", stopper(func(context.Context) error { return poolErr }))
+	bus := value(g, "bus", stopper(func(context.Context) error { return busErr }), pool)
 
-	err := lc.Run(cancelled(), failsafe)
+	err := runThrough(coordinator(t, failsafe, g, bus))
 	if !errors.Is(err, poolErr) || !errors.Is(err, busErr) {
 		t.Fatalf("error = %v, want both shutdown failures joined", err)
 	}
@@ -600,272 +531,206 @@ func TestRun_JoinsServiceShutdownErrorsWithNames(t *testing.T) {
 		t.Errorf("error = %v, want the shutdown phase wrap", err)
 	}
 	if !strings.Contains(err.Error(), "pool:") || !strings.Contains(err.Error(), "bus:") {
-		t.Errorf("error = %v, want each failure labeled with its service name", err)
+		t.Errorf("error = %v, want each failure labeled with its participant's name", err)
 	}
 }
 
-func TestRun_StageFailureSkipsLaterStagesAndUnwindsStartedOnly(t *testing.T) {
-	lc := lifecycle.New()
-	rec := &recorder{}
-	sentinel := errors.New("bus connect failed")
-
-	stopRecording := func(name string) func(context.Context) error {
-		return func(context.Context) error {
-			rec.add(name)
-			return nil
-		}
-	}
-
-	lc.Add(lifecycle.Service{
-		Name:     "pool",
-		Stage:    0,
-		Start:    func(context.Context) error { return nil },
-		Shutdown: stopRecording("pool"),
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "bus",
-		Stage:    1,
-		Start:    func(context.Context) error { return sentinel },
-		Shutdown: stopRecording("bus"),
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "cache",
-		Stage:    1,
-		Start:    func(context.Context) error { return nil },
-		Shutdown: stopRecording("cache"),
-	})
-
-	var serverStarted atomic.Bool
-	lc.Add(lifecycle.Service{
-		Name:  "server",
-		Stage: lifecycle.StageRoot,
-		Start: func(context.Context) error {
-			serverStarted.Store(true)
-			return nil
-		},
-		Shutdown: stopRecording("server"),
-	})
-
-	err := lc.Run(context.Background(), failsafe)
-	if !errors.Is(err, sentinel) {
-		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
-	}
-	if !strings.Contains(err.Error(), "startup:") || !strings.Contains(err.Error(), "bus:") {
-		t.Errorf("error = %v, want the startup wrap naming the failed service", err)
-	}
-	if serverStarted.Load() {
-		t.Error("a later stage started after an earlier stage failed")
-	}
-
-	// The failing stage finishes its concurrent starts, so cache is started
-	// and unwinds; bus failed and does not; server never ran.
-	want := []string{"cache", "pool"}
-	if got := rec.list(); !slices.Equal(got, want) {
-		t.Fatalf("unwind = %v, want %v (started services only, in reverse)", got, want)
-	}
-}
-
-func TestRun_HooksBracketTheServiceStages(t *testing.T) {
-	lc := lifecycle.New()
-	rec := &recorder{}
-
-	lc.OnStartup(func(context.Context) error {
-		rec.add("hook-up")
-		return nil
-	})
-	lc.OnShutdown(func(context.Context) error {
-		rec.add("hook-down")
-		return nil
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "svc",
-		Stage:    0,
-		Start:    func(context.Context) error { rec.add("svc-up"); return nil },
-		Shutdown: func(context.Context) error { rec.add("svc-down"); return nil },
-	})
-
-	if err := lc.Run(cancelled(), failsafe); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	want := []string{"hook-up", "svc-up", "svc-down", "hook-down"}
-	if got := rec.list(); !slices.Equal(got, want) {
-		t.Fatalf("sequence = %v, want %v", got, want)
-	}
-}
-
-func TestChecks_CollectsInStartOrderSkippingNil(t *testing.T) {
-	lc := lifecycle.New()
-
-	lc.Add(lifecycle.Service{
-		Name:  "server",
-		Stage: lifecycle.StageRoot,
-		Check: staticChecker(true),
-	})
-	lc.Add(lifecycle.Service{
-		Name:  "pool",
-		Stage: 0,
-		Check: staticChecker(true),
-	})
-	lc.Add(lifecycle.Service{
-		Name:     "flusher",
-		Stage:    0,
-		Shutdown: func(context.Context) error { return nil },
-	})
-	lc.Add(lifecycle.Service{
-		Name:  "bus",
-		Stage: 1,
-		Check: staticChecker(false),
-	})
-
-	checks := lc.Checks()
-	var names []string
-	for _, check := range checks {
-		names = append(names, check.Name)
-	}
-	want := []string{"pool", "bus", "server"}
-	if !slices.Equal(names, want) {
-		t.Fatalf("checks = %v, want %v", names, want)
-	}
-	if !checks[0].Checker.Ready() || checks[1].Checker.Ready() {
-		t.Error("checkers were not carried through")
-	}
-}
-
-func TestAdd_Validation(t *testing.T) {
-	valid := lifecycle.Service{
-		Name:  "svc",
-		Start: func(context.Context) error { return nil },
+func TestRegistration_PanicsAfterRun(t *testing.T) {
+	lc := coordinator(t, failsafe, graph.New())
+	if err := lc.Run(cancelled()); err != nil {
+		t.Fatalf("Run with no participants: %v", err)
 	}
 
 	for _, tc := range []struct {
 		name string
-		want string
-		add  func(lc *lifecycle.Coordinator)
+		call func()
 	}{
-		{
-			name: "EmptyName",
-			want: "lifecycle: Add: empty service name",
-			add: func(lc *lifecycle.Coordinator) {
-				svc := valid
-				svc.Name = ""
-				lc.Add(svc)
-			},
-		},
-		{
-			name: "NegativeStage",
-			want: `lifecycle: Add: service "svc": negative stage -1`,
-			add: func(lc *lifecycle.Coordinator) {
-				svc := valid
-				svc.Stage = -1
-				lc.Add(svc)
-			},
-		},
-		{
-			name: "DeclaresNothing",
-			want: `lifecycle: Add: service "svc" declares nothing`,
-			add: func(lc *lifecycle.Coordinator) {
-				lc.Add(lifecycle.Service{Name: "svc"})
-			},
-		},
-		{
-			name: "DuplicateName",
-			want: `lifecycle: Add: duplicate service "svc"`,
-			add: func(lc *lifecycle.Coordinator) {
-				lc.Add(valid)
-				lc.Add(valid)
-			},
-		},
+		{"OnReady", func() { lc.OnReady(func() {}) }},
+		{"Monitor", func() { lc.Monitor(make(chan error)) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lc := lifecycle.New()
-			defer func() {
-				r := recover()
-				if r == nil {
-					t.Fatal("Add did not panic")
-				}
-				if r != tc.want {
-					t.Fatalf("panic = %v, want %q", r, tc.want)
-				}
-			}()
-			tc.add(lc)
+			mustPanic(t, "lifecycle: "+tc.name+" after Exec or Run", tc.call)
 		})
 	}
-
-	t.Run("AfterRun", func(t *testing.T) {
-		lc := lifecycle.New()
-		if err := lc.Run(cancelled(), failsafe); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Fatal("Add after Run did not panic")
-			}
-			if want := "lifecycle: Add after Run"; r != want {
-				t.Fatalf("panic = %v, want %q", r, want)
-			}
-		}()
-		lc.Add(valid)
-	})
 }
 
-// A startup failure cancels the run context before the drain, so work a
-// started service left running on it stops rather than outliving the drain.
-func TestRun_StartupFailureCancelsRunContextBeforeDrain(t *testing.T) {
-	lc := lifecycle.New()
+func TestCoordinator_RunsOnce(t *testing.T) {
+	execOnce := func(c *lifecycle.Coordinator) { _ = c.Exec(context.Background(), noop) }
+	runOnce := func(c *lifecycle.Coordinator) { _ = c.Run(cancelled()) }
+	for _, tc := range []struct {
+		name          string
+		first, second func(*lifecycle.Coordinator)
+		op            string
+	}{
+		{"RunTwice", runOnce, runOnce, "Run"},
+		{"ExecTwice", execOnce, execOnce, "Exec"},
+		{"RunAfterExec", execOnce, runOnce, "Run"},
+		{"ExecAfterRun", runOnce, execOnce, "Exec"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lc := coordinator(t, failsafe, graph.New())
+			tc.first(lc)
+			want := "lifecycle: " + tc.op + " on a Coordinator that already ran"
+			mustPanic(t, want, func() { tc.second(lc) })
+		})
+	}
+}
 
+func TestRun_LayersStartLowestFirst(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	pool := node(g, &fake{name: "pool", r: &r})
+	consumer := node(g, &fake{name: "consumer", r: &r}, pool)
+	server := node(g, &fake{name: "server", r: &r}, consumer)
+
+	if err := runThrough(coordinator(t, failsafe, g, server)); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	want := []string{
+		"start pool", "start consumer", "start server",
+		"stop server", "stop consumer", "stop pool",
+	}
+	if got := r.list(); !slices.Equal(got, want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
+}
+
+func TestRun_LayerBarrierBlocksTheNextLayer(t *testing.T) {
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	var second atomic.Bool
+	g := graph.New()
+	first := value(g, "first", starter(func(context.Context) error {
+		close(blocked)
+		<-release
+		return nil
+	}))
+	top := value(g, "second", starter(func(context.Context) error {
+		second.Store(true)
+		return nil
+	}), first)
+	lc := coordinator(t, failsafe, g, top)
+
+	ready := make(chan struct{})
+	lc.OnReady(func() { close(ready) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := run(ctx, lc)
+
+	recvOrFail(t, blocked, "layer 0 to start")
+	time.Sleep(20 * time.Millisecond)
+	if second.Load() {
+		t.Fatal("layer 1 started while layer 0 was still starting")
+	}
+
+	close(release)
+	recvOrFail(t, ready, "coordinator to become ready")
+	cancel()
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !second.Load() {
+		t.Fatal("layer 1 never started")
+	}
+}
+
+func TestRun_ShutdownReversesLayers(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	pool := node(g, &fake{name: "pool", r: &r})
+	// A stop-only participant shuts down with its layer.
+	flusher := value(g, "flusher", stopper(func(context.Context) error {
+		r.record("stop flusher")
+		return nil
+	}), pool)
+	server := node(g, &fake{name: "server", r: &r}, flusher)
+
+	if err := runThrough(coordinator(t, failsafe, g, server)); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	want := []string{"start pool", "start server", "stop server", "stop flusher", "stop pool"}
+	if got := r.list(); !slices.Equal(got, want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
+}
+
+func TestRun_StartupFailureSkipsHigherLayersAndShutsDownBegunLayers(t *testing.T) {
+	var r recorder
+	sentinel := errors.New("bus connect failed")
+	g := graph.New()
+	pool := node(g, &fake{name: "pool", r: &r})
+	bus := node(g, &fake{name: "bus", r: &r, start: func(context.Context) error {
+		return sentinel
+	}}, pool)
+	cache := node(g, &fake{name: "cache", r: &r}, pool)
+	server := node(g, &fake{name: "server", r: &r}, bus, cache)
+
+	err := coordinator(t, failsafe, g, server).Run(context.Background())
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
+	}
+	if !strings.Contains(err.Error(), "startup:") || !strings.Contains(err.Error(), "bus:") {
+		t.Errorf("error = %v, want the startup wrap naming the failed participant", err)
+	}
+
+	// The failing layer finishes its concurrent starts, and the whole layer
+	// shuts down, bus whose Start failed included; server never starts.
+	got := r.list()
+	if !phased(got,
+		[]string{"start pool"},
+		[]string{"start bus", "start cache"},
+		[]string{"stop bus", "stop cache"},
+		[]string{"stop pool"},
+	) {
+		t.Fatalf("events = %v, want pool, {bus cache} started, then {bus cache} and pool stopped", got)
+	}
+}
+
+// A startup failure cancels the run context before shutdown, so work a
+// started participant left running on it stops rather than outliving the
+// shutdown.
+func TestRun_StartupFailureCancelsRunContextBeforeShutdown(t *testing.T) {
 	var runCtx context.Context
 	runErr := make(chan error, 1)
-	lc.Add(lifecycle.Service{
-		Name:  "pool",
-		Stage: 0,
-		Start: func(ctx context.Context) error {
+	g := graph.New()
+	pool := node(g, &fake{
+		name: "pool",
+		start: func(ctx context.Context) error {
 			runCtx = ctx
 			return nil
 		},
-		Shutdown: func(context.Context) error {
+		stop: func(context.Context) error {
 			runErr <- runCtx.Err()
 			return nil
 		},
 	})
-	lc.Add(lifecycle.Service{
-		Name:  "bus",
-		Stage: 1,
-		Start: func(context.Context) error { return errors.New("bus connect failed") },
-	})
+	bus := value(g, "bus", starter(func(context.Context) error {
+		return errors.New("bus connect failed")
+	}), pool)
 
-	if err := lc.Run(context.Background(), failsafe); err == nil {
-		t.Fatal("Run returned nil for a failing stage")
+	if err := coordinator(t, failsafe, g, bus).Run(context.Background()); err == nil {
+		t.Fatal("Run returned nil for a failing layer")
 	}
 	if err := recvOrFail(t, runErr, "pool shutdown"); err == nil {
-		t.Error("run context was live while the startup failure drained")
+		t.Error("run context was live while the startup failure shut down")
 	}
 }
 
-// The first failure in a stage cancels its siblings, and the cancellation
+// The first failure in a layer cancels its siblings, and the cancellation
 // they return is the failure's consequence, not a failure of its own.
 func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
-	lc := lifecycle.New()
 	sentinel := errors.New("bus connect failed")
+	g := graph.New()
+	bus := value(g, "bus", starter(func(context.Context) error { return sentinel }))
+	cache := value(g, "cache", starter(func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}))
+	lc := coordinator(t, failsafe, g, bus, cache)
 
-	lc.Add(lifecycle.Service{
-		Name:  "bus",
-		Stage: 0,
-		Start: func(context.Context) error { return sentinel },
-	})
-	lc.Add(lifecycle.Service{
-		Name:  "cache",
-		Stage: 0,
-		Start: func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	})
-
-	done := make(chan error, 1)
-	go func() { done <- lc.Run(context.Background(), failsafe) }()
-	err := recvOrFail(t, done, "Run to return")
+	err := recvOrFail(t, run(context.Background(), lc), "Run to return")
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("error = %v, want errors.Is(err, sentinel)", err)
 	}
@@ -874,128 +739,368 @@ func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
 	}
 }
 
-// A drain timeout that is not positive would time out every drain; it is a
-// wiring mistake like a late registration.
-func TestRun_NonPositiveDrainTimeoutPanics(t *testing.T) {
-	for _, timeout := range []time.Duration{0, -time.Second} {
-		t.Run(timeout.String(), func(t *testing.T) {
-			lc := lifecycle.New()
-			defer func() {
-				r := recover()
-				if r == nil {
-					t.Fatal("Run did not panic")
-				}
-				want := fmt.Sprintf("lifecycle: Run: drain timeout %v is not positive", timeout)
-				if r != want {
-					t.Fatalf("panic = %v, want %q", r, want)
-				}
-			}()
-			_ = lc.Run(cancelled(), timeout)
-		})
-	}
-}
-
-func TestCoordinator_ZeroValueIsUsable(t *testing.T) {
-	var lc lifecycle.Coordinator
-	rec := &recorder{}
-	lc.Add(lifecycle.Service{
-		Name:     "svc",
-		Start:    func(context.Context) error { rec.add("up"); return nil },
-		Shutdown: func(context.Context) error { rec.add("down"); return nil },
-	})
-
-	if err := lc.Run(cancelled(), failsafe); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if got, want := rec.list(), []string{"up", "down"}; !slices.Equal(got, want) {
-		t.Fatalf("sequence = %v, want %v", got, want)
-	}
-}
-
-// A cancellation a service returns from a context of its own is its failure,
-// not a consequence: with the run context live and nothing on record, it is
-// kept.
+// A cancellation a participant returns from a context of its own is its
+// failure, not a consequence: with the run context live and nothing on
+// record, it is kept.
 func TestRun_StartupKeepsAnUnrelatedCancellation(t *testing.T) {
-	lc := lifecycle.New()
-	lc.Add(lifecycle.Service{
-		Name: "dial",
-		Start: func(context.Context) error {
-			own, cancel := context.WithCancel(context.Background())
-			cancel()
-			return fmt.Errorf("dial: %w", own.Err())
-		},
-	})
+	g := graph.New()
+	dial := value(g, "dial", starter(func(context.Context) error {
+		own, cancel := context.WithCancel(context.Background())
+		cancel()
+		return fmt.Errorf("dial: %w", own.Err())
+	}))
 
-	err := lc.Run(context.Background(), failsafe)
+	err := coordinator(t, failsafe, g, dial).Run(context.Background())
 	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "startup:") {
 		t.Fatalf("error = %v, want the startup failure wrapping context.Canceled", err)
 	}
 }
 
 // A signal during startup is the signal-driven exit: the Starts that honor
-// the run context return its cancellation, the started services drain, and
+// the run context return its cancellation, the begun layers shut down, and
 // Run returns nil.
-func TestRun_SignalDuringStartupDrainsCleanly(t *testing.T) {
-	lc := lifecycle.New()
+func TestRun_SignalDuringStartupShutsDownCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	drained := make(chan struct{})
-	lc.Add(lifecycle.Service{
-		Name:     "pool",
-		Stage:    0,
-		Start:    func(context.Context) error { return nil },
-		Shutdown: func(context.Context) error { close(drained); return nil },
-	})
+	var r recorder
+	g := graph.New()
+	pool := node(g, &fake{name: "pool", r: &r})
+	var layer1 []graph.Ref
 	for _, name := range []string{"bus", "cache"} {
-		lc.Add(lifecycle.Service{
-			Name:  name,
-			Stage: 1,
-			Start: func(ctx context.Context) error {
-				cancel() // the signal arrives mid-startup
-				<-ctx.Done()
-				return fmt.Errorf("connect: %w", ctx.Err())
-			},
-		})
+		layer1 = append(layer1, node(g, &fake{name: name, r: &r, start: func(ctx context.Context) error {
+			cancel() // the signal arrives mid-startup
+			<-ctx.Done()
+			return fmt.Errorf("connect: %w", ctx.Err())
+		}}, pool))
 	}
+	server := node(g, &fake{name: "server", r: &r}, layer1...)
+	lc := coordinator(t, failsafe, g, server)
+
 	readied := false
 	lc.OnReady(func() { readied = true })
 
-	if err := lc.Run(ctx, failsafe); err != nil {
+	if err := lc.Run(ctx); err != nil {
 		t.Fatalf("Run after a signal during startup = %v, want nil", err)
 	}
-	recvOrFail(t, drained, "the started service's drain")
 	if readied {
 		t.Error("OnReady hooks ran for a startup the signal cut short")
+	}
+	// bus and cache returned the cancellation and still shut down; server
+	// never starts.
+	got := r.list()
+	if !phased(got,
+		[]string{"start pool"},
+		[]string{"start bus", "start cache"},
+		[]string{"stop bus", "stop cache"},
+		[]string{"stop pool"},
+	) {
+		t.Fatalf("events = %v, want the begun layers shut down and server never started", got)
 	}
 }
 
 // A signal during startup does not mask a real failure: a Start whose error
 // is not a cancellation still fails the run.
 func TestRun_SignalDuringStartupKeepsARealFailure(t *testing.T) {
-	lc := lifecycle.New()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sentinel := errors.New("flush failed")
 
-	lc.Add(lifecycle.Service{
-		Name: "bus",
-		Start: func(ctx context.Context) error {
-			cancel()
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	})
-	lc.Add(lifecycle.Service{
-		Name: "cache",
-		Start: func(ctx context.Context) error {
-			<-ctx.Done()
-			return sentinel
-		},
-	})
+	g := graph.New()
+	bus := value(g, "bus", starter(func(ctx context.Context) error {
+		cancel()
+		<-ctx.Done()
+		return ctx.Err()
+	}))
+	cache := value(g, "cache", starter(func(ctx context.Context) error {
+		<-ctx.Done()
+		return sentinel
+	}))
 
-	err := lc.Run(ctx, failsafe)
+	err := coordinator(t, failsafe, g, bus, cache).Run(ctx)
 	if !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "startup:") {
 		t.Fatalf("error = %v, want the startup failure wrapping the sentinel", err)
+	}
+}
+
+func TestExec_StartsLayersThenRunsThenShutsDownInReverse(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	// a's Start yields before it returns, so a missing barrier lets layer
+	// 1 start before it finishes.
+	a := node(g, &fake{name: "a", r: &r, start: func(context.Context) error {
+		time.Sleep(20 * time.Millisecond)
+		r.record("started a")
+		return nil
+	}})
+	b := node(g, &fake{name: "b", r: &r}, a)
+	c := node(g, &fake{name: "c", r: &r}, a)
+	d := node(g, &fake{name: "d", r: &r}, b, c)
+
+	err := coordinator(t, failsafe, g, d).Exec(context.Background(), func(context.Context) error {
+		r.record("fn")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+
+	if got := r.list(); !phased(got,
+		[]string{"start a"}, []string{"started a"},
+		[]string{"start b", "start c"},
+		[]string{"start d"}, []string{"fn"}, []string{"stop d"},
+		[]string{"stop b", "stop c"},
+		[]string{"stop a"},
+	) {
+		t.Errorf("events = %q, want a, {b c}, d, fn, then d, {b c}, a", got)
+	}
+}
+
+// rendezvous returns two functions, each of which marks its side begun and
+// waits for the other's, failing with an error when the other never begins:
+// the pair completes only when both run at once.
+func rendezvous() (a, b func(context.Context) error) {
+	aBegun, bBegun := make(chan struct{}), make(chan struct{})
+	meet := func(mine chan struct{}, theirs <-chan struct{}) func(context.Context) error {
+		return func(context.Context) error {
+			close(mine)
+			select {
+			case <-theirs:
+				return nil
+			case <-time.After(failsafe):
+				return errors.New("sibling never began")
+			}
+		}
+	}
+	return meet(aBegun, bBegun), meet(bBegun, aBegun)
+}
+
+func TestExec_LayerShutsDownConcurrently(t *testing.T) {
+	a, b := rendezvous()
+	g := graph.New()
+	na := value(g, "a", stopper(a))
+	nb := value(g, "b", stopper(b))
+	if err := coordinator(t, 2*failsafe, g, na, nb).Exec(context.Background(), noop); err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+}
+
+func TestExec_ContextEndedBeforeStartupReturnsTheCancellation(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	a := node(g, &fake{name: "a", r: &r})
+	ran := false
+	err := coordinator(t, failsafe, g, a).Exec(cancelled(), func(context.Context) error {
+		ran = true
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "startup:") {
+		t.Fatalf("Exec = %v, want the startup wrap of context.Canceled", err)
+	}
+	if ran {
+		t.Error("Exec ran fn after its context ended")
+	}
+	if got := r.list(); len(got) != 0 {
+		t.Errorf("events = %q, want nothing started", got)
+	}
+}
+
+// A value takes part in each phase it implements, and a value that
+// implements neither takes no part.
+func TestExec_ParticipationFollowsTheValue(t *testing.T) {
+	var r recorder
+	g := graph.New()
+	roots := []graph.Ref{
+		node(g, &fake{name: "subsystem", r: &r}),
+		value(g, "start-only", starter(func(context.Context) error {
+			r.record("start start-only")
+			return nil
+		})),
+		value(g, "stop-only", stopper(func(context.Context) error {
+			r.record("stop stop-only")
+			return nil
+		})),
+		value(g, "inert", 2),
+	}
+	if err := coordinator(t, failsafe, g, roots...).Exec(context.Background(), noop); err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+
+	got := r.list()
+	starts := []string{"start subsystem", "start start-only"}
+	stops := []string{"stop subsystem", "stop stop-only"}
+	if !phased(got, starts, stops) {
+		t.Errorf("events = %q, want starts %q then stops %q", got, starts, stops)
+	}
+}
+
+func TestExec_StartFailureSkipsFn(t *testing.T) {
+	var r recorder
+	errBoom := errors.New("boom")
+	waiting := make(chan struct{})
+	g := graph.New()
+	base := node(g, &fake{name: "base", r: &r})
+	database := node(g, &fake{name: "database", r: &r, start: func(context.Context) error {
+		select {
+		case <-waiting:
+			return errBoom
+		case <-time.After(failsafe):
+			return errors.New("sibling never began")
+		}
+	}}, base)
+	slow := node(g, &fake{name: "slow", r: &r, start: func(ctx context.Context) error {
+		close(waiting)
+		select {
+		case <-ctx.Done():
+			r.record("slow cancelled")
+			return ctx.Err()
+		case <-time.After(failsafe):
+			return errors.New("never cancelled")
+		}
+	}}, base)
+	top := node(g, &fake{name: "top", r: &r}, database, slow)
+
+	ran := false
+	err := coordinator(t, failsafe, g, top).Exec(context.Background(), func(context.Context) error {
+		ran = true
+		return nil
+	})
+
+	if want := "startup: database: boom"; err == nil || err.Error() != want {
+		t.Fatalf("Exec = %v, want the single error %q", err, want)
+	}
+	if !errors.Is(err, errBoom) {
+		t.Errorf("Exec = %v, want errors.Is(err, errBoom)", err)
+	}
+	if ran {
+		t.Error("Exec ran fn after a start failure")
+	}
+
+	if got := r.list(); !phased(got,
+		[]string{"start base"},
+		[]string{"start database", "start slow"},
+		[]string{"slow cancelled"},
+		[]string{"stop database", "stop slow"},
+		[]string{"stop base"},
+	) {
+		t.Errorf("events = %q, want base, {database slow}, slow cancelled, "+
+			"then {database slow} and base shut down, top never started", got)
+	}
+}
+
+func TestExec_JoinsShutdownErrors(t *testing.T) {
+	errA, errB := errors.New("a stuck"), errors.New("b stuck")
+	newGraph := func(r *recorder) (*graph.Graph, graph.Ref) {
+		g := graph.New()
+		a := node(g, &fake{name: "a", r: r, stop: func(context.Context) error { return errA }})
+		b := node(g, &fake{name: "b", r: r, stop: func(context.Context) error { return errB }}, a)
+		return g, b
+	}
+
+	t.Run("FailsACleanRun", func(t *testing.T) {
+		var r recorder
+		g, root := newGraph(&r)
+		err := coordinator(t, failsafe, g, root).Exec(context.Background(), noop)
+		if want := "shutdown: b: b stuck\na: a stuck"; err == nil || err.Error() != want {
+			t.Fatalf("Exec = %v, want %q", err, want)
+		}
+		if !errors.Is(err, errA) || !errors.Is(err, errB) {
+			t.Errorf("Exec = %v, want errA and errB", err)
+		}
+	})
+
+	t.Run("JoinsFnsError", func(t *testing.T) {
+		var r recorder
+		g, root := newGraph(&r)
+		errFn := errors.New("fn failed")
+		err := coordinator(t, failsafe, g, root).Exec(context.Background(), func(context.Context) error {
+			return errFn
+		})
+		if !errors.Is(err, errFn) || !errors.Is(err, errA) || !errors.Is(err, errB) {
+			t.Fatalf("Exec = %v, want errFn, errA and errB", err)
+		}
+		want := []string{"start a", "start b", "stop b", "stop a"}
+		if got := r.list(); !slices.Equal(got, want) {
+			t.Errorf("events = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestExec_ShutdownContextIsDetachedAndBounded(t *testing.T) {
+	const timeout = time.Minute
+	var (
+		r        recorder
+		stopErr  error
+		deadline time.Time
+		bounded  bool
+	)
+	g := graph.New()
+	a := node(g, &fake{name: "a", r: &r, stop: func(ctx context.Context) error {
+		stopErr = ctx.Err()
+		deadline, bounded = ctx.Deadline()
+		return nil
+	}})
+	ctx, cancel := context.WithCancel(context.Background())
+	begun := time.Now()
+
+	err := coordinator(t, timeout, g, a).Exec(ctx, func(ctx context.Context) error {
+		cancel()
+		return ctx.Err()
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Exec = %v, want fn's cancellation", err)
+	}
+	if !slices.Contains(r.list(), "stop a") {
+		t.Fatal("a was not shut down after its context was cancelled mid-fn")
+	}
+	if stopErr != nil {
+		t.Errorf("shutdown context err = %v, want live", stopErr)
+	}
+	if !bounded || deadline.Before(begun.Add(timeout)) || deadline.After(time.Now().Add(timeout)) {
+		t.Errorf("shutdown deadline = %v (set %v), want ShutdownTimeout from shutdown", deadline, bounded)
+	}
+}
+
+func TestExec_ShutdownOverrunStillAttemptsLowerLayers(t *testing.T) {
+	var r recorder
+	release := make(chan struct{})
+	defer close(release)
+	baseStopped := make(chan struct{})
+	errTop := errors.New("top failed")
+	g := graph.New()
+	base := node(g, &fake{name: "base", r: &r, stop: func(context.Context) error {
+		close(baseStopped)
+		return nil
+	}})
+	hang := node(g, &fake{name: "hang", r: &r, stop: func(context.Context) error {
+		<-release
+		return errors.New("late")
+	}}, base)
+	top := node(g, &fake{name: "top", r: &r, stop: func(context.Context) error { return errTop }}, hang)
+
+	err := coordinator(t, 100*time.Millisecond, g, top).Exec(context.Background(), noop)
+	// Past the deadline shutdown no longer waits on a layer, so base's
+	// shutdown may begin after Exec returns; it must begin.
+	recvOrFail(t, baseStopped, "base's shutdown")
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Exec = %v, want a deadline error", err)
+	}
+	if !strings.Contains(err.Error(), "drain timeout after") {
+		t.Errorf("Exec = %v, want the drain timeout description", err)
+	}
+	if !errors.Is(err, errTop) {
+		t.Errorf("Exec = %v, want errTop from the layer before the overrun", err)
+	}
+	if strings.Contains(err.Error(), "late") {
+		t.Errorf("Exec = %v, kept the straggler's late error", err)
+	}
+	if n := strings.Count(err.Error(), context.DeadlineExceeded.Error()); n != 1 {
+		t.Errorf("Exec = %v, want exactly one deadline error, got %d", err, n)
+	}
+	want := []string{"start base", "start hang", "start top", "stop top", "stop hang", "stop base"}
+	if got := r.list(); !slices.Equal(got, want) {
+		t.Errorf("events = %q, want %q", got, want)
 	}
 }

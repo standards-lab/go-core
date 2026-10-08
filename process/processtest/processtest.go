@@ -73,6 +73,25 @@ func moduleRoot() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// command prepares the binary Main built to run in the module root with
+// args, and with the parent's environment plus env's KEY=VALUE overrides.
+// Launch and Run both start the program through it, so a long-running
+// process and a one-shot run see the same environment.
+func command(t testing.TB, args, env []string) *exec.Cmd {
+	t.Helper()
+	if binary == "" {
+		t.Fatal("processtest: no binary; the suite's TestMain must call Main")
+	}
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = root
+	// Races report as they happen, so the race runtime's one-second sleep
+	// at exit only slows every run; the parent's GORACE options stay.
+	gorace := strings.TrimSpace(os.Getenv("GORACE") + " atexit_sleep_ms=0")
+	cmd.Env = append(os.Environ(), "GORACE="+gorace)
+	cmd.Env = append(cmd.Env, env...)
+	return cmd
+}
+
 // Process is one running program: its captured output and its exit.
 type Process struct {
 	cmd    *exec.Cmd
@@ -87,16 +106,7 @@ type Process struct {
 // after Failsafe.
 func Launch(t testing.TB, env ...string) *Process {
 	t.Helper()
-	if binary == "" {
-		t.Fatal("processtest: no binary; the suite's TestMain must call Main")
-	}
-	cmd := exec.Command(binary)
-	cmd.Dir = root
-	// Races report as they happen, so the race runtime's one-second sleep
-	// at exit only slows every Stop; the parent's GORACE options stay.
-	gorace := strings.TrimSpace(os.Getenv("GORACE") + " atexit_sleep_ms=0")
-	cmd.Env = append(os.Environ(), "GORACE="+gorace)
-	cmd.Env = append(cmd.Env, env...)
+	cmd := command(t, nil, env)
 	out := &output{}
 	cmd.Stdout, cmd.Stderr = out, out
 	if err := cmd.Start(); err != nil {

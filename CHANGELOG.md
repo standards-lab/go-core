@@ -6,6 +6,93 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-10-08
+
+The lifecycle coordinator now runs a computed dependency graph. A program describes its
+dependencies as `graph` nodes, each a name and a constructor; a Build constructs what the roots
+reach and orders it in layers, and the `Coordinator` starts, watches, and shuts down each value
+by the interfaces the value implements. Hand-numbered stages and function fields are gone.
+
+### Added
+
+- `graph` — a typed dependency graph on the standard library alone. `Graph.Define` describes a
+  node inertly, `Graph.Replace` swaps a node's constructor for a test's substitute, and
+  `Graph.Observe` traces what a Build reaches. `Graph.Build` constructs what its roots reach,
+  discovering the edges as the constructors call `Scope.Use` (`Scope.After` orders without a
+  value), builds each node once per Build, and returns a `System` whose `Get` returns a node's
+  value and whose `Layers` returns the built `Dependency` values in longest-path layers. A
+  constructor's error fails the Build labelled with its node's name; wiring mistakes panic.
+- `lifecycle.Coordinator.Exec`, which starts the System, runs a function under the run context,
+  and shuts down: the one-shot form a CLI command uses. It carries `Run`'s runtime contract:
+  readiness, the `OnReady` hooks, and monitored failures.
+- `lifecycle.Starter`, `lifecycle.Stopper`, and `lifecycle.Subsystem`, which embeds both: a
+  dependency's value takes part in startup and shutdown by implementing them. A value that
+  implements neither takes no part.
+- `lifecycle.Config`, with `Merge` and `Finalize`, and `lifecycle.Env` with `NewEnv`: the
+  `ShutdownTimeout` bounds the whole shutdown, defaults to 10s, and is overridden by
+  `<PREFIX>_SHUTDOWN_TIMEOUT`.
+- `lifecycle.Readiness`, a node value that reports its Coordinator's `Ready` and `Checks` to
+  the nodes that depend on it, such as a health handler. `New` binds every `*Readiness` in its
+  System; an unbound one is not ready.
+- `lifecycle.Monitored`: a value with `Err() <-chan error` is watched once startup completes,
+  and its first non-nil error ends the run as `run:`.
+- `lifecycle.Coordinator.Checks` is inferred: a `Check` for each value in the System that
+  implements `ReadinessChecker`, named by its node, in layer and then definition order.
+- `process/processtest.Run`, which runs the program `Main` built, once, as a `Cmd` says (its
+  arguments, standard input, and environment), and returns its `Result`: stdout, stderr, and the
+  exit code, separately. A run that stalls past `Failsafe` is interrupted, killed, and fails
+  the test.
+
+### Changed
+
+- `lifecycle`: the layers of the `graph.System` replace the stages. Each layer starts once the
+  layers below it have, its participants concurrently, and shutdown runs the layers in reverse,
+  each concurrently, under one `ShutdownTimeout` budget. The run context, the first failure's
+  cancellation, and the error labels (`startup:`, `run:`, `shutdown:`, the dependency's name)
+  are as in v0.5.0.
+- `lifecycle`: `Monitor` remains, for a channel outside the graph; the Coordinator watches it
+  beside the `Monitored` values.
+- **Breaking:** `lifecycle.New` takes `(sys *graph.System, cfg Config)` and panics on a nil
+  System, a `ShutdownTimeout` that is not positive, or a `Readiness` already bound to another
+  Coordinator. The zero `Coordinator` is no longer usable.
+- **Breaking:** `lifecycle.Coordinator.Run` takes only its context; the drain timeout is
+  `Config.ShutdownTimeout`.
+- **Breaking:** `lifecycle.Coordinator.Checks` lists the System's values that implement
+  `ReadinessChecker` instead of the checks declared on `Service`.
+- **Breaking:** `lifecycle`: shutdown calls `Shutdown` on a participant whose `Start` failed, so a
+  dependency constructed but not started leaks nothing. v0.5.0 shut down only services whose
+  `Start` succeeded. The start error remains the error reported.
+- **Breaking:** `lifecycle`: a `Run` whose context ended before startup starts and stops
+  nothing.
+
+### Fixed
+
+- `lifecycle.Coordinator.Run` reports a monitored failure that wraps `context.Canceled` as a
+  `run:` failure. v0.5.0 read the run context's cause and took such a failure for the clean
+  stop.
+
+### Removed
+
+- **Breaking:** `lifecycle.Coordinator.Add` and `lifecycle.Service`. A participant is a graph
+  node whose value implements `Starter`, `Stopper`, or `Subsystem`.
+- **Breaking:** the stages and `lifecycle.StageRoot`. A node's place in the order is computed
+  from what it uses.
+- **Breaking:** `lifecycle.Coordinator.OnStartup` and `lifecycle.Coordinator.OnShutdown`.
+
+### Migrating from v0.5.0
+
+- **The stage table becomes graph nodes.** Define a node per service whose constructor uses
+  the nodes it depends on, build the System from the roots, and pass it to
+  `lifecycle.New(sys, cfg)`. A service at `StageRoot` becomes a node that uses everything it
+  serves; `Scope.After` orders a node without its value.
+- **The hooks become layer-0 nodes.** A bracketing value, such as telemetry, is a node that
+  every other node uses or orders after, whose value implements `Starter` for the `OnStartup`
+  work and `Stopper` for the `OnShutdown` work.
+- **`lc.Monitor(x.Err())` becomes `Monitored`.** A value with `Err() <-chan error` is watched
+  without a call; `Monitor` remains for a channel outside the graph.
+- **`Run(ctx, timeout)` becomes `Run(ctx)`.** Load a `lifecycle.Config` and finalize it with the
+  program's environment prefix; the timeout is its `ShutdownTimeout`.
+
 ## [v0.5.0] - 2026-09-30
 
 The closing review of the storage suite: correctness fixes across the lifecycle, the loader,
@@ -157,7 +244,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/standards-lab/go-core/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-core/compare/v0.4.1...v0.5.0
 [v0.4.1]: https://github.com/standards-lab/go-core/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/standards-lab/go-core/compare/v0.3.0...v0.4.0
