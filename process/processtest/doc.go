@@ -8,6 +8,9 @@
 //
 //   - [Main], a suite's TestMain, which builds the program once per run
 //   - [Launch], which starts the built program as a [Process]
+//   - [Run], which runs the built program once as a [Cmd] says, with its
+//     arguments, standard input, and environment, and returns its [Result],
+//     the stdout, stderr, and exit code
 //   - [Process], one running program, which a test waits on with
 //     [Process.Await] and [Process.Wait], reads with [Process.Output] and
 //     [Process.Exited], and interrupts with [Process.Stop]

@@ -7,10 +7,16 @@
 // listen on; empty listens on none. TESTPROG_EXIT is the exit code, 0 by
 // default. TESTPROG_EXIT_AT_ONCE=1 exits with that code before waiting for
 // the signal.
+//
+// Run with echo as its first argument, it is a one-shot program instead:
+// after its two opening lines it writes its other arguments to stdout, one
+// per line, copies its stdin to stdout, writes "testprog to stderr" to
+// stderr, and exits with TESTPROG_EXIT.
 package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -26,6 +32,9 @@ func run() int {
 	code, _ := strconv.Atoi(os.Getenv("TESTPROG_EXIT"))
 	fmt.Println("testprog started")
 	fmt.Println("testprog GORACE=" + os.Getenv("GORACE"))
+	if len(os.Args) > 1 && os.Args[1] == "echo" {
+		return echo(os.Args[2:], code)
+	}
 	if os.Getenv("TESTPROG_EXIT_AT_ONCE") == "1" {
 		fmt.Fprintln(os.Stderr, "testprog exiting at once")
 		return code
@@ -42,5 +51,18 @@ func run() int {
 	defer stop()
 	<-ctx.Done()
 	fmt.Println("testprog stopped")
+	return code
+}
+
+// echo is the one-shot mode: args and stdin to stdout, a line to stderr,
+// and code as the exit.
+func echo(args []string, code int) int {
+	for _, arg := range args {
+		fmt.Println(arg)
+	}
+	if _, err := io.Copy(os.Stdout, os.Stdin); err != nil {
+		return process.Fail(os.Stderr, "copy stdin failed", err)
+	}
+	fmt.Fprintln(os.Stderr, "testprog to stderr")
 	return code
 }
