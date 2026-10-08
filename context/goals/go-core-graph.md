@@ -1,12 +1,12 @@
 # goal · go-core-graph
 
-- **State:** brief ready
-- **Task:** go-core
-- **Branch:** go-core
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
-1. [ ] go-core
+1. [x] go-core
 2. [ ] go-storage
 3. [ ] go-web-sdk
 4. [ ] go-web-sdk-template
@@ -73,10 +73,6 @@ Out of scope  downstream adoption (go-web-sdk, go-storage, template, go-web-serv
 Door          two-way for the code until tagged; one-way at the v0.6.0 tag
 Release       v0.6.0 (go-core, root)
 ```
-
-## Progress
-
-slices 6/6 committed · standards ✓ (f94363f) · spec ✓ no gaps · editor ✓
 
 ## Decisions
 
