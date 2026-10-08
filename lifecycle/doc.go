@@ -15,8 +15,15 @@
 //     shuts down: the one-shot form a CLI command uses
 //   - [Coordinator.Run], which starts the System, serves until its context
 //     ends, and shuts down: the long-running form a service uses
+//   - [Coordinator.OnReady], which registers a hook run once the System is
+//     ready, and [Coordinator.Monitor], which registers a channel whose
+//     failure ends the run
+//   - [Coordinator.Ready], whether the System is ready, and
+//     [Coordinator.Checks], the System's readiness checks
 //   - [ReadinessChecker], the interface a readiness probe consumes
 //   - [Check], a readiness check paired with its probe name
+//   - [Readiness], a graph node's value that reports its Coordinator's
+//     readiness to the nodes that depend on it
 //
 // A [Coordinator]'s life divides into an inert declaration phase and a single
 // blocking call that owns everything after. Nothing is registered for
@@ -26,8 +33,9 @@
 // mean; nothing executes. [Coordinator.Exec] or [Coordinator.Run] then
 // drives the whole sequence and returns one joined error. Registration is
 // legal only before that call, and the call is legal exactly once. Each
-// violation panics, as does [New] on a nil System or a ShutdownTimeout that
-// is not positive: they are wiring mistakes, not runtime conditions.
+// violation panics, as does [New] on a nil System, a ShutdownTimeout that
+// is not positive, or a [Readiness] already bound to another Coordinator:
+// they are wiring mistakes, not runtime conditions.
 //
 // # Participation
 //
@@ -67,10 +75,26 @@
 //
 // Readiness never flips during a failed startup, so a probe backed by
 // [Coordinator.Ready] cannot report a partially started process. On success
-// the coordinator is ready, and Run invokes the OnReady hooks synchronously,
-// in registration order. [Coordinator] satisfies [ReadinessChecker], the
-// contract a /readyz endpoint consumes. Readiness is non-monotonic: it is
-// false again the moment shutdown begins.
+// the coordinator is ready, and Exec and Run alike invoke the OnReady hooks
+// synchronously, in registration order, before Exec's function runs or Run
+// serves. [Coordinator] satisfies [ReadinessChecker], the contract a /readyz
+// endpoint consumes. Readiness is non-monotonic: it is false again the
+// moment shutdown begins.
+//
+// [Coordinator.Checks] lists the System's own readiness checks: a [Check]
+// for each value that implements [ReadinessChecker], named by its node, in
+// layer order and, within a layer, definition order.
+//
+// A node that serves readiness, such as a health handler, reaches the
+// Coordinator through a [Readiness]: the application defines a node whose
+// value is new(lifecycle.Readiness), the zero value, and the handler's node
+// uses it. There is no constructor, since the zero value is complete, and
+// the node's value is the pointer, since binding writes to it. [New] binds
+// every *Readiness in its System to the Coordinator it returns; a bound
+// Readiness reports that Coordinator's Ready and Checks, and is not among
+// them. An unbound Readiness is not ready and has no checks. A Readiness
+// binds once, so a node whose constructor returns one shared Readiness
+// across two Builds, each given to a New, panics in the second.
 //
 // # Running and monitors
 //

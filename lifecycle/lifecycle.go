@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 type Coordinator struct {
 	sys     *graph.System
 	timeout time.Duration
+	checks  []Check
 
 	mu       sync.Mutex
 	state    state
@@ -24,8 +26,10 @@ type Coordinator struct {
 }
 
 // New returns a Coordinator for sys, shutting down within
-// cfg.ShutdownTimeout. It panics on a nil sys or a ShutdownTimeout that is
-// not positive, as an unfinalized Config's is: both are wiring mistakes.
+// cfg.ShutdownTimeout, and binds every [Readiness] in sys to it. It panics
+// on a nil sys, a ShutdownTimeout that is not positive, as an unfinalized
+// Config's is, or a Readiness already bound to another Coordinator: each is
+// a wiring mistake.
 func New(sys *graph.System, cfg Config) *Coordinator {
 	if sys == nil {
 		panic("lifecycle: New: nil System")
@@ -36,11 +40,29 @@ func New(sys *graph.System, cfg Config) *Coordinator {
 			cfg.ShutdownTimeout,
 		))
 	}
-	return &Coordinator{sys: sys, timeout: cfg.ShutdownTimeout.Duration()}
+	c := &Coordinator{sys: sys, timeout: cfg.ShutdownTimeout.Duration()}
+	var bind []graph.Dependency
+	for _, layer := range sys.Layers() {
+		for _, d := range layer {
+			switch v := d.Value.(type) {
+			case *Readiness:
+				bind = append(bind, d)
+			case ReadinessChecker:
+				c.checks = append(c.checks, Check{Name: d.Name, Checker: v})
+			}
+		}
+	}
+	// Bind once the arguments are checked, so a New that panics on them
+	// binds nothing.
+	for _, d := range bind {
+		d.Value.(*Readiness).bind(d.Name, c)
+	}
+	return c
 }
 
-// OnReady registers a hook [Coordinator.Run] invokes synchronously, in
-// registration order, once startup has completed: every layer started.
+// OnReady registers a hook [Coordinator.Exec] or [Coordinator.Run] invokes
+// synchronously, in registration order, once startup has completed and the
+// Coordinator is ready: before Exec's function runs, and before Run serves.
 // Registration after Exec or Run panics.
 func (c *Coordinator) OnReady(fn func()) {
 	c.mu.Lock()
@@ -71,8 +93,19 @@ func (c *Coordinator) Ready() bool {
 	return c.state == stateRunning
 }
 
+// Checks returns a [Check] for each value in the System that implements
+// [ReadinessChecker], named by its node's name, in layer order and, within a
+// layer, definition order. A [Readiness] is not among them: it reports the
+// Coordinator, not a dependency. Each call returns a fresh copy, nil when
+// there are none.
+func (c *Coordinator) Checks() []Check {
+	return slices.Clone(c.checks)
+}
+
 // Exec starts the System, runs fn under the run context, and shuts the
-// System down. It returns fn's error joined with the shutdown's. When
+// System down. Exec keeps Run's runtime contract: the Coordinator is ready
+// and its OnReady hooks have run when fn starts, and it is not ready once
+// shutdown begins. It returns fn's error joined with the shutdown's. When
 // startup fails, or ctx ends before startup completes, fn does not run and
 // Exec returns the startup error, or ctx's, wrapped "startup:" and joined
 // with the shutdown's. A second call to Exec or [Coordinator.Run] panics.
@@ -91,9 +124,6 @@ func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) 
 // shutdown's. A second call to Run or [Coordinator.Exec] panics.
 func (c *Coordinator) Run(ctx context.Context) error {
 	return c.execute(ctx, "Run", true, func(runCtx context.Context, fail context.CancelCauseFunc) error {
-		for _, fn := range c.onReady {
-			fn()
-		}
 		c.watch(runCtx, fail)
 		<-runCtx.Done()
 		if cause := context.Cause(runCtx); !errors.Is(cause, context.Canceled) {
@@ -105,7 +135,8 @@ func (c *Coordinator) Run(ctx context.Context) error {
 
 // execute is the runtime path Exec and Run share: it claims the
 // Coordinator for op, derives the run context from ctx, starts the layers
-// under it, runs body once every layer has started, and shuts down on every
+// under it, and once every layer has started, flips ready, runs the
+// OnReady hooks in registration order, and runs body. It shuts down on every
 // path, cancelling the run context first. body receives the run context and
 // the function that cancels it with a cause. A startup that ctx's end cut
 // short returns only the shutdown's error when cutShortIsClean; otherwise
@@ -133,6 +164,9 @@ func (c *Coordinator) execute(
 	}
 
 	c.setState(stateRunning)
+	for _, fn := range c.onReady {
+		fn()
+	}
 	err := body(runCtx, fail)
 	return errors.Join(err, c.shutdown(fail, &e))
 }
