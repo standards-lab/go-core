@@ -38,8 +38,8 @@ by the interfaces the value implements. Hand-numbered stages and function fields
   and its first non-nil error ends the run as `run:`.
 - `lifecycle.Coordinator.Checks` is inferred: a `Check` for each value in the System that
   implements `ReadinessChecker`, named by its node, in layer and then definition order.
-- `process/processtest.Run`, which runs the program `Main` built once as a `Cmd` says (its
-  arguments, standard input, and environment) and returns its `Result`: stdout, stderr, and the
+- `process/processtest.Run`, which runs the program `Main` built, once, as a `Cmd` says (its
+  arguments, standard input, and environment), and returns its `Result`: stdout, stderr, and the
   exit code, separately. A run that stalls past `Failsafe` is interrupted, killed, and fails
   the test.
 

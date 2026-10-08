@@ -52,8 +52,9 @@
 //
 // The caller owns the signal context: the application's entrypoint builds
 // one — the process package's SignalContext — and passes it through the
-// composition root's run call to Exec or Run. The Coordinator derives the run context from it, which is cancelled by
-// the signal, by a startup or monitored failure, or when shutdown begins.
+// composition root's run call to Exec or Run. The Coordinator derives the
+// run context from it; the run context is cancelled by the signal, by a
+// startup or monitored failure, or when shutdown begins.
 // Every Start, and Exec's function, receives the run context; work that
 // outlives its call keeps watching that context. The coordinator installs no
 // signal handlers of its own.
@@ -72,8 +73,8 @@
 // A context that ends before or during startup stops it: no further layer
 // starts. Run treats that as the signal-driven exit, not a failure, when
 // every startup error wraps the context's error, and returns only the
-// shutdown's errors. Exec returns the cancellation, since its function
-// never ran.
+// shutdown's errors. Exec returns the context's error wrapped "startup:",
+// since its function never ran.
 //
 // Readiness never flips during a failed startup, so a probe backed by
 // [Coordinator.Ready] cannot report a partially started process. On success

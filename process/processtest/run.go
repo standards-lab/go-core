@@ -35,9 +35,9 @@ type Result struct {
 	Code int
 }
 
-// Run executes the binary Main built once, in the module root, with the
-// environment Launch gives it plus cmd.Env, waits for it to exit, and
-// returns its output and exit code. A nonzero code is a result, not a
+// Run executes the program Main built, once, in the module root, with the
+// environment Launch gives it plus cmd.Env; it waits for the program to exit
+// and returns its output and exit code. A nonzero code is a result, not a
 // failure. A run still going after Failsafe is a stall: it is interrupted,
 // killed if it has not exited within Failsafe more, and fails the test with
 // its output. Run logs the run through t.Log as a shell line a reader can

@@ -76,7 +76,7 @@ Release       v0.6.0 (go-core, root)
 
 ## Progress
 
-slices 6/6 committed · standards — · spec — · editor —
+slices 6/6 committed · standards ✓ (f94363f) · spec ✓ no gaps · editor ✓
 
 ## Decisions
 
@@ -94,6 +94,23 @@ slices 6/6 committed · standards — · spec — · editor —
   Stderr, Code}.
 - go-core: keeps go-core's run context (lives until shutdown) and error labels rather than the
   spike's per-layer start context and labels — neither is in the goal's break list.
+- go-core: a Run whose context ended before startup starts nothing, stops nothing, and returns
+  nil.
+- go-core: Exec returns a startup cut short by its context as a "startup:" error; Run treats the
+  same cut as a clean stop.
+- go-core: Exec returns fn's error unwrapped, joined with any monitored failure wrapped "run:".
+- go-core: lifecycle.Config follows go-core's config contract (Merge, Finalize, and Env with
+  NewEnv), so config.Load loads it.
+- go-core: Readiness has no constructor: the node's value is new(lifecycle.Readiness). Binding
+  one Readiness to a second Coordinator panics, and New computes Checks once.
+- go-core: the Coordinator calls each Monitored value's Err once startup completes, and skips a
+  nil channel, whether from Err or Monitor.
+- go-core: Run reports a monitored failure that wraps context.Canceled as "run:", fixing a
+  v0.5.0 flaw the standards review found.
+- go-core: a probe verified processtest.Run's stall-past-Failsafe path; no committed test covers
+  it, since Failsafe is a 15s constant.
+- go-core: processtest.Run's logged shell line names the program, not its build path, which Main
+  deletes, and lists only Cmd.Env's overrides.
 
 ## Pending edits
 
@@ -102,3 +119,21 @@ slices 6/6 committed · standards — · spec — · editor —
 - coordinator · roadmap: go-web-service task — sdk.Waker implements Ready() bool but isn't a
   Check today; as its own node, inferred Checks would add a "wake" entry to /readyz, against
   "/readyz answering as today". Its plan decides.
+- architecture · go-elemental/principles/lifecycle-and-context.md: drop the lifecycle.Service,
+  numbered Stage, and hooks-beside-subsystems text, the "shutdown hook" in "Cold start, hot
+  start, drain", and "does not follow it yet". go-core v0.6.0's Coordinator infers each value's
+  part from Starter, Stopper, and Subsystem, its checks from ReadinessChecker, its readiness
+  reporter from a lifecycle.Readiness node, and its runtime failures from Monitored.
+- coordinator · cli-applications.md: "Promotions first" — go-core v0.6.0 holds `graph`, the
+  graph-backed `lifecycle` with `Coordinator.Exec` as the one-shot form, and
+  `processtest.Run(t, Cmd{Args, Stdin, Env}) Result{Stdout, Stderr, Code}` as the one-shot
+  runner go-cli-sdk-template's integration suite uses.
+- coordinator · roadmap: go-web-sdk-template and go-web-service tasks — the health handler's node
+  uses a lifecycle.Readiness node; the server and the sweeper report runtime failures by
+  implementing lifecycle.Monitored; telemetry becomes a layer-0 node whose value implements
+  Starter and Stopper.
+- coordinator · roadmap: v1.messaging core-reactor — go-core v0.6.0 already ships
+  lifecycle.Monitored, found by type assertion and read once startup completes, and infers
+  Checks from ReadinessChecker. Drop Monitored from the task's additions; a value implementing
+  Subsystem, ReadinessChecker, and Monitored supersedes Component and
+  lc.Register(name, stage, c). The task's plan settles the reactor's shape.

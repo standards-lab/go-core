@@ -115,10 +115,10 @@ func (c *Coordinator) Checks() []Check {
 // System down. Exec keeps Run's runtime contract: the Coordinator is ready
 // and its OnReady hooks have run when fn starts, it is not ready once
 // shutdown begins, and a monitored failure ends fn's context. It returns
-// fn's error joined with the monitored failure, wrapped "run:", and the
-// shutdown's. When startup fails, or ctx ends before startup completes, fn
-// does not run and Exec returns the startup error, or ctx's, wrapped
-// "startup:" and joined with the shutdown's. A second call to Exec or
+// fn's error as fn returned it, joined with any monitored failure wrapped
+// "run:" and with the shutdown's error. When startup fails, or ctx ends
+// before startup completes, fn does not run and Exec returns the startup
+// error, or ctx's, wrapped "startup:" and joined with the shutdown's. A second call to Exec or
 // [Coordinator.Run] panics.
 func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) error {
 	return c.execute(ctx, "Exec", false, func(runCtx context.Context, monitored func() error) error {
