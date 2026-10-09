@@ -11,8 +11,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 ### Changed
 
 - `logging`: the logger `New` constructs writes each record's time in `time.UTC`, whatever
-  `time.Local` is, in both the JSON and the text format. A time-valued attribute the caller logs is written
-  as the caller built it.
+  `time.Local` is, in both the JSON and the text format. A time-valued attribute the caller logs
+  is written as the caller built it.
 
 ## [v0.6.0] - 2026-10-08
 
