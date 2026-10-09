@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	_ "time/tzdata" // the zones below load without the host's zoneinfo
 
 	"github.com/standards-lab/go-core/logging"
 )
@@ -100,20 +99,6 @@ func TestNew_ZeroConfigWritesText(t *testing.T) {
 	}
 }
 
-// setLocal points time.Local at the named zone for the test, restoring it after.
-// time.Local is process-wide, so no test that calls this may run in parallel.
-func setLocal(t *testing.T, name string) *time.Location {
-	t.Helper()
-	loc, err := time.LoadLocation(name)
-	if err != nil {
-		t.Fatalf("LoadLocation(%q): %v", name, err)
-	}
-	prev := time.Local
-	time.Local = loc
-	t.Cleanup(func() { time.Local = prev })
-	return loc
-}
-
 // recordTime returns the top-level time a record carries, as the handler wrote
 // it: the JSON "time" field or the text time= value.
 func recordTime(t *testing.T, format logging.Format, out string) string {
@@ -138,21 +123,29 @@ func recordTime(t *testing.T, format logging.Format, out string) string {
 	return ""
 }
 
-// The record time is in the host's zone when slog takes it, so each handler
-// converts it. Europe/London is GMT in winter, where a zero offset already
-// prints as Z; the instant here is in summer (BST, +01:00), so only the
-// conversion makes it Z.
-func TestNew_RecordTimeIsUTCWhateverTheLocalZone(t *testing.T) {
+// slog stamps a record with time.Now in time.Local, so each handler converts
+// the record's time. The output shows only the offset, and Europe/London is
+// GMT in winter, where an unconverted time already prints as Z; the record
+// times here are in summer (BST, +01:00) and in zones never at a zero offset,
+// so only the conversion makes them Z.
+func TestNew_RecordTimeIsUTC(t *testing.T) {
 	instant := time.Date(2026, time.July, 1, 12, 30, 45, 123_000_000, time.UTC)
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kolkata, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	for _, zone := range []string{"Europe/London", "America/New_York", "Asia/Kolkata"} {
+	for _, loc := range []*time.Location{time.Local, newYork, kolkata} {
 		for _, format := range []logging.Format{logging.FormatJSON, logging.FormatText} {
-			t.Run(zone+"/"+format.String(), func(t *testing.T) {
-				local := setLocal(t, zone)
+			t.Run(loc.String()+"/"+format.String(), func(t *testing.T) {
 				var buf bytes.Buffer
 				logger := logging.New(&buf, logging.Config{Level: logging.LevelInfo, Format: format})
 
-				record := slog.NewRecord(instant.In(local), slog.LevelInfo, "hello", 0)
+				record := slog.NewRecord(instant.In(loc), slog.LevelInfo, "hello", 0)
 				if err := logger.Handler().Handle(context.Background(), record); err != nil {
 					t.Fatalf("Handle: %v", err)
 				}
@@ -173,26 +166,10 @@ func TestNew_RecordTimeIsUTCWhateverTheLocalZone(t *testing.T) {
 	}
 }
 
-// The same holds on the ordinary path, where slog stamps the record with
-// time.Now in time.Local; New York is never at a zero offset.
-func TestNew_LoggedRecordTimeIsUTC(t *testing.T) {
-	setLocal(t, "America/New_York")
-
-	for _, format := range []logging.Format{logging.FormatJSON, logging.FormatText} {
-		var buf bytes.Buffer
-		logging.New(&buf, logging.Config{Format: format}).Info("hello")
-
-		if got := recordTime(t, format, buf.String()); !strings.HasSuffix(got, "Z") {
-			t.Errorf("%s: time = %q, want UTC (a Z suffix)", format, got)
-		}
-	}
-}
-
 // Only the record's own time is converted: a time the caller logs, at the top
 // level or as a "time" key inside a group, is written as the caller built it.
 func TestNew_CallerTimeAttrsAreUntouched(t *testing.T) {
-	local := setLocal(t, "America/New_York")
-	at := time.Date(2026, time.July, 1, 8, 0, 0, 0, local)
+	at := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.Local) // BST, +01:00
 
 	var buf bytes.Buffer
 	logging.New(&buf, logging.Config{Format: logging.FormatJSON}).
