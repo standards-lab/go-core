@@ -1,6 +1,6 @@
 # goal · go-core-graph
 
-- **State:** building
+- **State:** brief ready
 - **Task:** go-web-service
 - **Branch:** go-web-service
 
