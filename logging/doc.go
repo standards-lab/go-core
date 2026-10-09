@@ -35,4 +35,11 @@
 // handler for [FormatJSON] and a text handler otherwise. Finalize is the
 // validation point: New returns no error, and a Config that skipped Finalize
 // yields an info-level logger.
+//
+// # Record times
+//
+// Both handlers write each record's time in UTC, whatever the host's zone
+// (time.Local), so the JSON handler's time ends in "Z" and the text handler's
+// does too. Only the record's own time is converted: a time.Time the caller
+// passes as an attribute is written as the caller built it.
 package logging

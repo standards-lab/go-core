@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
+	_ "time/tzdata" // the zones below load without the host's zoneinfo
 
 	"github.com/standards-lab/go-core/logging"
 )
@@ -95,5 +97,121 @@ func TestNew_ZeroConfigWritesText(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "msg=hello") {
 		t.Errorf("output = %q, want a text record", buf.String())
+	}
+}
+
+// setLocal points time.Local at the named zone for the test, restoring it after.
+// time.Local is process-wide, so no test that calls this may run in parallel.
+func setLocal(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		t.Fatalf("LoadLocation(%q): %v", name, err)
+	}
+	prev := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = prev })
+	return loc
+}
+
+// recordTime returns the top-level time a record carries, as the handler wrote
+// it: the JSON "time" field or the text time= value.
+func recordTime(t *testing.T, format logging.Format, out string) string {
+	t.Helper()
+	if format == logging.FormatJSON {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(out), &record); err != nil {
+			t.Fatalf("unmarshal %q: %v", out, err)
+		}
+		s, ok := record[slog.TimeKey].(string)
+		if !ok {
+			t.Fatalf("record %q carries no string time", out)
+		}
+		return s
+	}
+	for field := range strings.FieldsSeq(out) {
+		if v, ok := strings.CutPrefix(field, slog.TimeKey+"="); ok {
+			return v
+		}
+	}
+	t.Fatalf("record %q carries no time= field", out)
+	return ""
+}
+
+// The record time is in the host's zone when slog takes it, so each handler
+// converts it. Europe/London is GMT in winter, where a zero offset already
+// prints as Z; the instant here is in summer (BST, +01:00), so only the
+// conversion makes it Z.
+func TestNew_RecordTimeIsUTCWhateverTheLocalZone(t *testing.T) {
+	instant := time.Date(2026, time.July, 1, 12, 30, 45, 123_000_000, time.UTC)
+
+	for _, zone := range []string{"Europe/London", "America/New_York", "Asia/Kolkata"} {
+		for _, format := range []logging.Format{logging.FormatJSON, logging.FormatText} {
+			t.Run(zone+"/"+format.String(), func(t *testing.T) {
+				local := setLocal(t, zone)
+				var buf bytes.Buffer
+				logger := logging.New(&buf, logging.Config{Level: logging.LevelInfo, Format: format})
+
+				record := slog.NewRecord(instant.In(local), slog.LevelInfo, "hello", 0)
+				if err := logger.Handler().Handle(context.Background(), record); err != nil {
+					t.Fatalf("Handle: %v", err)
+				}
+
+				got := recordTime(t, format, buf.String())
+				if !strings.HasSuffix(got, "Z") {
+					t.Errorf("time = %q, want UTC (a Z suffix)", got)
+				}
+				parsed, err := time.Parse(time.RFC3339Nano, got)
+				if err != nil {
+					t.Fatalf("parse time %q: %v", got, err)
+				}
+				if !parsed.Equal(instant) {
+					t.Errorf("time = %v, want the record's instant %v", parsed, instant)
+				}
+			})
+		}
+	}
+}
+
+// The same holds on the ordinary path, where slog stamps the record with
+// time.Now in time.Local; New York is never at a zero offset.
+func TestNew_LoggedRecordTimeIsUTC(t *testing.T) {
+	setLocal(t, "America/New_York")
+
+	for _, format := range []logging.Format{logging.FormatJSON, logging.FormatText} {
+		var buf bytes.Buffer
+		logging.New(&buf, logging.Config{Format: format}).Info("hello")
+
+		if got := recordTime(t, format, buf.String()); !strings.HasSuffix(got, "Z") {
+			t.Errorf("%s: time = %q, want UTC (a Z suffix)", format, got)
+		}
+	}
+}
+
+// Only the record's own time is converted: a time the caller logs, at the top
+// level or as a "time" key inside a group, is written as the caller built it.
+func TestNew_CallerTimeAttrsAreUntouched(t *testing.T) {
+	local := setLocal(t, "America/New_York")
+	at := time.Date(2026, time.July, 1, 8, 0, 0, 0, local)
+
+	var buf bytes.Buffer
+	logging.New(&buf, logging.Config{Format: logging.FormatJSON}).
+		Info("hello", "at", at, slog.Group("req", slog.Time(slog.TimeKey, at)))
+
+	var record struct {
+		At  string `json:"at"`
+		Req struct {
+			Time string `json:"time"`
+		} `json:"req"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("unmarshal %q: %v", buf.String(), err)
+	}
+	want := at.Format(time.RFC3339Nano)
+	if record.At != want {
+		t.Errorf("at = %q, want %q (the caller's zone kept)", record.At, want)
+	}
+	if record.Req.Time != want {
+		t.Errorf("req.time = %q, want %q (a grouped time key is the caller's)", record.Req.Time, want)
 	}
 }

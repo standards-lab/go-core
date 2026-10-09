@@ -6,6 +6,14 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-10-09
+
+### Changed
+
+- `logging`: the logger `New` constructs writes each record's time in UTC, whatever the host's
+  zone, in both the JSON and the text format. A time-valued attribute the caller logs is written
+  as the caller built it.
+
 ## [v0.6.0] - 2026-10-08
 
 The lifecycle coordinator now runs a computed dependency graph. A program describes its
@@ -244,7 +252,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.7.0...HEAD
+[v0.7.0]: https://github.com/standards-lab/go-core/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-core/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-core/compare/v0.4.1...v0.5.0
 [v0.4.1]: https://github.com/standards-lab/go-core/compare/v0.4.0...v0.4.1
