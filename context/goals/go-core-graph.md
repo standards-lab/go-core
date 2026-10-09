@@ -1,8 +1,8 @@
 # goal · go-core-graph
 
-- **State:** idle
-- **Task:** none
-- **Branch:** none
+- **State:** building
+- **Task:** go-web-service
+- **Branch:** go-web-service
 
 ## Tasks
 
@@ -12,96 +12,137 @@
 4. [x] go-web-sdk-template
 5. [ ] go-web-service
 
-## Task brief · go-web-sdk-template
+## Task brief · go-web-service
 
 ```
-## Task brief · go-core-graph · go-web-sdk-template
-Problem       The template requires go-core v0.5.0 and go-web-sdk v0.14.0. Its composition
-              root registers the server on the stage table (lifecycle.Add at StageRoot),
-              watches server.Err() through Monitor, and mounts /readyz on the Coordinator.
-              go-core v0.6.0 retires Add, Service, the stages, StageRoot, and Run's timeout;
-              go-web-sdk v0.15.0's RegisterHealth takes a web.Doctor. Every generated
-              service seeds from an API that no longer exists. The exact probe answers, a
-              startup failure, the shutdown bound, and OnReady after bind aren't pinned, so
-              nothing holds the move to today's behavior.
+## Task brief · go-core-graph · go-web-service
+Problem       go-web-service requires go-core v0.5.0, go-web-sdk v0.14.0, and go-storage
+              v0.4.0. Its composition root registers every service on the stage table
+              (lifecycle.Add at stageInfrastructure, stageSchema, stageReactors,
+              StageRoot), brackets the stages with telemetry's OnStartup and OnShutdown
+              hooks, watches the server's and the sweeper's Err through Monitor, and mounts
+              /readyz on the Coordinator. go-core v0.6.0 removes all of that; go-web-sdk
+              v0.15.0's RegisterHealth takes a web.Doctor; go-storage v0.5.0 requires
+              go-core v0.6.0. The service is the goal's closing test: until it runs on the
+              graph, the promotion is unproven on the full stack. The exact /readyz order,
+              the ready record's address, a startup failure at the server, and the shutdown
+              bound are unpinned, so nothing holds the move to today's behavior.
 Behaviors
-  1. The template builds and the check passes on go-core v0.6.0 and go-web-sdk v0.15.0;
-     currency reports nothing. Go 1.27.1 and golangci-lint 2.14.0 stay.
+  1. Both modules build, and the check passes, on go-core v0.6.0, go-web-sdk v0.15.0, and
+     go-storage v0.5.0 (the slab module on go-core v0.6.0 and go-web-sdk v0.15.0), with Go
+     1.27.2 and grafana/mimir 3.2.2. Currency reports nothing. The go directive stays 1.27,
+     and golangci-lint 2.14.0 stays.
   2. Configuration loads at the entrypoint with its contract unchanged:
      - shutdown_timeout is a top-level config.json key, default 10s.
-     - APP_SHUTDOWN_TIMEOUT overrides it; an unparsable value is an error naming
-       APP_SHUTDOWN_TIMEOUT, a non-positive one "shutdown_timeout must be positive";
-       an empty prefix reads no override.
-     - An overlay's shutdown_timeout replaces the base's; one that leaves it unset keeps it.
+     - APP_SHUTDOWN_TIMEOUT overrides it. An unparsable value is an error naming
+       APP_SHUTDOWN_TIMEOUT; a non-positive one gives "shutdown_timeout must be positive".
+       An empty prefix reads no override.
+     - An overlay's shutdown_timeout replaces the base's; an overlay that leaves it unset
+       keeps the base's.
      - A file with a "Config" or "Env" key is rejected as unknown.
      - A config load failure exits nonzero with "config load failed".
-  3. The service's Config embeds lifecycle.Config by value, untagged, and drops its own
-     shutdown timeout. A literal sets the timeout as a promoted key.
-  4. The app package describes its graph in one exported Nodes value: Logger, Config,
-     Readiness, Router, Server. Each layer keeps a define function. The reactor layer lists
-     the Build roots, and Server takes an After edge to each, so it stays topmost. Neither
-     the stage table nor the layer structs remain.
-  5. New(cfg, w) describes the graph only and can't fail; the entrypoint's "app init
+  3. Config embeds lifecycle.Config by value, untagged, and drops its own shutdown
+     timeout. Merge and Finalize call the embedded ones first; Finalize returns the
+     embedded error unwrapped, so error text and order stay. Literals set the timeout as
+     a promoted key. The sweeper's grace stays half the shutdown timeout.
+  4. The app package describes its graph in one exported Nodes value with these nodes, by
+     name: config, logger, telemetry, database, storage, sql (the SQL session with its
+     catalog), files (the file store over blobfs and the object store), wake, gate,
+     organization, document, schema (with its migrator, migration sets, and seeder
+     inside), sweeper, readiness, router, server. Each layer file keeps one define
+     function: infrastructure (config through files, database defined before storage),
+     telemetry, admin (gate, schema), domain (organization, document), reactors (wake,
+     sweeper), and server (readiness, router, server). Nodes.Reactors lists the sweeper.
+     The server orders itself After each reactor and After schema. Neither the stage table
+     nor the Infrastructure, Domain, and Admin structs remain.
+  5. New(cfg, w) only describes the graph and can't fail; the entrypoint's "app init
      failed" path goes. App.Graph() and App.Nodes() are exported, so a caller can Replace
      or Observe a node before Run.
-  6. Run(ctx) builds the graph, hands the Coordinator the Config node's lifecycle block,
-     and runs it:
+  6. Run(ctx) builds from config, logger, server, schema, and Nodes.Reactors, hands the
+     Coordinator the config node's lifecycle block, and runs it:
      - 0 after a clean drain, logging "server stopped".
-     - 1 on a startup, build, or shutdown failure, logging "service failed" with the error.
+     - 1 on a Build, startup, runtime, or shutdown failure, logging "service failed" with
+       the error. A Build failure is logged through a logger built outside the graph from
+       the config's log block.
      - A second Run panics before anything is built.
   7. /healthz answers 200, application/json, Cache-Control no-store, {"status":"ok"}, with
      a request ID header.
-  8. /readyz answers 200, application/json, no-store, {"status":"ready","checks":[...]},
-     checks exactly ["lifecycle"]. The health route's web.Doctor is the Readiness node's
-     value, not the Coordinator.
-  9. OnReady logs "server ready addr=<addr>" once the server has bound, and that address
-     answers /readyz 200.
- 10. A taken port makes Run return 1 with a "startup:" error naming server; "server ready"
-     is never logged.
- 11. A connection stalled past shutdown_timeout makes Run return 1 within shutdown_timeout
-     plus a margin.
- 12. Server is alone in the built graph's top layer. The root makes no Monitor call:
-     *web.Server is inferred Subsystem and Monitored, so its runtime error ends the run.
-     Startup order, readiness held until every check passes, the monitored error, and
-     reverse drain are pinned in go-core's lifecycle and go-web-sdk's health/server tests.
- 13. The integration suite passes unchanged: boot, probe, drain; two instances; the local
-     overlay.
- 14. No README, STANDARDS, context, package doc, or harness comment names a stage, the
-     stage table, StageRoot, lifecycle.Service, Add, or Monitor on the server. "How to add
-     a service" defines a node in its layer's define function, part inferred, and a
-     reactor as a Build root.
- 15. The template module's CHANGELOG template/v0.12.0 section, dated and linked, carries
-     the [Unreleased] entries and records:
-     - the go-core v0.6.0 and go-web-sdk v0.15.0 requirement;
-     - for a generated service porting: stage table and layer structs give way to Nodes
-       and define functions; New can't fail and Run builds; Config embeds
-       lifecycle.Config (cfg.Config is the lifecycle block); RegisterHealth takes the
-       Readiness node; lc.Monitor(server.Err()) dropped, since it would watch twice;
-       /readyz lists checks after "lifecycle" in layer, then definition, order;
+  8. /readyz answers 200, application/json, no-store, {"status":"ready","checks":[...]}
+     with checks exactly lifecycle, database, storage, schema, sweeper, in that order. The
+     health route's web.Doctor is the readiness node's value. With the object store
+     unreachable, /readyz answers 503 and lists storage as the only unready check.
+  9. The ready record "server ready" names the address the server bound, logged once after
+     binding, and that address answers /readyz 200.
+ 10. A port another listener holds makes the service exit 1 with a "startup:" error
+     naming server; "server ready" is never logged.
+ 11. With APP_SHUTDOWN_TIMEOUT=1s, an upload whose declared body is only partly sent holds
+     the drain; an interrupt makes the service exit 1 within the timeout plus a margin.
+ 12. Startup order is kept, dependencies before dependents:
+     - telemetry starts before every other participant and stops after them;
+     - database and storage start together; a failure in either exits 1 naming it, and
+       schema never starts;
+     - schema starts after both;
+     - the sweeper starts after schema, so no sweep pass is refused on an empty schema;
+     - the server starts last, alone in the built graph's top layer, and drains first.
+     The drain runs in reverse.
+ 13. Telemetry's node value is a service-owned Starter and Stopper over go-observability's
+     Telemetry, and its construction performs no I/O. Its Shutdown limits the flush to 1s,
+     logs a failure at warn as "telemetry shutdown", and never fails the run. A Shutdown
+     after a Start that didn't succeed does nothing.
+ 14. The wake node's value gives the document domain its Nudge and the sweeper its source,
+     and has no Ready method, so /readyz gains no "wake" check. The wake is nudged once at
+     construction, so startup runs a sweep.
+ 15. Each participant is exactly one node's value: the admin storage routes read the
+     storage node. The root makes no Monitor call; the server's and sweeper's values are
+     found as Monitored, and a sweeper failure ends the run as "run:". sdk's reactor tests
+     pin this through a one-node graph with no Monitor call, and a compile-time proof
+     states that the reactor is a lifecycle Subsystem, ReadinessChecker, and Monitored.
+ 16. The integration suite passes: the existing cases plus the pins of behaviors 8 to 11.
+     After the pin slice, the only integration change is the harness's Ready comment.
+ 17. No README, STANDARDS, context note, package doc, or comment names a stage, the stage
+     table, StageRoot, lifecycle.Service, Add, OnStartup, OnShutdown, or Monitor on the
+     server or the sweeper. The README's startup paragraph describes the graph's order,
+     and "how to add a service" defines a node in its layer's define function, with a
+     reactor's node joining Nodes.Reactors.
+ 18. The CHANGELOG's [Unreleased] records:
+     - the go-core v0.6.0, go-web-sdk v0.15.0, and go-storage v0.5.0 requirements;
+     - the composition root on the graph, with Config embedding lifecycle.Config;
+     - telemetry as a node, the wake kept off /readyz, and the probes unchanged;
      - that the libraries' own breaks are in their CHANGELOGs.
-Test seams    New and Run over HTTP, the log as the ready signal; Config's Merge, Finalize,
-              and Load over files; App.Graph() built and read by layer (behavior 12); the
-              integration process runner, unchanged
+Test seams    the integration process runner over Postgres and Azurite (behaviors 7-12,
+              16); New and Run hermetic, for startup and Build failure; App.Graph() built
+              and read by layer (behaviors 12, 15); Config's Merge, Finalize, and Load over
+              files; sdk's Reactor under a Coordinator on a one-node graph
 Slices
-  1. pins on v0.5.0 — an exception to upgrade-first (round 1, Q1): v0.6.0 removes the API
-     the pins would be written against. Exact probe answers, readiness at the logged
-     address, startup failure, shutdown bound, and the config contract, pinned on the
-     stage table. Done when the check and integration tier pass on v0.5.0
-     (behaviors 2, 7-11, 13).
-  2. upgrade and move: go-core v0.6.0, go-web-sdk pinned @v0.15.0; Config embeds
-     lifecycle.Config; Nodes graph, New and Run, Readiness node as Doctor, no Monitor;
-     stages and layer structs gone. Done when currency exits 0, the check passes, and
-     slice 1's pins and integration pass with only New's call site changed
-     (behaviors 1-11, 13).
-  3. structural pin, docs, CHANGELOG: Server alone in the top layer; stage text removed;
-     the v0.12.0 section. Done when the check passes and the docs name no stage
-     (behaviors 12, 14, 15).
-Out of scope  go-web-service's move, telemetry, sweeper; a test-only root hook or fake
-              participant; probe body or APP_ namespace changes; middleware/rate-limit;
-              architecture page edits (goal sync)
-Door          two-way until tagged; one-way at the template/v0.12.0 tag
-Release       template/v0.12.0 (go-web-sdk-template, template module)
+  1. upgrade: Go 1.27.2 and grafana/mimir 3.2.2. Done when currency reports only the
+     go-core, go-web-sdk, and go-storage lines and the check passes.
+  2. pins on v0.5.0 (an exception to upgrade-first, round 1 Q1: v0.6.0 removes the API
+     the pins would run against): integration cases for the exact /readyz order and both
+     probes' headers, the ready record's bound address, the taken port, and the
+     partial-upload stall; unit pins for any config contract not yet covered. Done when
+     the check and the integration tier pass on v0.5.0 (behaviors 2, 7-11, 16).
+  3. upgrade and move: go-core v0.6.0, go-web-sdk v0.15.0, go-storage v0.5.0 in both
+     modules; Config embeds lifecycle.Config; the Nodes graph, New and Run; telemetry and
+     wake values; the readiness node as Doctor; no Monitor; sdk's reactor tests rewired;
+     the stage table and layer structs gone. Done when currency exits 0, the check passes,
+     and slice 2's pins and the whole integration suite pass with only the harness comment
+     changed (behaviors 1-15).
+  4. structural pins, docs, CHANGELOG: the server alone in the top layer, telemetry below
+     every other participant, the sweeper above schema, each participant once; stage text
+     removed; [Unreleased] entries. Done when the check passes and the docs name no stage
+     (behaviors 12, 15, 17, 18).
+Out of scope  the role-interface findings (cli · role-interfaces); go-observability's
+              Shutdown fix and go-database's doc examples (same task); promoting sdk's
+              reactor and gate (v1.messaging); slab beyond its requirements; probe bodies,
+              the APP_ namespace, telemetry configuration; a release (the service is
+              unreleased); coordinator and architecture edits (goal sync)
+Door          two-way: no tag; the sync's pull requests to the coordinator and the
+              architecture repository revert like any other
 ```
+
+## Progress
+
+slices 0/4 committed · standards — · spec — · editor —
 
 ## Decisions
 
@@ -207,6 +248,33 @@ Release       template/v0.12.0 (go-web-sdk-template, template module)
   internal apptest package.
 - go-web-sdk-template: context/scaffolding-cli.md names a Nodes field and defineInfrastructure in
   place of the removed layer structs.
+- go-web-service: lifecycle pins written on v0.5.0 before the library upgrade; Go 1.27.2 and
+  Mimir 3.2.2 go first, since neither touches the stage API.
+- go-web-service: the serving pins (/readyz order and headers, ready address, taken port,
+  shutdown bound) are integration cases, written on v0.5.0.
+- go-web-service: the wake node's value has no Ready method, so /readyz stays at five checks;
+  the sweeper's check already covers the Waker.
+- go-web-service: the After-telemetry edge sits on database and storage only, with a structural
+  test that telemetry is below every other participant.
+- go-web-service: a node per value two or more nodes use; a value one node uses is built inside
+  that node. Nodes: config, logger, telemetry, database, storage, sql, files, wake, gate,
+  organization, document, schema, sweeper, readiness, router, server ("files" because "storage"
+  keeps naming the object store on /readyz).
+- go-web-service: the sweeper's runtime-failure pin moves sdk's two Coordinator tests onto a
+  one-node graph with no Monitor call, plus a compile-time proof of Subsystem,
+  ReadinessChecker, and Monitored; no app-level failure test.
+- go-web-service: the integration harness's "root lifecycle stage" comment changes.
+- go-web-service: the shutdown-bound pin stalls a raw-TCP upload that sends part of its
+  declared body, with APP_SHUTDOWN_TIMEOUT=1s.
+- go-web-service: sync repoints lifecycle-and-context.md and composition-terms.md from
+  spike-cli-architecture to go-core; cli's template task repoints the other three.
+- go-web-service: messaging.md's drain paragraph states the rule only; the relay edge is
+  v1.messaging's.
+- go-web-service: the workspace's role interfaces were inventoried (no duplicate method sets;
+  go-core infers a check from any Ready() bool). The findings go in cli-applications.md and
+  are executed as cli's first task, role-interfaces, which decides candidates a–d and folds in
+  go-observability's Shutdown-after-failed-Start crash and go-database's lc.Add doc examples;
+  the Gate stays with v1.messaging. Not a go-core-graph task, since go-core v0.6.0 is released.
 
 ## Pending edits
 
@@ -247,9 +315,6 @@ Release       template/v0.12.0 (go-web-sdk-template, template module)
 - coordinator · roadmap: go-core-graph go-storage task summary — "Releases go-storage
   v0.5.0" (was v0.4.1); go-web-service task takes go-storage v0.5.0.
 - coordinator · roadmap: storage-s3 — builds on go-storage v0.5.0, the go-core-graph release.
-- coordinator · messaging.md: "Lifecycle registration" — go-storage v0.5.0's Store joins the
-  Coordinator as a graph node's value, inferred as Starter, Stopper, and ReadinessChecker; no
-  composition root copies its methods into a `lifecycle.Service`.
 - coordinator · roadmap: go-web-service task — its Config meets the same lifecycle.Config
   embedding points as the template (by value, untagged, promoted literal key), and its
   stageSchema and stageReactors become Build roots with the server After each.
@@ -269,3 +334,92 @@ Release       template/v0.12.0 (go-web-sdk-template, template module)
 - architecture · go-elemental/principles/lifecycle-and-context.md: "The wiring rule" — under
   the graph, a composition root's wiring defects panic during Run's Build ("graph: " panics),
   not at New; a constructor's error returns from Build and the service exits 1.
+- coordinator · roadmap: cli goal — gains repos = ["go-core", "go-web-sdk",
+  "go-observability", "go-database"]; cli's first plan adds go-cli-sdk and
+  go-cli-sdk-template, and sets the root, as before.
+- coordinator · roadmap: cli goal summary — "Builds on go-core-graph's release." becomes
+  "Builds on the go-core release its first task, role-interfaces, cuts."
+- coordinator · roadmap: new first cli task, ahead of sdk:
+    [goals.cli.tasks.role-interfaces]
+    name = "Role interfaces across the stack"
+    repos = ["go-core", "go-web-sdk", "go-observability", "go-database"]
+    summary = '''
+    Decides the role-interface findings in `cli-applications.md` ("Role interfaces")
+    before go-cli-sdk adds the CLI's own: (a) go-core infers a /readyz check from any
+    `Ready() bool`; (b) `web.Doctor`'s home; (c) `lifecycle.Subsystem`, never asserted at
+    runtime; (d) the consumer-side `Ready()` in `Source[T]` and admin/storage's `Store`. A
+    change (d) rules for go-web-service lands as a pending edit on v1.messaging's
+    service-reactors task. The Gate stays with v1.messaging's core-reactor. Also fixes
+    go-observability's `Telemetry.Shutdown` after a failed Start (nil providers under go-core
+    v0.6.0) and go-database's `lc.Add(lifecycle.Service{...})` doc examples. Its plan
+    settles the tags it releases; go-cli-sdk builds on its go-core release.
+    '''
+    context = ["standards-lab/context/cli-applications.md"]
+- coordinator · roadmap: cli · sdk task summary — "at go-core v0.6.0's graph and
+  lifecycle" becomes "at the graph and lifecycle of the go-core release role-interfaces
+  cuts".
+- coordinator · roadmap: cli · template task summary — add "Repoints the architecture's
+  three remaining spike-cli-architecture links (tests-and-docs.md's apptest fixtures,
+  domain-files.md's files domain, baseline-standards.md's schema commands) to
+  go-cli-sdk-template once it holds those examples."
+- coordinator · cli-applications.md: add before "## The plan":
+    ## Role interfaces
+
+    go-core v0.6.0's Coordinator finds each value's part from its methods, so a role
+    interface is a contract every value in a graph can meet by accident. The
+    go-core-graph goal took inventory before cli adds the CLI's own:
+
+    | Interface | Home | Methods | Implemented by | Read by |
+    |---|---|---|---|---|
+    | Starter | go-core lifecycle | `Start(ctx) error` | database.DB, storage.Store, admin.Service, observability.Telemetry, web.Server, sdk.Reactor | the Coordinator, by assertion |
+    | Stopper | go-core lifecycle | `Shutdown(ctx) error` | the same except admin.Service | the Coordinator, by assertion |
+    | Subsystem | go-core lifecycle | Starter + Stopper | DB, Store, Telemetry, Server, Reactor | docs and compile-time proofs only |
+    | ReadinessChecker | go-core lifecycle | `Ready() bool` | Coordinator, Readiness, DB, Store, admin.Service, Reactor, Waker | `Coordinator.Checks`, by assertion; `web.Doctor` |
+    | Monitored | go-core lifecycle | `Err() <-chan error` | web.Server, Reactor | the Coordinator, by assertion |
+    | Doctor | go-web-sdk | ReadinessChecker + `Checks()` | Coordinator, Readiness | `RegisterHealth` |
+    | Mounter | go-web-sdk | `Handle(pattern, handler)` | http.ServeMux, web.Router | `RegisterHealth` |
+    | Source[T] | go-web-service sdk | `Receive`, `Ready() bool` | Waker, Every | Reactor |
+
+    No two packages declare the same method set. The candidates, which cli's
+    role-interfaces task decides:
+
+    a. Any `Ready() bool` becomes a /readyz check. A value with Ready in another sense
+       joins the probe: go-web-service hides its Waker behind a value with no Ready.
+    b. `web.Doctor` lives in go-web-sdk, though only go-core's two types implement it.
+    c. `Subsystem` names Starter plus Stopper, but the Coordinator never asserts it.
+    d. `Source[T]` and admin/storage's `Store` declare `Ready()` on the consumer side,
+       which (a) makes a readiness check wherever such a value is a node.
+
+    The Gate's consumer views (`Shared`, `Exclusive`) stay with v1.messaging's
+    core-reactor. Two fixes ride along: go-observability v0.1.0's `Telemetry.Shutdown`
+    dereferences providers a failed Start never set, which v0.6.0 now reaches, and
+    go-database v0.7.0's doc examples still call `lc.Add(lifecycle.Service{...})`.
+- coordinator · roadmap: v1.messaging template task summary — becomes "The template's
+  `reactors.go` defines each reactor as a graph node on go-core's `reactor`, appended to
+  `Nodes.Reactors`. The template stays engine-free and imports no go-messaging."
+- coordinator · roadmap: v1.messaging service-reactors task summary — "every component
+  registers through `Register`" becomes "each component is a graph node whose part go-core
+  infers".
+- coordinator · messaging.md: the "A broker constructs without I/O ..." bullet — "starts as
+  a stage-0 lifecycle component" becomes "starts as a lowest-layer graph node".
+- coordinator · messaging.md: "Lifecycle registration" — replace the section's body:
+    Infrastructure joins the lifecycle through `Start`, `Shutdown`, and `Ready`
+    (go-database's pool, go-storage's store, the broker). Under go-core v0.6.0 each is a
+    graph node's value, and the Coordinator infers its part: Starter, Stopper, and
+    ReadinessChecker from those methods, and Monitored from `Err() <-chan error`. No
+    composition root copies methods into a `lifecycle.Service`, and nothing registers.
+    The coordinator's two error-drop windows (after the signal, and at the drain
+    deadline) stay as they are, since the reactor covers both itself.
+
+    The graph's layers order the drain: a node drains before every node it uses or
+    orders After, so the server drains first and the database and the broker last.
+- architecture · go-elemental/principles/lifecycle-and-context.md: the spike-cli-architecture
+  sentence becomes "[go-core](https://github.com/standards-lab/go-core)'s `lifecycle`
+  package realizes the rule." (with the existing edit dropping "does not follow it yet").
+- architecture · principles/composition-terms.md: "[spike-cli-architecture](...) expresses
+  go-web-service's startup order as a graph and runs a CLI and a graph shaped like the web
+  service on the same coordinator" becomes "[go-core](https://github.com/standards-lab/go-core)'s
+  `graph` and `lifecycle` run both:
+  [go-web-service](https://github.com/standards-lab/go-web-service) describes its
+  composition root as one graph on that coordinator, and the CLI application type builds
+  on the same one."
