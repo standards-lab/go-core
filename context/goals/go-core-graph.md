@@ -142,7 +142,7 @@ Door          two-way: no tag; the sync's pull requests to the coordinator and t
 
 ## Progress
 
-slices 2/4 committed · standards — · spec — · editor —
+slices 4/4 committed · standards — · spec — · editor —
 
 ## Decisions
 
