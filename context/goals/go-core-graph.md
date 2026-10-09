@@ -1,8 +1,8 @@
 # goal · go-core-graph
 
-- **State:** brief ready
-- **Task:** go-web-service
-- **Branch:** go-web-service
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
@@ -10,7 +10,7 @@
 2. [x] go-storage
 3. [x] go-web-sdk
 4. [x] go-web-sdk-template
-5. [ ] go-web-service
+5. [x] go-web-service
 
 ## Task brief · go-web-service
 
@@ -139,10 +139,6 @@ Out of scope  the role-interface findings (cli · role-interfaces); go-observabi
 Door          two-way: no tag; the sync's pull requests to the coordinator and the
               architecture repository revert like any other
 ```
-
-## Progress
-
-slices 4/4 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -293,6 +289,10 @@ slices 4/4 committed · standards ✓ · spec ✓ · editor ✓
   TestStartup_ConfigLoadFailure, on the black-box tier; the template keeps its package-main test.
 - go-web-service: no internal/apptest package, since graph_test.go holds assertion helpers, not
   fixtures.
+- go-web-service: architect, at the session brief: only the composition root, its test
+  fixtures, and the SDKs that run a graph import `graph` — recorded as an architecture
+  principle at sync. graph's ergonomics (string-keyed nodes, opaque construction and layering)
+  go to the backlog as graph-ergonomics.
 
 ## Pending edits
 
@@ -456,3 +456,15 @@ slices 4/4 committed · standards ✓ · spec ✓ · editor ✓
 - coordinator · roadmap: v1.data evaluation task summary — add "It also decides whether
   go-web-sdk-template's package-main test of the config-load failure moves to its integration
   tier, as go-web-service's TestStartup_ConfigLoadFailure did."
+- architecture · principles/composition-terms.md: after the Graph definition, add "Only the
+  composition root, its test fixtures, and the SDKs that run a graph import `graph`. Every
+  package below the root takes its dependencies as plain values through its constructor and
+  never sees a node, a scope, or the system, so the graph's API can change without reaching
+  them."
+- coordinator · roadmap: backlog += "graph-ergonomics" (after "v1.harness"), with a goal table:
+  name "graph ergonomics"; summary: go-core's `graph` works but its API is early: nodes are
+  string-keyed, and how a node is constructed and which layer it lands in is hard to see from
+  the define functions. Iron these out as more applications use the graph; the
+  composition-root principle (composition-terms.md) keeps the breaks inside composition roots,
+  their fixtures, and the SDKs that run a graph. cli's plan may pull it forward if go-cli-sdk's
+  WithGraph meets the same friction.
