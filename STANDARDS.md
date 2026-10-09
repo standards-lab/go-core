@@ -9,5 +9,6 @@ The judgement calls the standards-reviewer applies to go-core, beyond what `mise
 - `architecture/standards/go-elemental/principles/topology-and-naming.md`: the root module and its packages.
 - `architecture/standards/go-elemental/principles/release-and-ci.md`: one root `v<semver>` artifact with one `CHANGELOG.md`.
 - `architecture/standards/go-elemental/principles/lifecycle-and-context.md`: `lifecycle` and `process` realize it, and their documentation names the entrypoint and the composition root in its terms; a new primitive of the main sequence goes to `process` when it runs before the infrastructure exists and to `lifecycle` when it runs from `Run` on.
+- `architecture/standards/go-elemental/principles/utc-times.md`: `logging.New`'s handlers, which write each record's time in UTC.
 - `architecture/principles/validation-first.md`: a new configuration field validates in its type's Finalize, and a new `config.Options` field validates before `Load` reads the first file.
 - `architecture/principles/context-architecture.md`: the README and each `doc.go` are the homes.
