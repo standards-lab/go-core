@@ -21,3 +21,11 @@ type Subsystem interface {
 	Starter
 	Stopper
 }
+
+// ReadyStarter is a [Starter] that reports whether what it started is
+// ready: the value [Coordinator.Checks] infers a readiness check from. A
+// value with Ready and no Start is not one.
+type ReadyStarter interface {
+	Starter
+	ReadinessChecker
+}

@@ -15,10 +15,24 @@ import (
 var _ lifecycle.ReadinessChecker = (*lifecycle.Readiness)(nil)
 
 // checker is a value that implements ReadinessChecker and takes no part in
-// startup or shutdown.
+// startup or shutdown, so no Check is inferred from it.
 type checker func() bool
 
 func (c checker) Ready() bool { return c() }
+
+// probed is a Starter that reports its own readiness, and does not shut
+// down: the least a value needs for a Check to be inferred from it.
+type probed func() bool
+
+func (p probed) Start(context.Context) error { return nil }
+func (p probed) Ready() bool                 { return p() }
+
+var _ lifecycle.ReadyStarter = probed(nil)
+
+// probedSubsystem is a probed value that also shuts down.
+type probedSubsystem struct{ probed }
+
+func (probedSubsystem) Shutdown(context.Context) error { return nil }
 
 // readiness defines a *Readiness node on g under name, as an application
 // does for the nodes that report readiness.
@@ -106,21 +120,26 @@ func TestRun_OnReadyRunsInRegistrationOrderAfterTheFlip(t *testing.T) {
 	}
 }
 
-func TestCoordinator_ChecksListsCheckersInLayerThenDefinitionOrder(t *testing.T) {
+func TestCoordinator_ChecksListsReadyStartersInLayerThenDefinitionOrder(t *testing.T) {
 	g := graph.New()
 	base := node(g, &fake{name: "base"})
-	db := g.Define("db", func(s *graph.Scope) (checker, error) {
+	db := g.Define("db", func(s *graph.Scope) (probedSubsystem, error) {
+		s.Use(base)
+		return probedSubsystem{func() bool { return true }}, nil
+	})
+	queue := g.Define("queue", func(s *graph.Scope) (probed, error) {
 		s.Use(base)
 		return func() bool { return true }, nil
 	})
-	cache := value(g, "cache", checker(func() bool { return false }))
+	cache := value(g, "cache", probed(func() bool { return false }))
 	probe := readiness(g, "readiness")
 	plain := value(g, "plain", 2)
 
-	lc := coordinator(t, failsafe, g, db, cache, probe, plain)
+	lc := coordinator(t, failsafe, g, queue, db, cache, probe, plain)
 	checks := lc.Checks()
-	if got, want := checkNames(checks), []string{"cache", "db"}; !slices.Equal(got, want) {
-		t.Fatalf("Checks names = %q, want %q: layer 0 before layer 1, no Readiness", got, want)
+	want := []string{"cache", "db", "queue"}
+	if got := checkNames(checks); !slices.Equal(got, want) {
+		t.Fatalf("Checks names = %q, want %q: layer 0 before layer 1, definition order within it, no Readiness", got, want)
 	}
 	if checks[0].Checker.Ready() || !checks[1].Checker.Ready() {
 		t.Error("Checks' Checkers are not the System's values")
@@ -132,7 +151,28 @@ func TestCoordinator_ChecksListsCheckersInLayerThenDefinitionOrder(t *testing.T)
 	}
 }
 
-func TestCoordinator_ChecksIsEmptyWithoutCheckers(t *testing.T) {
+// A value with Ready and no Start reports on something it did not start, so
+// no Check is inferred from it, whether or not it shuts down.
+func TestCoordinator_ChecksOmitsReadinessCheckersThatDoNotStart(t *testing.T) {
+	type readyStopper struct {
+		checker
+		stopper
+	}
+	g := graph.New()
+	view := value(g, "view", checker(func() bool { return true }))
+	closer := value(g, "closer", readyStopper{
+		checker(func() bool { return true }),
+		stopper(func(context.Context) error { return nil }),
+	})
+	db := value(g, "db", probed(func() bool { return true }))
+
+	lc := coordinator(t, failsafe, g, view, closer, db)
+	if got, want := checkNames(lc.Checks()), []string{"db"}; !slices.Equal(got, want) {
+		t.Errorf("Checks names = %q, want %q: Ready without Start yields no Check", got, want)
+	}
+}
+
+func TestCoordinator_ChecksIsEmptyWithoutReadyStarters(t *testing.T) {
 	g := graph.New()
 	lc := coordinator(t, failsafe, g, node(g, &fake{name: "svc"}), readiness(g, "readiness"))
 	if got := lc.Checks(); len(got) != 0 {
@@ -156,7 +196,8 @@ func TestReadiness_ReportsTheBoundCoordinator(t *testing.T) {
 	var r recorder
 	g := graph.New()
 	probe := readiness(g, "readiness")
-	db := value(g, "db", checker(func() bool { return true }))
+	db := value(g, "db", probed(func() bool { return true }))
+	view := value(g, "view", checker(func() bool { return true }))
 	health := g.Define("health", func(s *graph.Scope) (starter, error) {
 		rd := s.Use(probe)
 		return func(context.Context) error {
@@ -164,7 +205,7 @@ func TestReadiness_ReportsTheBoundCoordinator(t *testing.T) {
 			return nil
 		}, nil
 	})
-	sys, err := g.Build(health, db)
+	sys, err := g.Build(health, db, view)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -174,8 +215,9 @@ func TestReadiness_ReportsTheBoundCoordinator(t *testing.T) {
 	if rd.Ready() {
 		t.Error("Readiness is ready before Exec")
 	}
-	if got, want := checkNames(rd.Checks()), checkNames(lc.Checks()); !slices.Equal(got, want) || len(got) != 1 {
-		t.Errorf("Readiness Checks = %q, want the Coordinator's %q", got, want)
+	if got, want := checkNames(rd.Checks()), []string{"db"}; !slices.Equal(got, want) ||
+		!slices.Equal(got, checkNames(lc.Checks())) {
+		t.Errorf("Readiness Checks = %q, want the Coordinator's narrowed %q", got, want)
 	}
 	err = lc.Exec(context.Background(), func(context.Context) error {
 		r.record("fn ready=" + strconv.FormatBool(rd.Ready()))
