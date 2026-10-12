@@ -103,8 +103,8 @@ func (c *Coordinator) Ready() bool {
 }
 
 // Checks returns a [Check] for each value in the System that implements
-// [ReadyStarter], both [Starter] and [ReadinessChecker], named by its
-// node's name, in layer order and, within a layer, definition order. A
+// [ReadyStarter], that is, both [Starter] and [ReadinessChecker], named by
+// its node's name, in layer order and, within a layer, definition order. A
 // value whose Ready reports on something it does not start, such as a node
 // that only reads another's state, is not among them, and neither is a
 // [Readiness]: it reports the Coordinator, not a dependency. Whether the

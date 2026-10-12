@@ -6,8 +6,8 @@
 //   - [Starter] and [Stopper], the single-method interfaces a dependency's
 //     value implements to take part in startup and in shutdown, and
 //     [Subsystem], which embeds both
-//   - [ReadyStarter], a Starter that implements Ready, the set
-//     [Coordinator.Checks] comes from
+//   - [ReadyStarter], a Starter that implements Ready: the interface
+//     [Coordinator.Checks] infers readiness checks from
 //   - [Monitored], the interface a dependency's value implements to report
 //     runtime failures on a channel the Coordinator watches
 //   - [Config], the Coordinator's configuration, with [Config.Merge] and
