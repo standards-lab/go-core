@@ -85,8 +85,11 @@
 // moment shutdown begins.
 //
 // [Coordinator.Checks] lists the System's own readiness checks: a [Check]
-// for each value that implements [ReadinessChecker], named by its node, in
-// layer order and, within a layer, definition order.
+// for each value that implements both [Starter] and [ReadinessChecker],
+// named by its node, in layer order and, within a layer, definition order.
+// Only a Starter's readiness is inferred, since a value reports on what it
+// started: a value with Ready and no Start yields no Check, and a Starter
+// with Ready yields one whether or not it also implements [Stopper].
 //
 // A node that serves readiness, such as a health handler, reaches the
 // Coordinator through a [Readiness]: the application defines a node whose

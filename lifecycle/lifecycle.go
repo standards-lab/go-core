@@ -29,7 +29,9 @@ type Coordinator struct {
 }
 
 // New returns a Coordinator for sys, shutting down within
-// cfg.ShutdownTimeout, binds every [Readiness] in sys to it, and watches
+// cfg.ShutdownTimeout, binds every [Readiness] in sys to it, infers its
+// [Coordinator.Checks] from the values that implement both [Starter] and
+// [ReadinessChecker], and watches
 // every [Monitored] value in sys as [Coordinator.Monitor] would. It panics
 // on a nil sys, a ShutdownTimeout that is not positive, as an unfinalized
 // Config's is, or a Readiness already bound to another Coordinator: each is
@@ -48,10 +50,9 @@ func New(sys *graph.System, cfg Config) *Coordinator {
 	var bind []graph.Dependency
 	for _, layer := range sys.Layers() {
 		for _, d := range layer {
-			switch v := d.Value.(type) {
-			case *Readiness:
+			if _, ok := d.Value.(*Readiness); ok {
 				bind = append(bind, d)
-			case ReadinessChecker:
+			} else if v, ok := d.Value.(readyStarter); ok {
 				c.checks = append(c.checks, Check{Name: d.Name, Checker: v})
 			}
 			if v, ok := d.Value.(Monitored); ok {
@@ -103,12 +104,21 @@ func (c *Coordinator) Ready() bool {
 }
 
 // Checks returns a [Check] for each value in the System that implements
-// [ReadinessChecker], named by its node's name, in layer order and, within a
-// layer, definition order. A [Readiness] is not among them: it reports the
-// Coordinator, not a dependency. Each call returns a fresh copy, nil when
-// there are none.
+// both [Starter] and [ReadinessChecker], named by its node's name, in layer
+// order and, within a layer, definition order. A value whose Ready reports
+// on something it does not start, such as a node that only reads another's
+// state, is not among them, and neither is a [Readiness]: it reports the
+// Coordinator, not a dependency. Whether the value also implements [Stopper]
+// does not matter. Each call returns a fresh copy, nil when there are none.
 func (c *Coordinator) Checks() []Check {
 	return slices.Clone(c.checks)
+}
+
+// readyStarter is a value [New] infers a [Check] from: one that starts and
+// reports whether what it started is ready.
+type readyStarter interface {
+	Starter
+	ReadinessChecker
 }
 
 // Exec starts the System, runs fn under the run context, and shuts the

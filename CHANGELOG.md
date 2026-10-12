@@ -6,6 +6,16 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.8.0] - 2026-10-12
+
+### Changed
+
+- **Breaking:** `lifecycle.Coordinator.Checks` holds a `Check` only for a value that implements
+  both `Starter` and `ReadinessChecker`, still named by its node, in layer and then definition
+  order. A value with `Ready() bool` and no `Start`, such as a node that reads another's state,
+  yields no Check; a `Starter` with `Ready` yields one whether or not it implements `Stopper`.
+  `lifecycle.Readiness` reports the narrowed Checks. To keep a value's Check, give it a `Start`.
+
 ## [v0.7.0] - 2026-10-09
 
 ### Changed
@@ -252,7 +262,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.8.0...HEAD
+[v0.8.0]: https://github.com/standards-lab/go-core/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/standards-lab/go-core/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-core/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-core/compare/v0.4.1...v0.5.0
