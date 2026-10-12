@@ -27,6 +27,8 @@ type probed func() bool
 func (p probed) Start(context.Context) error { return nil }
 func (p probed) Ready() bool                 { return p() }
 
+var _ lifecycle.ReadyStarter = probed(nil)
+
 // probedSubsystem is a probed value that also shuts down.
 type probedSubsystem struct{ probed }
 

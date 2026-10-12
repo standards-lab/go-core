@@ -8,13 +8,18 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [v0.8.0] - 2026-10-12
 
+### Added
+
+- `lifecycle.ReadyStarter`, the Starter that implements Ready, which Coordinator.Checks infers a
+  readiness check from.
+
 ### Changed
 
 - **Breaking:** `lifecycle.Coordinator.Checks` holds a `Check` only for a value that implements
   both `Starter` and `ReadinessChecker`, still named by its node, in layer and then definition
   order. A value with `Ready() bool` and no `Start`, such as a node that reads another's state,
   yields no Check; a `Starter` with `Ready` yields one whether or not it implements `Stopper`.
-  `lifecycle.Readiness` reports the narrowed Checks. To keep a value's Check, give it a `Start`.
+  `lifecycle.Readiness` reports the narrowed Checks. To keep a value's Check, give it a `Start`, making it a `ReadyStarter`.
 
 ## [v0.7.0] - 2026-10-09
 

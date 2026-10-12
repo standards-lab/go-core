@@ -6,6 +6,8 @@
 //   - [Starter] and [Stopper], the single-method interfaces a dependency's
 //     value implements to take part in startup and in shutdown, and
 //     [Subsystem], which embeds both
+//   - [ReadyStarter], a Starter that implements Ready, the set
+//     [Coordinator.Checks] comes from
 //   - [Monitored], the interface a dependency's value implements to report
 //     runtime failures on a channel the Coordinator watches
 //   - [Config], the Coordinator's configuration, with [Config.Merge] and
@@ -85,8 +87,8 @@
 // moment shutdown begins.
 //
 // [Coordinator.Checks] lists the System's own readiness checks: a [Check]
-// for each value that implements both [Starter] and [ReadinessChecker],
-// named by its node, in layer order and, within a layer, definition order.
+// for each [ReadyStarter], a value that implements both [Starter] and
+// [ReadinessChecker], named by its node, in layer order and, within a layer, definition order.
 // Only a Starter's readiness is inferred, since a value reports on what it
 // started: a value with Ready and no Start yields no Check, and a Starter
 // with Ready yields one whether or not it also implements [Stopper].
