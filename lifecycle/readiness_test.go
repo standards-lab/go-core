@@ -172,7 +172,7 @@ func TestCoordinator_ChecksOmitsReadinessCheckersThatDoNotStart(t *testing.T) {
 	}
 }
 
-func TestCoordinator_ChecksIsEmptyWithoutCheckers(t *testing.T) {
+func TestCoordinator_ChecksIsEmptyWithoutReadyStarters(t *testing.T) {
 	g := graph.New()
 	lc := coordinator(t, failsafe, g, node(g, &fake{name: "svc"}), readiness(g, "readiness"))
 	if got := lc.Checks(); len(got) != 0 {
