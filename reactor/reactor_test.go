@@ -283,6 +283,41 @@ func TestReactor_Ready(t *testing.T) {
 	}
 }
 
+// Readiness turns false when Shutdown begins, not when it returns: a handler
+// held in flight keeps the drain open while Ready is read.
+func TestReactor_NotReadyWhileDraining(t *testing.T) {
+	inFlight := make(chan struct{})
+	drainSeen := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var first sync.Once
+	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
+		first.Do(func() { close(inFlight) })
+		<-reactor.Draining(ctx)
+		select {
+		case drainSeen <- struct{}{}:
+		default:
+		}
+		<-release
+		return nil
+	})
+	if err := r.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recvOrFail(t, inFlight, "the handler to start")
+	eventually(t, r.Ready, "readiness")
+
+	done := make(chan error, 1)
+	go func() { done <- shutdown(t, r, failsafe) }()
+	recvOrFail(t, drainSeen, "the drain to begin")
+	if r.Ready() {
+		t.Error("ready while Shutdown drains a handler in flight")
+	}
+	close(release)
+	if err := recvOrFail(t, done, "Shutdown to return"); err != nil {
+		t.Fatalf("Shutdown = %v, want a clean drain", err)
+	}
+}
+
 func TestReactor_StartTwice(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
 	if err := r.Start(context.Background()); err != nil {
