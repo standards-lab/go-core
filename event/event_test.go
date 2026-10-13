@@ -71,6 +71,19 @@ func TestEncodeHeaders(t *testing.T) {
 	}
 }
 
+// A time in another zone is written as the same instant in UTC.
+func TestEncodeWritesTimeInUTC(t *testing.T) {
+	e := sample()
+	e.Time = time.Date(2026, 7, 1, 14, 0, 0, 5, time.Local)
+	h, _, err := event.Encode(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := h["ce-time"], []string{"2026-07-01T13:00:00.000000005Z"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ce-time = %v, want %v", got, want)
+	}
+}
+
 func TestDecodeCanonicalHTTPHeader(t *testing.T) {
 	want := sample()
 	h, body, err := event.Encode(want)

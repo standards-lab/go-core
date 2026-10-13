@@ -172,6 +172,22 @@ func TestEmitMintsVersion7IDs(t *testing.T) {
 	}
 }
 
+// The default clock reads time.Local, which TestMain sets to a zone other
+// than UTC, and the recorder stamps the time in UTC.
+func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
+	s := &sink{}
+	_, err := event.NewRecorder[*tx](s, "/exercise").Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		kindStarted.Raise(q, "", started{})
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc := s.events[0].Time.Location(); loc != time.UTC {
+		t.Errorf("time location = %v, want UTC", loc)
+	}
+}
+
 func TestNewRecorderRejectsAWiringDefect(t *testing.T) {
 	for name, build := range map[string]func(){
 		"nil sink":     func() { event.NewRecorder[*tx](nil, "/exercise") },
