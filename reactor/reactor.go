@@ -75,11 +75,10 @@ func CancelAfter(d time.Duration) Option {
 	return func(o *reactorOptions) { o.cancelAfter = d }
 }
 
-// CancelWithin is the CancelAfter of a reactor that drains under a
-// coordinator whose drain timeout is drain: half of it, so the cancellation
-// lands inside the drain timeout and a reactor that had to cancel its
-// handlers reports it well before the coordinator's deadline drops the
-// report.
+// CancelWithin sets CancelAfter for a reactor that drains under a
+// coordinator whose drain timeout is drain, to half of it: the handlers are
+// cancelled inside the drain timeout, and a reactor that had to cancel them
+// reports it well before the coordinator's deadline drops the report.
 func CancelWithin(drain time.Duration) Option {
 	return CancelAfter(drain / 2)
 }
@@ -167,9 +166,9 @@ func (r *Reactor[T]) Start(ctx context.Context) error {
 // and waits for them to unwind. It returns once Receive returns, or when
 // ctx ends, which cancels the handlers and stops waiting. The error reports
 // a failure sent on Err that nothing read, the handlers' cancellation once
-// CancelAfter passed, or ctx's error, or else Receive's error. Shutdown
-// before Start retires the reactor, so it never starts, and a later
-// Shutdown of a retired reactor returns nil.
+// the CancelAfter period passed, or ctx's error, or else Receive's error.
+// Shutdown before Start retires the reactor, so it never starts, and a
+// later Shutdown of a retired reactor returns nil.
 func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	switch r.state {
@@ -208,7 +207,7 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 			cancelAt = nil
 			select {
 			case <-r.done:
-				continue // the drain finished as CancelAfter passed
+				continue // the drain finished as the CancelAfter period passed
 			default:
 			}
 			r.abort()

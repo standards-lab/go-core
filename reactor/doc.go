@@ -45,5 +45,5 @@
 // only when Shutdown's own context ends, which is the drain deadline. A
 // handler that runs in several steps, such as a loop over bounded passes,
 // reads [Draining] from its context to stop between steps once the drain
-// begins, rather than run until CancelAfter cancels it.
+// begins, rather than run until its context is cancelled.
 package reactor
