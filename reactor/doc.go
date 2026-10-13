@@ -8,7 +8,8 @@
 //     returns one
 //   - [Reactor.Start], which starts the source, and [Reactor.Shutdown],
 //     which drains it
-//   - [Reactor.Ready], whether the source is receiving, and [Reactor.Err],
+//   - [Reactor.Ready], whether the reactor runs and its source is
+//     receiving, and [Reactor.Err],
 //     the channel that reports a failure while running
 //   - [Option], which configures a Reactor, with [Grace], which bounds how
 //     long its drain lets the handling in flight run, and [GraceWithin],

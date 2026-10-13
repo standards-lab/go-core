@@ -35,8 +35,8 @@ stable as the standard library, this repository depends on the standard library 
   runs the program once and returns its stdout, stderr, and exit code.
 - `reactor` — joins one source of occurrences to one function for the process lifetime: a
   lifecycle component that drains the handling in flight within a grace period at shutdown.
-  `Every` and `Wake` are its interval sources, `Wake` with a `Nudge` its producers call, and
-  `Gate` pauses background work while an operation runs exclusively.
+  `Every` delivers on an interval, and `Wake` also delivers on each `Waker.Nudge` a producer
+  calls. `Gate` pauses background work while an operation runs exclusively.
 
 ## Development
 

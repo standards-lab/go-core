@@ -10,7 +10,7 @@ This context records only working knowledge the code and the README do not expre
 
 ## Capability map
 
-All seven packages are built; the README lists them, and the code and each package's `doc.go`
+go-core has seven packages; the README lists them, and the code and each package's `doc.go`
 are authoritative for the API.
 
 - **config** — layered configuration.
@@ -23,8 +23,7 @@ are authoritative for the API.
   principle.
 - **process/processtest** — the integration toolkit beside `process`, promoted from the
   reference service's harness.
-- **reactor** — one source of occurrences joined to one handler for the process lifetime, a
-  lifecycle component that drains at shutdown; with its interval and nudge sources and the
-  quiesce gate.
+- **reactor** — the lifecycle component that runs one source of occurrences into one handler
+  and drains at shutdown, its interval sources `Every` and `Wake`, and the quiesce gate `Gate`.
 
 The map is complete for the tier.
