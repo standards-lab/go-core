@@ -6,6 +6,28 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.10.0] - 2026-10-13
+
+### Added
+
+- `event` — the CloudEvents 1.0 envelope, on the standard library alone. `Event` carries the
+  context attributes and data, and `Event.Validate` reports every way one breaks the
+  specification. `Encode` and `Decode` map an Event to and from binary content mode as a
+  `Header`, a plain map that converts to a NATS or HTTP header; the time attribute is written in
+  UTC as RFC 3339 with nanoseconds.
+- `event.EventKind`, one event a domain raises, its type paired with the Go type of its data.
+  `Define` declares one, panicking on a type that breaks `CheckType`, and `EventKind.Raise` adds
+  an event of the kind to a `Queue`, whose `Events` and `Err` let a test read what a command
+  raised.
+- `event.Recorder`, which emits a command's events into the command's own transaction.
+  `NewRecorder` builds one over a `Sink` and the service's source; `Recorder.Emit` wraps a
+  command's body into the function a transaction runs, and only when the body succeeds stamps
+  each queued event with an id, the source, and the time and writes it through the sink. The
+  transaction is a type parameter, so the package names no database. The `Clock` and `IDs`
+  options set the time and the id a recorder stamps.
+- `event.Permanent`, which marks a handler's error as one redelivery cannot fix, and
+  `event.IsPermanent`, which reports the mark through further wrapping.
+
 ## [v0.9.0] - 2026-10-13
 
 ### Added
@@ -286,7 +308,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.10.0...HEAD
+[v0.10.0]: https://github.com/standards-lab/go-core/compare/v0.9.0...v0.10.0
 [v0.9.0]: https://github.com/standards-lab/go-core/compare/v0.8.0...v0.9.0
 [v0.8.0]: https://github.com/standards-lab/go-core/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/standards-lab/go-core/compare/v0.6.0...v0.7.0
