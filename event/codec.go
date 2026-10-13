@@ -49,11 +49,10 @@ func Encode(e Event) (Header, []byte, error) {
 
 // Decode reads an event from binary content mode. Header names match
 // case-insensitively, so a canonicalized HTTP header decodes too, and a
-// lowercase name wins over another spelling of it; any
-// ce-prefixed header that is not a context attribute is an extension. The
-// time attribute is parsed as RFC 3339 and returned in UTC, whatever offset
-// it was written with. The result must carry specversion 1.0 and pass
-// [Event.Validate].
+// lowercase name wins over another spelling of it. Any ce-prefixed header
+// that is not a context attribute is an extension. The time attribute is
+// parsed as RFC 3339 and returned in UTC, whatever offset it was written
+// with. The result must carry specversion 1.0 and pass [Event.Validate].
 func Decode(h Header, body []byte) (Event, error) {
 	var e Event
 	var version string

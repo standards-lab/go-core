@@ -12,8 +12,9 @@ const SpecVersion = "1.0"
 
 // Event is one CloudEvents 1.0 event. ID, Source, and Type are required; the
 // specversion is always [SpecVersion] and is not a field. A zero Time and an
-// empty Subject, DataContentType, or DataSchema are absent attributes. Extensions holds
-// the extension attributes, such as traceparent, keyed by name.
+// empty Subject, DataContentType, or DataSchema are absent attributes.
+// Extensions holds the extension attributes, such as traceparent, keyed by
+// name.
 type Event struct {
 	ID              string
 	Source          string

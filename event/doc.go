@@ -33,9 +33,9 @@
 //
 // # Raising and emitting
 //
-// A domain raises, and the recorder emits. A domain declares each event it
-// raises as an [EventKind], which pairs the event type with the Go type of
-// its data, the event entity:
+// A domain raises events, and a recorder emits them. A domain declares each
+// event it raises as an [EventKind], which pairs the event type with the Go
+// type of its data:
 //
 //	var Started = event.Define[StartedData]("exercise.started")
 //

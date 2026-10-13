@@ -8,9 +8,9 @@ import (
 	"unicode"
 )
 
-// EventKind is one event a domain raises: its type, and T, the event entity
-// its data carries. A domain declares its kinds with [Define], so the type
-// and the entity cannot drift apart at a call site.
+// EventKind is one event a domain raises: its type, and T, the Go type of
+// its data. A domain declares its kinds with [Define], so the type and T
+// cannot drift apart at a call site.
 type EventKind[T any] struct {
 	typ string
 }
