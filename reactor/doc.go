@@ -36,14 +36,9 @@
 //
 // # Drain
 //
-// Start detaches the reactor from the context it is given, so cancelling the
-// run context at a signal does not interrupt handling before the reactor's
-// layer drains. Shutdown drains in two phases: it stops the source from
-// taking new occurrences and waits for the handling in flight, then, once
-// the [CancelAfter] period passes, cancels the handlers' contexts and waits
-// for them to unwind. Without CancelAfter, a handler's context is cancelled
-// only when Shutdown's own context ends, which is the drain deadline. A
-// handler that runs in several steps, such as a loop over bounded passes,
-// reads [Draining] from its context to stop between steps once the drain
-// begins, rather than run until its context is cancelled.
+// A reactor's handling outlives the run context and ends at its layer's
+// drain: [Reactor.Start] and [Reactor.Shutdown] state the two phases, and
+// [CancelAfter] bounds the first. A handler that runs in several steps,
+// such as a loop over bounded passes, reads [Draining] to stop between
+// steps once the drain begins.
 package reactor
