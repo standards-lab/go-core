@@ -11,6 +11,9 @@
 //     which derives that bound from a coordinator's drain timeout
 //   - [Draining], which returns a handler's drain signal
 //   - [Every], a Source that delivers the time on each tick of an interval
+//   - [Wake], which returns a [Waker]: a Source that delivers the time on
+//     each tick of an interval and on each [Waker.Nudge], coalescing the
+//     nudges that come before a delivery into one
 //
 // # Lifecycle
 //

@@ -32,8 +32,8 @@ func Draining(ctx context.Context) <-chan struct{} {
 // Source delivers occurrences to a Func.
 //
 // What a handler error means is the source's own rule. An interval
-// ([Every]) has nothing to redeliver, so an error ends it; a subscription
-// redelivers the occurrence instead and keeps receiving. A
+// ([Every], [Wake]) has nothing to redeliver, so an error ends it; a
+// subscription redelivers the occurrence instead and keeps receiving. A
 // source may bound each occurrence with a deadline on the context it
 // passes to fn, such as a broker's acknowledgement wait; the reactor keeps
 // that deadline while detaching the handler from the source's own
