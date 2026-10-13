@@ -155,6 +155,14 @@ func TestValidate(t *testing.T) {
 			event.Event{ID: "1", Source: "/s", Type: "t", Extensions: map[string]string{"subject": "x"}},
 			[]string{"context attribute"},
 		},
+		"several bad extensions": {
+			event.Event{ID: "1", Source: "/s", Type: "t", Extensions: map[string]string{"": "x", "Bad": "x", "time": "x"}},
+			[]string{
+				"extension: name must not be empty",
+				`extension "Bad": name must be lowercase alphanumeric`,
+				`extension "time": name is a context attribute`,
+			},
+		},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

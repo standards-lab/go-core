@@ -86,6 +86,31 @@ func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
 	}
 }
 
+// One Emit stamps every event it writes with the same time, read from the
+// clock once: this clock moves on each call, so a per-event read would show.
+func TestEmitStampsOneTimeForTheWholeQueue(t *testing.T) {
+	s := &sink{}
+	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	tick := func() time.Time { at = at.Add(time.Second); return at }
+	_, err := event.NewRecorder[*tx](s, "/exercise", event.Clock(tick)).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		kindStarted.Raise(q, "ex-1", started{Round: 0})
+		kindStarted.Raise(q, "ex-1", started{Round: 1})
+		kindStopped.Raise(q, "ex-1", struct{}{})
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.events) != 3 {
+		t.Fatalf("wrote %d events, want 3", len(s.events))
+	}
+	for i, e := range s.events[1:] {
+		if !e.Time.Equal(s.events[0].Time) {
+			t.Errorf("event %d time = %v, want %v, the first event's", i+1, e.Time, s.events[0].Time)
+		}
+	}
+}
+
 // A body that fails writes nothing, and Emit returns its error with the
 // zero result, whatever the body returned beside it.
 func TestEmitWritesNothingWhenTheBodyFails(t *testing.T) {
