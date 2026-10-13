@@ -14,7 +14,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
   context attributes and data, and `Event.Validate` reports every way one breaks the
   specification. `Encode` and `Decode` map an Event to and from binary content mode as a
   `Header`, a plain map that converts to a NATS or HTTP header; the time attribute is written in
-  UTC as RFC 3339 with nanoseconds.
+  UTC as RFC 3339 with nanoseconds, and `Decode` returns it in UTC whatever offset it was written
+  with.
 - `event.EventKind`, one event a domain raises, its type paired with the Go type of its data.
   `Define` declares one, panicking on a type that breaks `CheckType`, and `EventKind.Raise` adds
   an event of the kind to a `Queue`, whose `Events` and `Err` let a test read what a command

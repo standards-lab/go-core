@@ -84,6 +84,24 @@ func TestEncodeWritesTimeInUTC(t *testing.T) {
 	}
 }
 
+// A time written with another offset is decoded as the same instant in UTC.
+func TestDecodeReturnsTimeInUTC(t *testing.T) {
+	h := event.Header{
+		"ce-specversion": {"1.0"}, "ce-id": {"1"}, "ce-source": {"/s"}, "ce-type": {"t"},
+		"ce-time": {"2026-01-01T10:00:00+01:00"},
+	}
+	e, err := event.Decode(h, nil)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if e.Time.Location() != time.UTC {
+		t.Errorf("Time.Location() = %v, want UTC", e.Time.Location())
+	}
+	if want := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC); !e.Time.Equal(want) {
+		t.Errorf("Time = %v, want %v", e.Time, want)
+	}
+}
+
 func TestDecodeCanonicalHTTPHeader(t *testing.T) {
 	want := sample()
 	h, body, err := event.Encode(want)

@@ -51,7 +51,9 @@ func Encode(e Event) (Header, []byte, error) {
 // case-insensitively, so a canonicalized HTTP header decodes too, and a
 // lowercase name wins over another spelling of it; any
 // ce-prefixed header that is not a context attribute is an extension. The
-// result must carry specversion 1.0 and pass [Event.Validate].
+// time attribute is parsed as RFC 3339 and returned in UTC, whatever offset
+// it was written with. The result must carry specversion 1.0 and pass
+// [Event.Validate].
 func Decode(h Header, body []byte) (Event, error) {
 	var e Event
 	var version string
@@ -92,7 +94,7 @@ func Decode(h Header, body []byte) (Event, error) {
 			if err != nil {
 				return Event{}, fmt.Errorf("event: time: %w", err)
 			}
-			e.Time = t
+			e.Time = t.UTC()
 		default:
 			if e.Extensions == nil {
 				e.Extensions = map[string]string{}
