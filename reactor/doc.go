@@ -14,6 +14,9 @@
 //   - [Wake], which returns a [Waker]: a Source that delivers the time on
 //     each tick of an interval and on each [Waker.Nudge], coalescing the
 //     nudges that come before a delivery into one
+//   - [Gate], a quiesce gate: background work holds it shared, and an
+//     operation that must run with that work paused holds it exclusively,
+//     each acquisition honoring a context
 //
 // # Lifecycle
 //
