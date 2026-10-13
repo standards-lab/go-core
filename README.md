@@ -2,7 +2,8 @@
 
 go-core is the Core SDK for Standards Lab's Go Elemental standard. It provides layered
 configuration, a dependency graph and the process lifecycle that runs it, a reactor that joins a
-source of occurrences to a handler, and logging.
+source of occurrences to a handler, the CloudEvents envelope a domain raises its events in, and
+logging.
 
 `github.com/standards-lab/go-core` is a single Go module with the process-level packages every
 program in the standard builds on.
@@ -19,6 +20,10 @@ stable as the standard library, this repository depends on the standard library 
 ## Packages
 
 - `config` — loads configuration in layers: a base file, an environment overlay, and secrets.
+- `event` — the CloudEvents 1.0 envelope and its binary-content-mode codec, and the types a
+  domain raises its events with: an `EventKind` declared with `Define` raises into a `Queue`,
+  and a `Recorder` emits the queue through a `Sink` into the command's own transaction, only
+  when the command succeeds. `Permanent` marks a handler's error that redelivery cannot fix.
 - `graph` — a typed dependency graph: nodes described inertly, each a name and a constructor,
   and a Build that constructs what the roots reach into a System of computed layers.
 - `lifecycle` — runs a built `graph` System: starts its layers in order, tracks and reports

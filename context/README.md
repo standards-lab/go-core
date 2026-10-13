@@ -10,10 +10,12 @@ This context records only working knowledge the code and the README do not expre
 
 ## Capability map
 
-go-core has seven packages; the README lists them, and the code and each package's `doc.go`
+go-core has eight packages; the README lists them, and the code and each package's `doc.go`
 are authoritative for the API.
 
 - **config** — layered configuration.
+- **event** — the CloudEvents 1.0 envelope and its codec, and the event kinds, queue, and
+  recorder a domain raises and emits its events with.
 - **graph** — the typed dependency graph the lifecycle runs.
 - **lifecycle** — the process lifecycle that runs the graph's layers, governed by the standard's
   [lifecycle and context ownership](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/principles/lifecycle-and-context.md)
