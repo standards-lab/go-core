@@ -11,9 +11,10 @@
 //   - [Reactor.Ready], whether the reactor runs and its source is
 //     receiving, and [Reactor.Err],
 //     the channel that reports a failure while running
-//   - [Option], which configures a Reactor, with [Grace], which bounds how
-//     long its drain lets the handling in flight run, and [GraceWithin],
-//     which derives that bound from a coordinator's drain timeout
+//   - [Option], which configures a Reactor, with [CancelAfter], which
+//     bounds how long its drain lets the handling in flight run before it
+//     cancels the handlers, and [CancelWithin], which derives that bound
+//     from a coordinator's drain timeout
 //   - [Draining], which returns a handler's drain signal
 //   - [Every], a Source that delivers the time on each tick of an interval
 //   - [Wake], which returns a [Waker]: a Source that delivers the time on
@@ -39,10 +40,10 @@
 // run context at a signal does not interrupt handling before the reactor's
 // layer drains. Shutdown drains in two phases: it stops the source from
 // taking new occurrences and waits for the handling in flight, then, once
-// the [Grace] period passes, cancels the handlers' contexts and waits for
-// them to unwind. Without Grace, a handler's context is cancelled only when
-// Shutdown's own context ends, which is the drain deadline. A handler that
-// runs in several steps, such as a loop over bounded passes, reads
-// [Draining] from its context to stop between steps once the drain begins,
-// rather than run until the grace cancels it.
+// the [CancelAfter] period passes, cancels the handlers' contexts and waits
+// for them to unwind. Without CancelAfter, a handler's context is cancelled
+// only when Shutdown's own context ends, which is the drain deadline. A
+// handler that runs in several steps, such as a loop over bounded passes,
+// reads [Draining] from its context to stop between steps once the drain
+// begins, rather than run until CancelAfter cancels it.
 package reactor

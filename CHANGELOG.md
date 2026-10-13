@@ -16,8 +16,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
   Coordinator starts it with its layer, drains it before the nodes it uses, reports its
   readiness, and ends the run on its failure. `Start` detaches the handling from the run
   context; `Shutdown` stops the source, waits for the handling in flight, and cancels the
-  handlers' contexts once the `Grace` option's period passes (`GraceWithin` derives it from a
-  drain timeout). `Draining` returns a handler's drain signal, for a handler that runs in steps.
+  handlers' contexts once the `CancelAfter` option's period passes (`CancelWithin` derives it from
+  a drain timeout). `Draining` returns a handler's drain signal, for a handler that runs in steps.
 - `reactor.Every`, a Source that delivers the time on each tick of an interval, and
   `reactor.Wake`, which returns a `Waker`: the same interval source plus `Waker.Nudge`, whose
   calls before a delivery coalesce into one.

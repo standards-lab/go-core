@@ -89,7 +89,7 @@ func TestReactor_CoordinatorStartsReportsReadyAndDrains(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // finish the step in hand
 		ev.record("handler drained")
 		return nil
-	}, reactor.GraceWithin(failsafe))
+	}, reactor.CancelWithin(failsafe))
 	lc := coordinate(t, r, ev)
 
 	checks := lc.Checks()
@@ -124,7 +124,7 @@ func TestReactor_CoordinatorEndsRunOnFailure(t *testing.T) {
 	boom := errors.New("boom")
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		return boom
-	}, reactor.Grace(10*time.Millisecond))
+	}, reactor.CancelAfter(10*time.Millisecond))
 	lc := coordinate(t, r, &events{})
 
 	done := make(chan error, 1)

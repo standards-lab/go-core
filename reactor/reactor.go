@@ -61,26 +61,27 @@ const (
 type Option func(*reactorOptions)
 
 type reactorOptions struct {
-	grace time.Duration
+	cancelAfter time.Duration
 }
 
-// Grace bounds how long Shutdown lets the handling in flight run before it
-// cancels the handlers' contexts. Shutdown then waits for them to unwind,
-// until its own context ends. Set it below the coordinator's drain
+// CancelAfter bounds how long Shutdown lets the handling in flight run
+// before it cancels the handlers' contexts. Shutdown then waits for them to
+// unwind, until its own context ends. Set it below the coordinator's drain
 // timeout, so a reactor that had to cancel its handlers says so in Run's
 // result; the coordinator drops any error that arrives after its own
-// deadline. Without Grace, the handlers are cancelled only when Shutdown's
-// context ends.
-func Grace(d time.Duration) Option {
-	return func(o *reactorOptions) { o.grace = d }
+// deadline. Without CancelAfter, the handlers are cancelled only when
+// Shutdown's context ends.
+func CancelAfter(d time.Duration) Option {
+	return func(o *reactorOptions) { o.cancelAfter = d }
 }
 
-// GraceWithin is the grace of a reactor that drains under a coordinator
-// whose drain timeout is drain: half of it, so a reactor that had to cancel
-// its handlers reports it well before the coordinator's deadline drops the
+// CancelWithin is the CancelAfter of a reactor that drains under a
+// coordinator whose drain timeout is drain: half of it, so the cancellation
+// lands inside the drain timeout and a reactor that had to cancel its
+// handlers reports it well before the coordinator's deadline drops the
 // report.
-func GraceWithin(drain time.Duration) Option {
-	return Grace(drain / 2)
+func CancelWithin(drain time.Duration) Option {
+	return CancelAfter(drain / 2)
 }
 
 // Reactor runs a Source into a Func. It is single use: Start once,
@@ -162,13 +163,13 @@ func (r *Reactor[T]) Start(ctx context.Context) error {
 
 // Shutdown drains the reactor in two phases. It closes the drain signal
 // ([Draining]), stops the source, and waits for the handling in flight;
-// once the [Grace] period passes, it cancels the handlers' contexts and
-// waits for them to unwind. It returns once Receive returns, or when ctx
-// ends, which cancels the handlers and stops waiting. The error reports a
-// failure sent on Err that nothing read, a grace that ran out, or ctx's
-// error, or else Receive's error. Shutdown before Start retires the
-// reactor, so it never starts, and a later Shutdown of a retired reactor
-// returns nil.
+// once the [CancelAfter] period passes, it cancels the handlers' contexts
+// and waits for them to unwind. It returns once Receive returns, or when
+// ctx ends, which cancels the handlers and stops waiting. The error reports
+// a failure sent on Err that nothing read, the handlers' cancellation once
+// CancelAfter passed, or ctx's error, or else Receive's error. Shutdown
+// before Start retires the reactor, so it never starts, and a later
+// Shutdown of a retired reactor returns nil.
 func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	switch r.state {
@@ -194,20 +195,20 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	r.stop()
 	defer r.abort()
 
-	var grace <-chan time.Time
-	if r.opts.grace > 0 {
-		t := time.NewTimer(r.opts.grace)
+	var cancelAt <-chan time.Time
+	if r.opts.cancelAfter > 0 {
+		t := time.NewTimer(r.opts.cancelAfter)
 		defer t.Stop()
-		grace = t.C
+		cancelAt = t.C
 	}
 	cancelled := false
 	for {
 		select {
-		case <-grace:
-			grace = nil
+		case <-cancelAt:
+			cancelAt = nil
 			select {
 			case <-r.done:
-				continue // the drain finished as the grace ran out
+				continue // the drain finished as CancelAfter passed
 			default:
 			}
 			r.abort()
@@ -230,7 +231,7 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 					err = nil
 				}
 				return errors.Join(
-					fmt.Errorf("reactor: handlers cancelled after grace %v", r.opts.grace),
+					fmt.Errorf("reactor: handlers cancelled after %v", r.opts.cancelAfter),
 					err,
 				)
 			}

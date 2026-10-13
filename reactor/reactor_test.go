@@ -124,7 +124,7 @@ func TestReactor_ShutdownDeadlineCancelsHandler(t *testing.T) {
 	}
 }
 
-func TestReactor_GraceCancelsThenWaits(t *testing.T) {
+func TestReactor_CancelAfterCancelsThenWaits(t *testing.T) {
 	started := make(chan struct{}, 1)
 	unwound := make(chan struct{})
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
@@ -133,7 +133,7 @@ func TestReactor_GraceCancelsThenWaits(t *testing.T) {
 		time.Sleep(20 * time.Millisecond) // the handler takes time to unwind
 		close(unwound)
 		return ctx.Err()
-	}, reactor.Grace(20*time.Millisecond))
+	}, reactor.CancelAfter(20*time.Millisecond))
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -144,15 +144,15 @@ func TestReactor_GraceCancelsThenWaits(t *testing.T) {
 	default:
 		t.Fatal("Shutdown returned before the handler unwound")
 	}
-	if err == nil || !strings.Contains(err.Error(), "handlers cancelled after grace 20ms") {
-		t.Fatalf("Shutdown = %v, want the grace report", err)
+	if err == nil || !strings.Contains(err.Error(), "handlers cancelled after 20ms") {
+		t.Fatalf("Shutdown = %v, want the cancellation report", err)
 	}
 	if errors.Is(err, context.Canceled) {
 		t.Errorf("Shutdown = %v, reports the handler's own cancellation", err)
 	}
 }
 
-func TestReactor_GraceStillBoundedByContext(t *testing.T) {
+func TestReactor_CancelAfterStillBoundedByContext(t *testing.T) {
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
 	defer close(release)
@@ -160,7 +160,7 @@ func TestReactor_GraceStillBoundedByContext(t *testing.T) {
 		started <- struct{}{}
 		<-release // ignores cancellation
 		return nil
-	}, reactor.Grace(10*time.Millisecond))
+	}, reactor.CancelAfter(10*time.Millisecond))
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -170,10 +170,10 @@ func TestReactor_GraceStillBoundedByContext(t *testing.T) {
 	}
 }
 
-func TestReactor_GraceUnusedIsClean(t *testing.T) {
+func TestReactor_CancelAfterUnusedIsClean(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		return nil
-	}, reactor.Grace(time.Second))
+	}, reactor.CancelAfter(time.Second))
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -183,26 +183,26 @@ func TestReactor_GraceUnusedIsClean(t *testing.T) {
 	}
 }
 
-// GraceWithin grants half the drain timeout it is given: a handler that
-// ignores the drain is cancelled once that half passes.
-func TestReactor_GraceWithinIsHalfTheDrain(t *testing.T) {
+// CancelWithin cancels after half the drain timeout it is given: a handler
+// that ignores the drain is cancelled once that half passes.
+func TestReactor_CancelWithinIsHalfTheDrain(t *testing.T) {
 	started := make(chan struct{}, 1)
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
 		started <- struct{}{}
 		<-ctx.Done()
 		return ctx.Err()
-	}, reactor.GraceWithin(40*time.Millisecond))
+	}, reactor.CancelWithin(40*time.Millisecond))
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	recvOrFail(t, started, "the handler")
 	begun := time.Now()
 	err := shutdown(t, r, failsafe)
-	if err == nil || !strings.Contains(err.Error(), "handlers cancelled after grace 20ms") {
-		t.Fatalf("Shutdown = %v, want the report of a 20ms grace", err)
+	if err == nil || !strings.Contains(err.Error(), "handlers cancelled after 20ms") {
+		t.Fatalf("Shutdown = %v, want the report of a cancellation after 20ms", err)
 	}
 	if took := time.Since(begun); took < 20*time.Millisecond {
-		t.Errorf("handlers cancelled after %v, before the 20ms grace", took)
+		t.Errorf("handlers cancelled after %v, before the 20ms CancelAfter period", took)
 	}
 }
 
@@ -371,7 +371,7 @@ func TestReactor_ShutdownTwiceAfterStart(t *testing.T) {
 
 // The drain signal closes when Shutdown begins, while the handler in
 // flight still runs on a live context, so a handler that works in steps
-// stops between them and the drain ends clean, without a grace.
+// stops between them and the drain ends clean, without being cancelled.
 func TestReactor_DrainingClosesWhenShutdownBegins(t *testing.T) {
 	inFlight := make(chan struct{})
 	var first sync.Once
