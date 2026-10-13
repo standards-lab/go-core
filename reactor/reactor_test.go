@@ -233,16 +233,18 @@ func TestReactor_HandlerErrorOnErr(t *testing.T) {
 
 func TestReactor_UnreadErrReachesShutdown(t *testing.T) {
 	boom := errors.New("boom")
-	src := failing{err: boom, failed: make(chan struct{})}
+	src := failing{err: boom, fail: make(chan struct{})}
 	r := reactor.New[int](src, func(context.Context, int) error { return nil })
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	// Nothing reads Err, as when the coordinator stopped monitoring at the
-	// signal just before the source failed. Let the failure land on Err
-	// while the reactor is still running.
-	recvOrFail(t, src.failed, "the source's failure")
-	time.Sleep(20 * time.Millisecond)
+	// signal just before the source failed. The reactor turns not ready
+	// as it puts the failure on Err, so Shutdown begins only once the
+	// failure has landed there.
+	eventually(t, r.Ready, "readiness")
+	close(src.fail)
+	eventually(t, func() bool { return !r.Ready() }, "the failure to land on Err")
 	if err := shutdown(t, r, failsafe); !errors.Is(err, boom) {
 		t.Fatalf("Shutdown = %v, want the unread failure", err)
 	}
@@ -456,19 +458,19 @@ func (s *stub) Receive(ctx context.Context, _ reactor.Func[int]) error {
 
 func (s *stub) Ready() bool { return s.ready.Load() }
 
-// failing is a source that fails as soon as it starts, closing failed as
-// it returns.
+// failing is a source that is ready from the start and fails once fail
+// closes.
 type failing struct {
-	err    error
-	failed chan struct{}
+	err  error
+	fail chan struct{}
 }
 
 func (f failing) Receive(context.Context, reactor.Func[int]) error {
-	defer close(f.failed)
+	<-f.fail
 	return f.err
 }
 
-func (failing) Ready() bool { return false }
+func (failing) Ready() bool { return true }
 
 // deadlineSource delivers one occurrence under a per-occurrence deadline
 // and value, then stops its own context while the handler still runs.
