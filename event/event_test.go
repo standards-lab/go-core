@@ -1,6 +1,9 @@
 package event_test
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"maps"
 	"net/http"
 	"reflect"
@@ -181,5 +184,25 @@ func TestDecodePrefersLowercase(t *testing.T) {
 		if e.ID != "lower" {
 			t.Fatalf("ID = %q, want the lowercase header's value", e.ID)
 		}
+	}
+}
+
+func TestPermanent(t *testing.T) {
+	if event.Permanent(nil) != nil {
+		t.Error("Permanent(nil) is not nil")
+	}
+	if event.IsPermanent(fs.ErrNotExist) {
+		t.Error("an unmarked error is permanent")
+	}
+	err := fmt.Errorf("handle: %w", event.Permanent(fs.ErrNotExist))
+	if !event.IsPermanent(err) {
+		t.Error("the mark did not survive wrapping")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Error("errors.Is does not reach the cause")
+	}
+	cause := event.Permanent(&fs.PathError{Op: "open", Path: "x", Err: fs.ErrNotExist})
+	if _, ok := errors.AsType[*fs.PathError](cause); !ok {
+		t.Error("errors.As does not reach the cause")
 	}
 }
