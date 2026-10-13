@@ -22,6 +22,6 @@ func Permanent(err error) error {
 // IsPermanent reports whether any error in err's tree was marked by
 // [Permanent].
 func IsPermanent(err error) bool {
-	var p *permanentError
-	return errors.As(err, &p)
+	_, ok := errors.AsType[*permanentError](err)
+	return ok
 }
