@@ -5,17 +5,16 @@ import (
 	"sync"
 )
 
-// The gate: a quiesce gate a process's background work, such as a
-// reactor's handler, holds shared and an operation that must run
-// with that work paused holds exclusively. It is a readers-writer lock
-// whose acquisitions honor a context, so a caller that gives up stops
+// Gate is a quiesce gate: a process's background work, such as a reactor's
+// handler, holds it shared, and an operation that must run with that work
+// paused holds it exclusively. Any number of shared holders may hold it at
+// once, or one exclusive holder and no shared one. It is a readers-writer
+// lock whose acquisitions honor a context, so a caller that gives up stops
 // waiting, and which prefers the exclusive side: once an exclusive holder
 // is waiting, no new shared holder is admitted, so work that holds the gate
-// in short, repeated turns cannot starve the operation waiting for it.
-
-// Gate is a quiesce gate. Any number of shared holders may hold it at once,
-// or one exclusive holder and no shared one. The zero value is an open
-// gate, ready to use; a Gate must not be copied after first use.
+// in short, repeated turns cannot starve the operation waiting for it. The
+// zero value is an open gate, ready to use; a Gate must not be copied after
+// first use.
 type Gate struct {
 	mu       sync.Mutex
 	shared   int  // shared holders

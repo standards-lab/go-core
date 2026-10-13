@@ -26,25 +26,35 @@ type every struct {
 }
 
 func (s *every) Receive(ctx context.Context, fn Func[time.Time]) error {
-	t := time.NewTicker(s.d)
+	return receiveTicks(ctx, s.d, nil, &s.ready, fn)
+}
+
+// receiveTicks delivers the time to fn on each tick of d and on each value
+// from nudge, which may be nil, until ctx ends or fn fails. It holds ready
+// true while it receives, and drops a tick that came due while fn ran.
+func receiveTicks(ctx context.Context, d time.Duration, nudge <-chan struct{}, ready *atomic.Bool, fn Func[time.Time]) error {
+	t := time.NewTicker(d)
 	defer t.Stop()
-	s.ready.Store(true)
-	defer s.ready.Store(false)
+	ready.Store(true)
+	defer ready.Store(false)
 	for {
+		var now time.Time
 		select {
 		case <-ctx.Done():
 			return nil
-		case now := <-t.C:
-			if ctx.Err() != nil {
-				return nil
-			}
-			if err := fn(ctx, now); err != nil {
-				return err
-			}
-			select {
-			case <-t.C: // drop the tick that came due during fn
-			default:
-			}
+		case now = <-t.C:
+		case <-nudge:
+			now = time.Now()
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		if err := fn(ctx, now); err != nil {
+			return err
+		}
+		select {
+		case <-t.C: // drop the tick that came due during fn
+		default:
 		}
 	}
 }

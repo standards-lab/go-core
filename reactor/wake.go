@@ -43,30 +43,7 @@ func (s *Waker) Nudge() {
 // Receive delivers the time on each tick and each pending nudge until ctx
 // ends.
 func (s *Waker) Receive(ctx context.Context, fn Func[time.Time]) error {
-	t := time.NewTicker(s.d)
-	defer t.Stop()
-	s.ready.Store(true)
-	defer s.ready.Store(false)
-	for {
-		var now time.Time
-		select {
-		case <-ctx.Done():
-			return nil
-		case now = <-t.C:
-		case <-s.nudge:
-			now = time.Now()
-		}
-		if ctx.Err() != nil {
-			return nil
-		}
-		if err := fn(ctx, now); err != nil {
-			return err
-		}
-		select {
-		case <-t.C: // drop the tick that came due during fn
-		default:
-		}
-	}
+	return receiveTicks(ctx, s.d, s.nudge, &s.ready, fn)
 }
 
 // Ready reports whether the source is receiving.
