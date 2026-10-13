@@ -18,6 +18,7 @@ const (
 )
 
 // Encode maps a valid e to binary content mode: the headers and the body.
+// The time attribute is written in UTC, as RFC 3339 with nanoseconds.
 func Encode(e Event) (Header, []byte, error) {
 	if err := e.Validate(); err != nil {
 		return nil, nil, err
