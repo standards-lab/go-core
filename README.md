@@ -1,7 +1,8 @@
 # go-core
 
 go-core is the Core SDK for Standards Lab's Go Elemental standard. It provides layered
-configuration, a dependency graph and the process lifecycle that runs it, and logging.
+configuration, a dependency graph and the process lifecycle that runs it, a reactor that joins a
+source of occurrences to a handler, and logging.
 
 `github.com/standards-lab/go-core` is a single Go module with the process-level packages every
 program in the standard builds on.
@@ -32,6 +33,11 @@ stable as the standard library, this repository depends on the standard library 
   runs it as a subprocess. It then waits on what a client observes, interrupts the process and
   reads its exit code, and relays a backing service's connection so a test can sever it. `Run`
   runs the program once and returns its stdout, stderr, and exit code.
+- `reactor` — joins one source of occurrences to one function for the process lifetime: a
+  lifecycle component that drains the handling in flight at shutdown and cancels it once its
+  `CancelAfter` period passes. `Every` delivers on an interval, and `Wake` also delivers on each
+  `Waker.Nudge` a producer calls. `Gate` pauses background work while an operation runs
+  exclusively.
 
 ## Development
 
