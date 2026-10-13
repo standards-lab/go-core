@@ -6,6 +6,10 @@
 //   - [Source], what delivers occurrences, and [Func], what handles one
 //   - [Reactor], which runs one Source into one Func, and [New], which
 //     returns one
+//   - [Reactor.Start], which starts the source, and [Reactor.Shutdown],
+//     which drains it
+//   - [Reactor.Ready], whether the source is receiving, and [Reactor.Err],
+//     the channel that reports a failure while running
 //   - [Option], which configures a Reactor, with [Grace], which bounds how
 //     long its drain lets the handling in flight run, and [GraceWithin],
 //     which derives that bound from a coordinator's drain timeout
@@ -14,9 +18,9 @@
 //   - [Wake], which returns a [Waker]: a Source that delivers the time on
 //     each tick of an interval and on each [Waker.Nudge], coalescing the
 //     nudges that come before a delivery into one
-//   - [Gate], a quiesce gate: background work holds it shared, and an
-//     operation that must run with that work paused holds it exclusively,
-//     each acquisition honoring a context
+//   - [Gate], a quiesce gate: background work holds it with [Gate.Shared],
+//     and an operation that must run with that work paused holds it with
+//     [Gate.Exclusive], each acquisition honoring a context
 //
 // # Lifecycle
 //

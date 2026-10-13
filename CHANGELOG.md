@@ -6,6 +6,24 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-10-13
+
+### Added
+
+- `reactor` — joins one source of occurrences to one function for the process lifetime, on the
+  standard library alone. `New` returns a `Reactor` from a `Source` and a `Func`; the Reactor is
+  a lifecycle component with `Start`, `Shutdown`, `Ready`, and `Err`, so the `lifecycle`
+  Coordinator starts it with its layer, drains it before the nodes it uses, reports its
+  readiness, and ends the run on its failure. `Start` detaches the handling from the run
+  context; `Shutdown` stops the source, waits for the handling in flight, and cancels the
+  handlers' contexts once the `Grace` option's period passes (`GraceWithin` derives it from a
+  drain timeout). `Draining` returns a handler's drain signal, for a handler that runs in steps.
+- `reactor.Every`, a Source that delivers the time on each tick of an interval, and
+  `reactor.Wake`, which returns a `Waker`: the same interval source plus `Waker.Nudge`, whose
+  calls before a delivery coalesce into one.
+- `reactor.Gate`, a quiesce gate: background work holds it with `Shared`, and an operation that
+  must run with that work paused holds it with `Exclusive`, each acquisition honoring a context.
+
 ## [v0.8.0] - 2026-10-12
 
 ### Added
@@ -268,7 +286,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.9.0...HEAD
+[v0.9.0]: https://github.com/standards-lab/go-core/compare/v0.8.0...v0.9.0
 [v0.8.0]: https://github.com/standards-lab/go-core/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/standards-lab/go-core/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-core/compare/v0.5.0...v0.6.0

@@ -10,11 +10,12 @@ This context records only working knowledge the code and the README do not expre
 
 ## Capability map
 
-All five packages are built; the README lists them, and the code and each package's `doc.go`
+All seven packages are built; the README lists them, and the code and each package's `doc.go`
 are authoritative for the API.
 
 - **config** — layered configuration.
-- **lifecycle** — the staged process lifecycle, governed by the standard's
+- **graph** — the typed dependency graph the lifecycle runs.
+- **lifecycle** — the process lifecycle that runs the graph's layers, governed by the standard's
   [lifecycle and context ownership](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/principles/lifecycle-and-context.md)
   principle.
 - **logging** — the process logger.
@@ -22,5 +23,8 @@ are authoritative for the API.
   principle.
 - **process/processtest** — the integration toolkit beside `process`, promoted from the
   reference service's harness.
+- **reactor** — one source of occurrences joined to one handler for the process lifetime, a
+  lifecycle component that drains at shutdown; with its interval and nudge sources and the
+  quiesce gate.
 
 The map is complete for the tier.
