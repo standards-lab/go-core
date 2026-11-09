@@ -8,6 +8,10 @@ The README and each package's `doc.go` document this repository. The
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows.
 This context records only working knowledge the code and the README do not express.
 
+- [`graph-ergonomics.md`](graph-ergonomics.md) holds the design direction for the `graph` and
+  `lifecycle` redesign: its pain points, the behavior it keeps, the candidate API, the spike
+  that settles it, and the migration.
+
 ## Capability map
 
 go-core has eight packages; the README lists them, and the code and each package's `doc.go`

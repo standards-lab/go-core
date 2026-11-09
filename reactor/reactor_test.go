@@ -518,8 +518,12 @@ func (s *deadlineSource) Receive(ctx context.Context, fn reactor.Func[int]) erro
 	occ, cancel := context.WithTimeout(context.WithValue(ctx, ctxKey("occurrence"), "one"), s.d)
 	defer cancel()
 	stop, stopNow := context.WithCancel(occ)
-	done := make(chan error, 1)
-	go func() { done <- fn(stop, 1) }()
+	// done closes when the handler returns; its error is not under test.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = fn(stop, 1)
+	}()
 	stopNow()
 	close(s.stopped)
 	<-done
