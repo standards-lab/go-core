@@ -8,7 +8,7 @@ The README and each package's `doc.go` document this repository. The
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows.
 This context records only working knowledge the code and the README do not express.
 
-- `graph-ergonomics.md` holds the design direction for the `graph` and `lifecycle` redesign: its
+- [`graph-ergonomics.md`](graph-ergonomics.md) holds the design direction for the `graph` and `lifecycle` redesign: its
   pain points, the behavior it keeps, the candidate API, the spike that settles it, and the
   migration.
 

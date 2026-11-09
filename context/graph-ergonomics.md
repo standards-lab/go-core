@@ -11,15 +11,9 @@ and the spikes live under `~/experiments/`. Line numbers are as of this note's w
 
 ## The packages today
 
-`graph` describes an application's dependencies as nodes and builds them. `g.Define(name, ctor)`
-adds a node and returns a typed handle, `*graph.Node[T]`; the name is a required label, unique
-per graph. A constructor is a `func(*graph.Scope) (T, error)`. It declares what it depends on by
-calling `s.Use(other)`, which builds `other` if this Build has not and returns its value;
-`s.After(other)` adds an edge that orders without passing a value. `g.Build(roots...)` runs the
-constructors the roots reach, depth-first, and returns a `*graph.System`: the values, read back
-with `sys.Get(node)`, and the nodes in startup layers, `sys.Layers()`. `lifecycle.New(sys, cfg)`
-returns a Coordinator that starts those layers lowest first, reports readiness, and shuts down
-in reverse; a web service calls its `Run`, a CLI command its `Exec`.
+The packages are documented in their `doc.go` files (go-core `graph/doc.go`,
+`lifecycle/doc.go`), and this note uses their vocabulary: `Define`, `Scope.Use`, `Scope.After`,
+`Build`, `System.Get`, `System.Layers`, and `lifecycle.New`.
 
 Both packages behave correctly. They read badly, and nine consumers repeat the same workarounds.
 Across the consumers (the three libraries, go-cli-sdk, go-web-sdk, both templates,
@@ -429,8 +423,12 @@ func TestGraph_ServerAloneInTopLayer(t *testing.T) {
 func TestGraph_TelemetryBeneathParticipants(t *testing.T) {
 	a := app.New(configtest.Config(t), io.Discard)
 	n := a.Nodes()
-	sys, _ := a.Graph().Build(a.Roots()...)
+	sys, err := a.Graph().Build(a.Roots()...)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
 	tel := sys.LayerOf(n.Telemetry)
+	// participant reports whether a value implements a lifecycle interface.
 	for _, layer := range sys.Layers() {
 		for _, d := range layer {
 			if d.Ref != graph.Ref(n.Telemetry) && participant(d.Value) && sys.LayerOf(d.Ref) <= tel {
@@ -478,7 +476,7 @@ methods on `*Nodes` are the only form.
   repository was archived in August 2025.
 
 None of them meets the sourcing rule either: the standard writes a capability in-house when it
-is generic to its layer and has no specification or threat model behind it (architecture
+is generic to its layer and has no specification or security surface (architecture
 `standards/go-elemental/principles/dependencies.md:65-68`), and go-cli-sdk's lint holds that
 module to the standard library and go-core.
 
