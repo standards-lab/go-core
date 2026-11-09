@@ -286,6 +286,12 @@ maintained by hand. Telemetry, which only orders, is a root rather than a discar
 the router's middleware. The thirty-line `Run` is one call, and the lifecycle config is a node,
 as it is on the CLI side. `Roots` is the composition root's own method, not go-core API.
 
+`Run` now returns `web.Run`'s error instead of an int exit code, so its caller changes too:
+go-web-service `cmd/server/main.go:26` returns `app.New(cfg, stdout).Run(ctx)` as the process's
+exit code and must map the error to one. The "server ready", "service failed", and "server
+stopped" logs leave the composition root; whether they move into `web.Run` or to that caller is
+left to the spike, as part of how `web.Run` reports readiness and failure (see The spike).
+
 ### Sketch 2: a CLI command declaring its nodes
 
 Today, a miniature of slab (`internal/app/app.go`, `internal/app/infrastructure.go`,
@@ -363,7 +369,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 The command package keeps its shape on purpose: declaring nodes on the command is what makes a
 run build only what the command reaches, so the redesign keeps it and amends
 `composition-terms.md` to admit it (pain point 10). The gain is in the composition root. A
-setting family parameterized by flag name, like `newSetting`, still returns a constructor; a
+setting family parameterized by flag name, like `flags.setting` (today's `newSetting`, moved
+onto the flags it reads), still returns a constructor; a
 method cannot carry its parameters, and that is the case the pattern is for.
 
 ### Sketch 3: a layer test
@@ -490,7 +497,8 @@ legible, with arity adapters and methods on `*Nodes` compared on one tier?
 
 Its answer decides the exact API go-core's breaking release ships: which of decisions 9 to 14
 survive as written, whether arity adapters ship, and the shape of the details this note leaves
-loose (the rule the name check applies, how `web.Run` reports readiness and failure, and how a
+loose (the rule the name check applies, how `web.Run` reports readiness and failure and whether
+it or its caller logs them, and how a
 Nodes method reaches a plain value such as the logger's writer). The spike is a prerequisite of
 `capstone.data-intelligence`.
 
@@ -503,5 +511,8 @@ Nodes method reaches a plain value such as the logger's writer). The spike is a 
      (adding `web.Run`), and go-cli-sdk;
   2. the templates: go-web-sdk-template and go-cli-sdk-template;
   3. go-web-service, with slab.
+- **The spikes are read, never migrated.** The spike repositories that import `graph` or
+  `lifecycle` (spike-ai-pipeline and others) are outside the goal's repositories; their code is
+  evidence for the redesign, and they stay on the old API.
 - **`composition-terms.md` is amended** to admit CLI command packages taking the nodes they
   declare, once the spike settles the API.
