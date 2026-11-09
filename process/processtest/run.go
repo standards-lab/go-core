@@ -58,15 +58,19 @@ func Run(t testing.TB, cmd Cmd) Result {
 	if err := c.Start(); err != nil {
 		t.Fatalf("start %s: %v", filepath.Base(binary), err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- c.Wait() }()
+	// done closes once Wait returns; waitErr is read only after that.
+	var waitErr error
+	done := make(chan struct{})
+	go func() {
+		waitErr = c.Wait()
+		close(done)
+	}()
 
-	exited, err := within(done, Failsafe)
-	if !exited {
+	if !within(done, Failsafe) {
 		// Interrupt first, as Launch's cleanup does, so a program that
 		// drains on the signal shows what it was doing.
 		_ = c.Process.Signal(syscall.SIGINT)
-		if exited, _ = within(done, Failsafe); !exited {
+		if !within(done, Failsafe) {
 			_ = c.Process.Kill()
 			<-done
 		}
@@ -77,26 +81,26 @@ func Run(t testing.TB, cmd Cmd) Result {
 	res := Result{Stdout: stdout.String(), Stderr: stderr.String()}
 	var exit *exec.ExitError
 	switch {
-	case err == nil:
-	case errors.As(err, &exit):
+	case waitErr == nil:
+	case errors.As(waitErr, &exit):
 		res.Code = exit.ExitCode()
 	default:
-		t.Fatalf("%s: %v", shellLine(cmd, stdin.String()), err)
+		t.Fatalf("%s: %v", shellLine(cmd, stdin.String()), waitErr)
 	}
 	t.Log(transcript(shellLine(cmd, stdin.String()), res))
 	return res
 }
 
 // within waits up to d for the run's Wait to return, reporting whether it
-// returned and its error.
-func within(done <-chan error, d time.Duration) (bool, error) {
+// returned.
+func within(done <-chan struct{}, d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
-	case err := <-done:
-		return true, err
+	case <-done:
+		return true
 	case <-timer.C:
-		return false, nil
+		return false
 	}
 }
 
