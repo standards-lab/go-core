@@ -18,8 +18,8 @@ The packages are documented in their `doc.go` files (go-core `graph/doc.go`,
 Both packages behave correctly. They read badly, and nine consumers repeat the same workarounds.
 Across the consumers (the three libraries, go-cli-sdk, go-web-sdk, both templates,
 go-web-service, and the spikes), `Define` is called 81 times, `Scope.Use` 64, `Scope.After` 10,
-`System.Get` 32, `inv.Get` 64, and `Layers()` 8, all eight in tests. Every `s.Use` in
-them is unconditional.
+`System.Get` 32, `inv.Get` 64, and `Layers()` 8, all eight in tests. Every `s.Use` in them is
+unconditional.
 
 ## Pain points
 
@@ -35,12 +35,12 @@ them is unconditional.
    `*Nodes` (`infrastructure.go:76`), single handles (slab
    `internal/app/infrastructure.go:150,162`), or none (go-web-service
    `internal/app/telemetry.go:99`).
-3. **Value-only closures.** A node whose value is fixed, or a fresh zero value, still takes a
-   four-line closure: 6 sites (go-web-service `internal/app/infrastructure.go:52`,
-   `server.go:12`, `admin.go:35`, `reactors.go:32`; go-web-sdk-template
-   `template/internal/app/infrastructure.go:22`, `server.go:12`). The fresh ones must stay fresh
-   per Build: a `lifecycle.Readiness` binds to one Coordinator only (go-core
-   `lifecycle/doc.go:97-106`), and the gate and nudge are per-run state.
+3. **Fixed and fresh values need closures.** A node whose value is fixed, or a fresh zero
+   value, still takes a four-line closure: 6 sites (go-web-service
+   `internal/app/infrastructure.go:52`, `server.go:12`, `admin.go:35`, `reactors.go:32`;
+   go-web-sdk-template `template/internal/app/infrastructure.go:22`, `server.go:12`). The fresh
+   ones must stay fresh per Build: a `lifecycle.Readiness` binds to one Coordinator only
+   (go-core `lifecycle/doc.go:97-106`), and the gate and nudge are per-run state.
 4. **Layer placement is invisible.** Where a node lands is set by `s.After` calls scattered
    through constructor bodies: telemetry three times (go-web-service
    `internal/app/infrastructure.go:78,88,105`), the server after every reactor and the schema
@@ -110,8 +110,8 @@ do. These hold across it:
 
 ## The candidate API
 
-One candidate, from the goal record's decisions 9 to 14. Everything not named here stays as it
-is.
+This section proposes one candidate API, from the goal record's decisions 9 to 14. Everything
+it does not name stays as it is.
 
 - **Order and groups are declared at Define (decision 9).** `Define` takes options:
   `graph.After(refs...)` orders the node after each ref, and `graph.In(group)` makes it a member
@@ -368,10 +368,11 @@ func (a *App) Run(ctx context.Context, args []string) int {
 
 The command package keeps its shape on purpose: declaring nodes on the command is what makes a
 run build only what the command reaches, so the redesign keeps it and amends
-`composition-terms.md` to admit it (pain point 10). The gain is in the composition root. A
-setting family parameterized by flag name, like `flags.setting` (today's `newSetting`, moved
-onto the flags it reads), still returns a constructor; a
-method cannot carry its parameters, and that is the case the pattern is for.
+`composition-terms.md` to admit it (pain point 10). The gain is in the composition root.
+
+A family of settings parameterized by flag name, such as `flags.setting` (today's `newSetting`,
+moved onto the flags it reads), still returns a constructor: a method cannot carry those
+parameters, and returning a constructor is the pattern for that case.
 
 ### Sketch 3: a layer test
 
@@ -496,11 +497,13 @@ miniature of slab, with commands declaring their nodes) shorter, and their layer
 legible, with arity adapters and methods on `*Nodes` compared on one tier?
 
 Its answer decides the exact API go-core's breaking release ships: which of decisions 9 to 14
-survive as written, whether arity adapters ship, and the shape of the details this note leaves
-loose (the rule the name check applies, how `web.Run` reports readiness and failure and whether
-it or its caller logs them, and how a
-Nodes method reaches a plain value such as the logger's writer). The spike is a prerequisite of
-`capstone.data-intelligence`.
+survive as written, whether arity adapters ship, and three details this note leaves open:
+
+- the rule the name check applies;
+- how `web.Run` reports readiness and failure, and whether it or its caller logs them;
+- how a `*Nodes` method reaches a plain value such as the logger's writer.
+
+The spike is a prerequisite of `capstone.data-intelligence`.
 
 ## Migration
 

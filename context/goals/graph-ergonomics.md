@@ -56,7 +56,7 @@ Door          two-way (documentation and tooling bumps; nothing released)
 
 ## Progress
 
-slices 0/2 committed · standards — · spec — · editor —
+slices 2/2 committed · standards done · spec done (1 round, gaps closed) · editor done
 
 ## Decisions
 
@@ -74,7 +74,13 @@ slices 0/2 committed · standards — · spec — · editor —
 - design-review: keep explicit string node names; a fixture check that each name matches its field replaces the `// "name"` comments.
 - design-review: System and Observe expose node handles (Ref on Dependency, Observe(func(Ref)), System.LayerOf), plus System.String() printing the layer table.
 - design-review: go-web-sdk gains web.Run matching go-cli-sdk's cli.Run, with lifecycle.Config supplied one way on both sides.
+- design-review: the tooling bumps take no CHANGELOG entry; none has been recorded for earlier bumps.
+- design-review: golangci-lint 2.15's errcheck findings are fixed in code, not in lint config: processtest.Run and a reactor test now signal completion by closing a chan struct{}.
+- design-review: the note leaves three details to the spike: what web.Run returns and reports, and where the ready, failed, and stopped logs go; the rule the name check applies; and how a *Nodes method reaches a plain New argument such as an io.Writer field.
 
 ## Pending edits
 
 - coordinator · roadmap: correct graph-ergonomics' summary: nodes are typed *Node[T] handles; the string is a required name that introspection exposes as the only identity, not the key.
+- coordinator · standards-lab/context/auth-strategy.md:199-200: the auth plan names an auth.go layer file with a define function; revise it once the spike settles the constructor shape.
+- architecture · principles/composition-terms.md: amend it to admit CLI command packages taking the nodes they declare, once the spike settles the API (decision 5).
+- architecture · standards/go-elemental/principles/domain-files.md:47-48: reconcile it with the composition-terms.md amendment.
