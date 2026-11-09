@@ -1,12 +1,16 @@
 # goal · graph-ergonomics
 
-- **State:** brief ready
-- **Task:** design-review
-- **Branch:** design-review
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
-1. [ ] design-review
+1. [x] design-review
+2. [ ] release
+3. [ ] migrate-libraries
+4. [ ] migrate-templates
+5. [ ] migrate-service
 
 ## Task brief · design-review
 
@@ -53,10 +57,6 @@ Ship order    Before this task ships, the architect runs `marathon experiment gr
               does not sync it.
 Door          two-way (documentation and tooling bumps; nothing released)
 ```
-
-## Progress
-
-slices 2/2 committed · standards done · spec done (1 round, gaps closed) · editor done
 
 ## Decisions
 
