@@ -4,8 +4,7 @@ This note holds what the code does not express about go-core v0.11.0's `graph` a
 API, goal `graph-ergonomics` in the workspace roadmap: why the API changed, the behavior it kept,
 the reasons behind its decisions, the alternatives it rejected, and what the consumers' migrations
 need. The API itself is stated in `graph/doc.go`, `graph/graphtest/doc.go`, and
-`lifecycle/doc.go`, and the CHANGELOG's v0.11.0 section lists every change. A section the code
-comes to express is deleted.
+`lifecycle/doc.go`, and the CHANGELOG's v0.11.0 section lists every change.
 
 Citations name a repository and a file:line in it; `slab` is go-web-service's `tools/slab` CLI,
 and the spikes live under `~/experiments/`. Citations into the consumers are to their code before
@@ -88,31 +87,17 @@ unconditional. Each point names what answers it.
 
 ## Behavior that did not change
 
-v0.11.0 changed how a composition root writes its graph, not what the graph and lifecycle do.
-go-core's graph and lifecycle tests, ported to the new API, hold these:
+v0.11.0 changes how a composition root writes its graph, not what the graph and lifecycle do:
+edge discovery through `s.Use`, build-once, longest-path layers, the participation interfaces,
+and the startup, readiness, and shutdown semantics are as `graph/doc.go` and `lifecycle/doc.go`
+state them, and go-core's ported tests hold them. A migrated consumer's behavior tests are therefore
+expected to keep passing, apart from a test that matches a Monitored value's `run: <error>`. The CHANGELOG's
+other breaks fail at compile time or panic at Define.
 
-- **Edges are discovered through `s.Use`.** A constructor's Use calls are its dependencies,
-  found as it runs, and a node neither a root nor reached by a Use is never constructed. This is
-  what lets a CLI run build only what its command declares: go-cli-sdk builds the leaf's
-  declared nodes plus the lifecycle config (`run.go:245`), so help or a usage error builds
-  nothing. `s.Use` stays the only way a constructor adds a dependency, which is why order and
-  groups, which carry no value, moved to Define rather than gaining a second edge in the Scope.
-- **Build-once.** Each node is built at most once per Build, and each Build constructs fresh
-  values.
-- **Longest-path layers.** A node's layer is one above its highest dependency, over the Use and
-  order-only edges; the composition root never assigns a layer.
-- **Panics for wiring mistakes.** Each wiring mistake panics with a `graph: ` message, as
-  `lifecycle.New` panics on its own; a constructor's error is still an error, labelled with the
-  node's name. The release added cases (the name rule, nil and foreign refs in an option, a
-  describing call after Build, nil handles in introspection) and removed none.
-- **The participation interfaces.** A node takes part in the lifecycle only through its value's
-  methods: `Starter`, `Stopper`, `Subsystem`, `ReadyStarter`, `Monitored`, and the `Check` a
-  readiness probe lists. No registration, no hooks.
-- **Startup, readiness, and shutdown.** Layers start lowest first, each layer concurrently; the
-  first failure stops higher layers; readiness never flips during a failed startup and goes
-  false when shutdown begins; checks are listed in layer order, then definition order; shutdown
-  runs on every path, in reverse (and the standard's `principles/lifecycle-and-context.md`).
-  lifecycle's one change is the label on a Monitored value's run failure.
+Use discovery is what lets a CLI run build only what its command declares: go-cli-sdk builds the
+leaf's declared nodes plus the lifecycle config (`run.go:245`), so help or a usage error builds
+nothing. `s.Use` stays the only way a constructor adds a dependency, which is why order and
+groups, which carry no value, moved to Define rather than gaining a second edge in the Scope.
 
 ## The decisions
 
@@ -124,7 +109,8 @@ reasons below are what the package docs do not state.
   After that built its target would let an order-only declaration pull a node, and its whole
   subtree, into a CLI run that never Uses it, undoing the build-only-what-is-declared property.
   A node only ordered against is named as a root instead, and `System.Dropped` makes a dropped
-  After observable, so the full-roots test asserts there is none.
+  After observable, so the full-roots test asserts there is none. An After naming an empty group
+  is dropped too, even in a full-roots Build, so the same assertion catches a forgotten `In`.
 - **Groups expand in definition order and share the node name space.** A group is a `Ref`, so a
   Build and an After take it wherever they take a node; one name space keeps the layer table and
   the error labels unambiguous. `Group` exports only `Name`: no consumer needed
@@ -182,7 +168,7 @@ reasons below are what the package docs do not state.
   in favor of participation by the value's own methods; dig resolves the graph by run-time
   reflection over constructor signatures, so a wiring mistake surfaces at run time rather than
   in a typed handle. Both are third-party dependencies in go-core, which is standard-library
-  only; fx's last release was May 2025.
+  only.
 - **samber/do (v2.1.0).** A typed container with lazy services, but it has no layered,
   concurrent startup: it cannot start a layer's subsystems together and shut down in reverse
   layers, which is the lifecycle's core semantics.

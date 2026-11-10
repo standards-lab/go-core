@@ -88,9 +88,9 @@
 //
 // # Concurrency
 //
-// A [Graph] is safe for concurrent use, as its documentation states: Builds
-// of one Graph may run concurrently, and describing it or adding an
-// observer may run beside a Build. A constructor runs in its Build's
+// A [Graph] is safe for concurrent use: Builds of one Graph may run
+// concurrently, and describing it or adding an observer may run beside a
+// Build, as [Graph] details. A constructor runs in its Build's
 // goroutine, and runs concurrently with the constructors of other Builds.
 //
 // # Errors and panics

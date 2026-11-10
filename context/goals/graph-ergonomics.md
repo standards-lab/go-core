@@ -130,7 +130,7 @@ Release       v0.11.0 (go-core)
 
 ## Progress
 
-slices 8/8 committed · standards — · spec — · editor —
+slices 8/8 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -163,13 +163,19 @@ slices 8/8 committed · standards — · spec — · editor —
 - release: an observer's panic re-panics with a "graph: " message naming the node and wrapping the original value.
 - release: a sync.Mutex makes the Graph safe for concurrent use; Build holds it only to set built and copy the observers.
 - release: System.Dependencies() []Dependency lists the built nodes in layer order, then definition order.
+- release: Has returns false for a node from another Graph, as LayerOf treats it as not in the System; LayerOf and Has share one panic message for a group, "a group, which is not a node".
+- release: an observer's panic value that is not an error is re-panicked as a %v string; an error is wrapped with %w.
+- release: Ref's unexported methods split into owner() and nodes(), so a foreign group is rejected before its members are read; reading them first would race with the other Graph's Define.
+- release: an After naming an empty group is reported by Dropped even in a Build of the full root set, so the empty-Dropped assertion catches a forgotten In.
+- release: graph/doc.go keeps its overview list of wiring panics, which predates the task.
+- release: the CHANGELOG's v0.11.0 section carries a "Migrating from v0.10.0" subsection, as v0.6.0 does.
 
 ## Pending edits
 
-- coordinator · roadmap: correct graph-ergonomics' summary: nodes are typed *Node[T] handles; the string is a required name that introspection exposes as the only identity, not the key.
+- coordinator · roadmap: correct graph-ergonomics' summary: nodes are typed *Node[T] handles; the string is a required name, not the key, and v0.10.0's introspection exposed it as a node's only identity.
 - coordinator · standards-lab/context/auth-strategy.md:199-200: the auth plan names an auth.go layer file with a define function; revise it once the spike settles the constructor shape.
 - architecture · principles/composition-terms.md: amend it to admit CLI command packages taking the nodes they declare, once the spike settles the API (decision 5).
 - architecture · standards/go-elemental/principles/domain-files.md:47-48: reconcile it with the composition-terms.md amendment.
-- coordinator · standards-lab/context/graph-ergonomics.md "Open findings": replace the release's bullet with its outcomes (LayerOf + Has, no Group.Members, observers persist, Replace keeps placement, the four further findings fixed); keep the migrate-libraries bullet.
-- coordinator · standards-lab/context/graph-ergonomics.md "The settled API": decision 13 gains Has, Dependencies, String's format, and the name rule; decision 9 gains the concurrency-safe Graph.
+- coordinator · standards-lab/context/graph-ergonomics.md "Open findings": remove the release's bullet, whose outcomes the next edit states; keep the migrate-libraries bullet. "Not shipped" gains Group.Members, a way to stop an observer, and Replace removing an edge or a membership.
+- coordinator · standards-lab/context/graph-ergonomics.md "The settled API": decision 9 gains that Replace swaps only the constructor, keeping After and In, and that a Graph is safe for concurrent use (concurrent Builds, describing calls and Observe beside a Build, observers possibly called concurrently). Decision 12 gains the name rule: Define, Value, Fresh, and Group refuse an empty name, a comma or a newline, and a name taken by a node or a group. Decision 13 becomes: `Ref` on a Dependency; `Observe(func(Ref))`, whose observers persist for every later Build and whose panic Build re-panics as a "graph: " message naming the node, wrapping an error value; `LayerOf`, which panics for a node not in the System, a nil ref, or a group; `Has(ref) bool`, false for a node not in the System or from another Graph; `Dependencies()`, every built node in layer, then definition, order; and `String()`, the unquoted layer table, one line per layer as "0: config, logger", with no trailing newline. "The three details": the name check's last clause names the comma and newline rule beside the empty name.
 - coordinator · roadmap: migrate-templates' and migrate-service's summaries name Has and Dependencies for the layer tests in place of scanning Layers().

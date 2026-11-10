@@ -164,7 +164,8 @@ func (s *System) String() string {
 // other members are absent. Only the Afters of nodes in s are considered.
 // The drops are in the declaring nodes' definition order, then in the
 // order of each node's After refs. A Build of the full root set drops
-// nothing, so a root's layer test asserts len(sys.Dropped()) == 0 to make
+// nothing unless a target is missing from the roots or a group has no
+// member, so a root's layer test asserts len(sys.Dropped()) == 0 to make
 // a forgotten root, or a forgotten [In], fail instead of silently losing
 // an order. Each call returns a fresh copy; nil when nothing is dropped.
 func (s *System) Dropped() []Drop {
