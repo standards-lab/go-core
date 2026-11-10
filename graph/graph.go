@@ -4,15 +4,28 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // Graph describes a set of nodes and their constructors. Describing is
 // inert: [Graph.Define], [Graph.Value], [Graph.Fresh], [Graph.Group], and
 // [Graph.Replace] record nodes, groups, and constructors and run none, and
 // only [Graph.Build] constructs anything. The first Build freezes the
-// description: Define, Value, Fresh, Group, and Replace panic after it. A
-// Graph is not safe for concurrent use.
+// description: Define, Value, Fresh, Group, and Replace panic after it.
+//
+// A Graph is safe for concurrent use. Builds may run concurrently, each
+// constructing its own values, and a describing call or [Graph.Observe]
+// may run beside a Build: a describing call that runs before the first
+// Build sets the freeze completes, and one after it panics. An observer
+// added while a Build runs applies from the next Build on. Concurrent
+// Builds call the same observers concurrently, so an observer shared by
+// them must be safe for concurrent use.
 type Graph struct {
+	// mu guards every field below, and the members of g's groups and the
+	// constructor of g's nodes, which Replace swaps. Build holds it only to
+	// set built and copy the observers; it builds without it, reading what
+	// the freeze has made immutable.
+	mu    sync.Mutex
 	nodes []*node
 	// groups are the groups [Graph.Group] defined, in definition order. They
 	// share the name space with nodes.
@@ -22,6 +35,7 @@ type Graph struct {
 	built bool
 	// observers are called, in the order added, as a Build begins each
 	// node. They are never removed: each applies to every later Build.
+	// Observe appends to it, and each Build copies it as it starts.
 	observers []func(Ref)
 }
 
@@ -79,6 +93,9 @@ func (g *Graph) Fresh[T any](name string, opts ...Option) *Node[*T] {
 // and every option before it changes g, then adds the node. call names the
 // exported function for a panic's message.
 func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), opts []Option) *Node[T] {
+	// Deferred, so a check that panics releases the lock.
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.checkName(call, name)
 	if ctor == nil {
 		panic(fmt.Sprintf("graph: %s %q with a nil constructor", call, name))
@@ -116,7 +133,7 @@ func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), op
 // checkName panics, with call naming the exported function, when g has run
 // a Build or name cannot name a new node or group: it is empty, contains a
 // comma or a newline, which would make a list of names ambiguous, or is
-// already taken on g by a node or a group.
+// already taken on g by a node or a group. The caller holds g.mu.
 func (g *Graph) checkName(call, name string) {
 	if g.built {
 		panic(fmt.Sprintf("graph: %s of %q after Build", call, name))
@@ -137,14 +154,16 @@ func (g *Graph) checkName(call, name string) {
 // members in definition order. It panics when r is nil, a zero-value
 // literal, or defined on another Graph; op names the call for the message.
 // When later is set, a nil ref's message asks whether the ref's Define, or
-// a group's Group, comes later, as it does for an option at Define.
+// a group's Group, comes later, as it does for an option at Define. The
+// caller holds g.mu or g has built, so a group of g's has members that
+// cannot change under it; resolve reads them only once it has checked the
+// ref is g's, since another Graph's may be changing.
 func (g *Graph) resolve(r Ref, op string, later bool) []*node {
 	kind := "node"
 	var owner *Graph
-	var nodes []*node
 	if r != nil {
 		kind = r.kind()
-		owner, nodes = r.expand()
+		owner = r.owner()
 	}
 	if owner == nil {
 		msg := fmt.Sprintf("graph: %s of a nil %s", op, kind)
@@ -160,7 +179,7 @@ func (g *Graph) resolve(r Ref, op string, later bool) []*node {
 	if owner != g {
 		panic(fmt.Sprintf("graph: %s of %q, a %s defined on another Graph", op, r.Name(), kind))
 	}
-	return nodes
+	return r.nodes()
 }
 
 // Replace swaps n's constructor for ctor, which every later Build runs in
@@ -173,6 +192,9 @@ func (g *Graph) Replace[T any](n *Node[T], ctor func(*Scope) (T, error)) {
 	if core == nil {
 		panic("graph: Replace of a nil node")
 	}
+	// Deferred, so a check that panics releases the lock.
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.built {
 		panic(fmt.Sprintf("graph: Replace of %q after Build", core.name))
 	}
@@ -195,10 +217,15 @@ func (g *Graph) Replace[T any](n *Node[T], ctor func(*Scope) (T, error)) {
 // Build constructs, such as a test asserting which nodes a run brought up;
 // fn cannot change the Build. When fn panics, Build panics with a "graph: "
 // message naming the node and carrying fn's value, wrapping it when it is
-// an error. Observe panics on a nil fn.
+// an error. Observe may run beside a Build, or in an observer: fn applies
+// from the next Build on, not to one already running. Concurrent Builds
+// call fn concurrently, so fn must then be safe for concurrent use.
+// Observe panics on a nil fn.
 func (g *Graph) Observe(fn func(Ref)) {
 	if fn == nil {
 		panic("graph: Observe with a nil function")
 	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.observers = append(g.observers, fn)
 }

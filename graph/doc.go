@@ -86,6 +86,20 @@
 // comma or a newline, so the table is unambiguous unquoted. An observer is
 // never removed: it applies to every later Build of its Graph.
 //
+// # Concurrency
+//
+// A [Graph] is safe for concurrent use. Builds of one Graph may run
+// concurrently, each constructing its own values into its own System. A
+// describing call, [Graph.Define], [Graph.Value], [Graph.Fresh],
+// [Graph.Group], or [Graph.Replace], may run beside a Build: one that runs
+// before the first Build freezes the Graph completes, and one after
+// panics, as it does without concurrency. [Graph.Observe] may run beside a
+// Build, or from an observer, and its function applies from the next Build
+// on, not to one already running. Concurrent Builds call the same
+// observers concurrently, so an observer shared by them must be safe for
+// concurrent use. A constructor runs in its Build's goroutine, and runs
+// concurrently with the constructors of other Builds.
+//
 // # Errors and panics
 //
 // A constructor's error fails the Build, labelled with its node's name and

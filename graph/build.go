@@ -22,8 +22,11 @@ type entry struct {
 
 // build is the state of one [Graph.Build].
 type build struct {
-	graph   *Graph
-	entries map[*node]*entry
+	graph *Graph
+	// observers are the Graph's observers as the Build started, so one
+	// Observe adds while the Build runs applies from the next Build on.
+	observers []func(Ref)
+	entries   map[*node]*entry
 	// stack is the chain of nodes under construction, outermost first,
 	// which names the path of a cycle.
 	stack []*node
@@ -55,9 +58,18 @@ type abort struct {
 // which only a recover in the constructor allows: a constructor must not
 // recover. The first Build freezes g: [Graph.Define], [Graph.Value],
 // [Graph.Fresh], [Graph.Group], and [Graph.Replace] panic after it.
+// Builds may run concurrently, and call the observers concurrently.
 func (g *Graph) Build(roots ...Ref) (sys *System, err error) {
+	// The lock covers only the freeze and the copy. Once built is set,
+	// every describing call panics before it changes g, so the nodes, their
+	// constructors and Afters, and the groups' members are immutable, and
+	// the Build reads them without the lock, beside other Builds and beside
+	// an observer that calls Observe.
+	g.mu.Lock()
 	g.built = true
-	b := &build{graph: g, entries: make(map[*node]*entry)}
+	observers := slices.Clone(g.observers)
+	g.mu.Unlock()
+	b := &build{graph: g, observers: observers, entries: make(map[*node]*entry)}
 	defer func() {
 		if r := recover(); r != nil {
 			a, ok := r.(abort)
@@ -98,7 +110,7 @@ func (b *build) construct(n *node) error {
 	e := &entry{node: n, building: true}
 	b.entries[n] = e
 	b.stack = append(b.stack, n)
-	for _, fn := range b.graph.observers {
+	for _, fn := range b.observers {
 		observe(fn, n)
 	}
 	s := &Scope{build: b, entry: e}

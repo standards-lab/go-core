@@ -34,9 +34,14 @@ type Node[T any] struct {
 type Ref interface {
 	// Name returns the name the node or group was defined with.
 	Name() string
-	// expand returns the Graph the ref was defined on, nil for a nil
-	// handle or a zero-value literal, and the nodes it stands for.
-	expand() (*Graph, []*node)
+	// owner returns the Graph the ref was defined on, nil for a nil
+	// handle or a zero-value literal.
+	owner() *Graph
+	// nodes returns the nodes the ref stands for. A group's members change
+	// under its Graph's lock until the first Build, so a caller calls
+	// nodes only on a ref whose owner it has checked is the Graph it holds,
+	// one that has run a Build or whose lock it holds.
+	nodes() []*node
 	// kind names what the ref is, "node" or "group", for a panic message.
 	kind() string
 }
@@ -49,13 +54,22 @@ func (n *Node[T]) ref() *node {
 	return n.core
 }
 
-// expand treats a zero-value literal, &Node[T]{}, as a nil handle: it has
+// owner treats a zero-value literal, &Node[T]{}, as a nil handle: it has
 // no core, since only Define, Value, and Fresh make one.
-func (n *Node[T]) expand() (*Graph, []*node) {
+func (n *Node[T]) owner() *Graph {
 	if core := n.ref(); core != nil {
-		return core.graph, []*node{core}
+		return core.graph
 	}
-	return nil, nil
+	return nil
+}
+
+// nodes returns n's core alone, nil for a nil handle or a zero-value
+// literal.
+func (n *Node[T]) nodes() []*node {
+	if core := n.ref(); core != nil {
+		return []*node{core}
+	}
+	return nil
 }
 
 func (*Node[T]) kind() string { return "node" }

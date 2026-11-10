@@ -117,14 +117,15 @@ func (s *System) lookup(ref Ref, op string) *node {
 	if ref == nil {
 		panic(fmt.Sprintf("graph: %s of a nil node", op))
 	}
-	owner, nodes := ref.expand()
-	if owner == nil {
+	if ref.owner() == nil {
 		panic(fmt.Sprintf("graph: %s of a nil %s", op, ref.kind()))
 	}
+	// A group's members may be changing on a Graph that has not built, so
+	// lookup rejects a group before it reads any nodes.
 	if _, ok := ref.(*Group); ok {
 		panic(fmt.Sprintf("graph: %s of %q, a group, which is not a node", op, ref.Name()))
 	}
-	return nodes[0]
+	return ref.nodes()[0]
 }
 
 // String returns the layer table, one line per layer, layer 0 first: the
@@ -201,8 +202,7 @@ func (b *build) system() *System {
 			if isGroup {
 				path = append(path, grp.name)
 			}
-			_, targets := r.expand()
-			for _, d := range targets {
+			for _, d := range r.nodes() {
 				if _, ok := b.entries[d]; ok {
 					l = max(l, layer(d)+1)
 				}
@@ -242,8 +242,7 @@ func (b *build) dropped(ordered []*entry) []Drop {
 	var drops []Drop
 	for _, e := range ordered {
 		for _, r := range e.node.after {
-			_, targets := r.expand()
-			if !slices.ContainsFunc(targets, func(d *node) bool { _, ok := b.entries[d]; return ok }) {
+			if !slices.ContainsFunc(r.nodes(), func(d *node) bool { _, ok := b.entries[d]; return ok }) {
 				drops = append(drops, Drop{Node: e.node.handle, After: r})
 			}
 		}

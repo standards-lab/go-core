@@ -10,7 +10,7 @@ type Group struct {
 	graph *Graph
 	name  string
 	// members are the nodes defined with In of the group, in definition
-	// order.
+	// order, guarded by graph's lock until the first Build freezes them.
 	members []*node
 }
 
@@ -19,6 +19,9 @@ type Group struct {
 // panics once g has run a Build, or when name is empty, contains a comma
 // or a newline, or is already defined on g.
 func (g *Graph) Group(name string) *Group {
+	// Deferred, so a check that panics releases the lock.
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.checkName("Group", name)
 	grp := &Group{graph: g, name: name}
 	g.groups = append(g.groups, grp)
@@ -34,13 +37,22 @@ func (grp *Group) Name() string {
 	return grp.name
 }
 
-// expand treats a zero-value literal, &Group{}, as a nil handle: it has no
+// owner treats a zero-value literal, &Group{}, as a nil handle: it has no
 // Graph, since only [Graph.Group] makes one.
-func (grp *Group) expand() (*Graph, []*node) {
+func (grp *Group) owner() *Graph {
 	if grp == nil {
-		return nil, nil
+		return nil
 	}
-	return grp.graph, grp.members
+	return grp.graph
+}
+
+// nodes returns the group's members, which Define, Value, and Fresh append
+// to under the Graph's lock until the first Build: see [Ref].
+func (grp *Group) nodes() []*node {
+	if grp == nil {
+		return nil
+	}
+	return grp.members
 }
 
 func (*Group) kind() string { return "group" }
