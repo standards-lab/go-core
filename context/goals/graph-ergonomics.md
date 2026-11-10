@@ -130,7 +130,7 @@ Release       v0.11.0 (go-core)
 
 ## Progress
 
-slices 0/8 committed · standards — · spec — · editor —
+slices 8/8 committed · standards — · spec — · editor —
 
 ## Decisions
 
