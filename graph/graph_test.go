@@ -224,11 +224,7 @@ func TestAfter_OrdersOnlyWithinTheSystem(t *testing.T) {
 		return s.Use(base), nil
 	})
 	// worker has no Use, so its layer comes from After alone.
-	worker := g.Define("worker", func(s *graph.Scope) (int, error) {
-		c["worker"]++
-		s.After(gate)
-		return 0, nil
-	})
+	worker := g.Define("worker", constant(c, "worker", 0), graph.After(gate))
 
 	// gate is in the System through the root list, so worker sits above it.
 	sys := mustBuild(t, g, worker, gate)
@@ -252,11 +248,9 @@ func TestAfter_OrdersOnlyWithinTheSystem(t *testing.T) {
 func TestAfter_TargetBuiltLaterStillOrders(t *testing.T) {
 	g := graph.New()
 	late := g.Define("late", func(*graph.Scope) (int, error) { return 0, nil })
-	early := g.Define("early", func(s *graph.Scope) (int, error) {
-		// late is not built yet when After names it.
-		s.After(late)
-		return 0, nil
-	})
+	// early is built first, as the first root, so late is not built yet
+	// when early's constructor runs.
+	early := g.Define("early", func(*graph.Scope) (int, error) { return 0, nil }, graph.After(late))
 	sys := mustBuild(t, g, early, late)
 	want := [][]string{{"late"}, {"early"}}
 	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
@@ -516,7 +510,7 @@ func TestWiring_Panics(t *testing.T) {
 		g := graph.New()
 		var a, b *graph.Node[int]
 		a = g.Define("a", func(s *graph.Scope) (int, error) { return s.Use(b), nil })
-		b = g.Define("b", func(s *graph.Scope) (int, error) { s.After(a); return 0, nil })
+		b = g.Define("b", func(*graph.Scope) (int, error) { return 0, nil }, graph.After(a))
 		mustPanic(t, "dependency cycle: a -> b -> a", func() { _, _ = g.Build(a) })
 	})
 	t.Run("use of a foreign node", func(t *testing.T) {
@@ -528,8 +522,9 @@ func TestWiring_Panics(t *testing.T) {
 	t.Run("after of a foreign node", func(t *testing.T) {
 		g, h := graph.New(), graph.New()
 		foreign := h.Define("foreign", func(*graph.Scope) (int, error) { return 0, nil })
-		top := g.Define("top", func(s *graph.Scope) (int, error) { s.After(foreign); return 0, nil })
-		mustPanic(t, `After of "foreign", a node defined on another Graph`, func() { _, _ = g.Build(top) })
+		mustPanic(t, `Define "top" with After of "foreign", a node defined on another Graph`, func() {
+			g.Define("top", func(*graph.Scope) (int, error) { return 0, nil }, graph.After(foreign))
+		})
 	})
 	t.Run("build of a foreign root", func(t *testing.T) {
 		g, h := graph.New(), graph.New()
@@ -573,10 +568,6 @@ func TestWiring_Panics(t *testing.T) {
 		s, dep := escaped(t)
 		mustPanic(t, `Use called after the constructor of "top" returned`, func() { s.Use(dep) })
 	})
-	t.Run("escaped After", func(t *testing.T) {
-		s, dep := escaped(t)
-		mustPanic(t, `After called after the constructor of "top" returned`, func() { s.After(dep) })
-	})
 
 	t.Run("define after build", func(t *testing.T) {
 		g := graph.New()
@@ -593,6 +584,11 @@ func TestWiring_Panics(t *testing.T) {
 		mustPanic(t, `Replace of "n" after Build`, func() {
 			g.Replace(n, func(*graph.Scope) (int, error) { return 1, nil })
 		})
+	})
+	t.Run("replace with a nil constructor", func(t *testing.T) {
+		g := graph.New()
+		n := g.Define("n", func(*graph.Scope) (int, error) { return 0, nil })
+		mustPanic(t, `Replace of "n" with a nil constructor`, func() { g.Replace(n, nil) })
 	})
 	t.Run("replace of a foreign node", func(t *testing.T) {
 		g, h := graph.New(), graph.New()
@@ -628,6 +624,18 @@ func TestWiring_Panics(t *testing.T) {
 			g.Define("db", func(*graph.Scope) (string, error) { return "", nil })
 		})
 	})
+	for _, name := range []string{"a,b", "a\nb", ",", "\n"} {
+		t.Run(fmt.Sprintf("define of the name %q", name), func(t *testing.T) {
+			g := graph.New()
+			mustPanic(t, fmt.Sprintf("Define of %q, a name with a comma or a newline", name), func() {
+				g.Define(name, func(*graph.Scope) (int, error) { return 0, nil })
+			})
+			// The refused name left nothing behind.
+			if g.Define("ok", func(*graph.Scope) (int, error) { return 0, nil }).Name() != "ok" {
+				t.Fatal("Define after the refused name failed")
+			}
+		})
+	}
 	t.Run("nil constructor", func(t *testing.T) {
 		g := graph.New()
 		mustPanic(t, `Define "db" with a nil constructor`, func() {

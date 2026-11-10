@@ -6,8 +6,9 @@ import (
 )
 
 // Scope is what a constructor receives: the means to reach its
-// dependencies and to order it after other nodes. It is valid only while the
-// constructor runs; every method panics once the constructor has returned.
+// dependencies. It has [Scope.Use] only: a node's order-only edges are
+// declared at Define, with [After]. It is valid only while the constructor
+// runs; Use panics once the constructor has returned.
 type Scope struct {
 	build *build
 	entry *entry
@@ -40,7 +41,7 @@ func (s *Scope) Use[T any](n *Node[T]) T {
 	if s.aborted != "" {
 		panic(s.recovered())
 	}
-	core := s.build.resolve(n, "Use")
+	core := s.build.graph.resolve(n, "Use", false)[0]
 	// Any panic leaving construct, the abort above all, marks the scope,
 	// so construct can tell a constructor that returned after recovering
 	// it.
@@ -61,19 +62,6 @@ func (s *Scope) Use[T any](n *Node[T]) T {
 	// type, which a plain assertion would panic on.
 	v, _ := s.build.entries[core].value.(T)
 	return v
-}
-
-// After orders the node under construction after r: it starts after r and
-// stops before it. It passes no value and never builds r; the edge holds
-// only when r is in the System, as a root or a node some Use reached, and
-// is dropped otherwise. After panics when r is nil or was defined on
-// another Graph, or after the constructor has returned.
-func (s *Scope) After(r Ref) {
-	s.check("After")
-	core := s.build.resolve(r, "After")
-	if !slices.Contains(s.entry.after, core) {
-		s.entry.after = append(s.entry.after, core)
-	}
 }
 
 // recovered is the panic message for a constructor that carried on after a

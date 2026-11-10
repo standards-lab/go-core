@@ -15,9 +15,6 @@ type entry struct {
 	// uses are the nodes the constructor reached through Use, deduplicated,
 	// in the order it first reached them.
 	uses []*node
-	// after are the order-only targets the constructor named; the ones not
-	// in the System are dropped when the layers are computed.
-	after []*node
 }
 
 // build is the state of one [Graph.Build].
@@ -39,17 +36,20 @@ type abort struct {
 
 // Build constructs every node the roots reach through [Scope.Use], each at
 // most once, depth-first, and returns them as a [System] in computed
-// layers. Each Build is independent and constructs fresh values. A
-// constructor's error fails the Build, labelled with its node's name and
-// wrapping the error, whether the node is a root or a dependency some Use
-// reached. Build panics on a nil root, a root defined on another Graph, or a
-// dependency cycle, among the nodes Use reaches or the ordering edges After
-// adds among them. It checks every root before it constructs any, so a
-// wiring mistake in one root panics before another root's constructor runs.
+// layers. A [Group] root stands for its members, built in definition order;
+// an empty one builds nothing. An [After] never builds its target. Each
+// Build is independent and constructs fresh values. A constructor's error
+// fails the Build, labelled with its node's name and wrapping the error,
+// whether the node is a root or a dependency some Use reached. Build panics
+// on a nil root, a root defined on another Graph, or a dependency cycle,
+// among the nodes Use reaches or the order-only edges [After] adds among
+// them, a group's included; the message names the cycle's path. It checks
+// every root before it constructs any, so a wiring mistake in one root
+// panics before another root's constructor runs.
 // It also panics when a constructor returns after a Use it made aborted,
 // which only a recover in the constructor allows: a constructor must not
-// recover. The first Build freezes g: [Graph.Define] and [Graph.Replace]
-// panic after it.
+// recover. The first Build freezes g: [Graph.Define], [Graph.Group], and
+// [Graph.Replace] panic after it.
 func (g *Graph) Build(roots ...Ref) (sys *System, err error) {
 	g.built = true
 	b := &build{graph: g, entries: make(map[*node]*entry)}
@@ -63,10 +63,11 @@ func (g *Graph) Build(roots ...Ref) (sys *System, err error) {
 		}
 	}()
 	// Resolve every root first, so a nil or foreign root anywhere in the
-	// list panics before any constructor runs.
-	nodes := make([]*node, len(roots))
-	for i, r := range roots {
-		nodes[i] = b.resolve(r, "Build")
+	// list panics before any constructor runs. A group expands here to its
+	// members, complete since Define panics after the first Build.
+	var nodes []*node
+	for _, r := range roots {
+		nodes = append(nodes, g.resolve(r, "Build", false)...)
 	}
 	for _, n := range nodes {
 		if err := b.construct(n); err != nil {
@@ -74,22 +75,6 @@ func (g *Graph) Build(roots ...Ref) (sys *System, err error) {
 		}
 	}
 	return b.system(), nil
-}
-
-// resolve returns r's node, panicking when r is nil or defined on another
-// Graph. op names the call for the message.
-func (b *build) resolve(r Ref, op string) *node {
-	var n *node
-	if r != nil {
-		n = r.ref()
-	}
-	if n == nil {
-		panic(fmt.Sprintf("graph: %s of a nil node", op))
-	}
-	if n.graph != b.graph {
-		panic(fmt.Sprintf("graph: %s of %q, a node defined on another Graph", op, n.name))
-	}
-	return n
 }
 
 // construct builds n unless it is built already, and returns its
