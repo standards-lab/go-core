@@ -82,25 +82,16 @@
 // [Graph.Value], or [Graph.Fresh] returned: [Dependency] carries it as its
 // Ref, an observer receives it, and [System.LayerOf] and [System.Has] take
 // it, so a test compares handles rather than names. [System.String] prints
-// the layer table for a failing test's message; a name cannot contain a
-// comma or a newline, so the table is unambiguous unquoted. An observer is
-// never removed: it applies to every later Build of its Graph. The
-// graphtest package checks a program's struct of handles against the names
-// its nodes and groups were defined with.
+// the layer table for a failing test's message. The graphtest package
+// checks a program's struct of handles against the names its nodes and
+// groups were defined with.
 //
 // # Concurrency
 //
-// A [Graph] is safe for concurrent use. Builds of one Graph may run
-// concurrently, each constructing its own values into its own System. A
-// describing call, [Graph.Define], [Graph.Value], [Graph.Fresh],
-// [Graph.Group], or [Graph.Replace], may run beside a Build: one that runs
-// before the first Build freezes the Graph completes, and one after
-// panics, as it does without concurrency. [Graph.Observe] may run beside a
-// Build, or from an observer, and its function applies from the next Build
-// on, not to one already running. Concurrent Builds call the same
-// observers concurrently, so an observer shared by them must be safe for
-// concurrent use. A constructor runs in its Build's goroutine, and runs
-// concurrently with the constructors of other Builds.
+// A [Graph] is safe for concurrent use, as its documentation states: Builds
+// of one Graph may run concurrently, and describing it or adding an
+// observer may run beside a Build. A constructor runs in its Build's
+// goroutine, and runs concurrently with the constructors of other Builds.
 //
 // # Errors and panics
 //
@@ -113,9 +104,8 @@
 // that returns, with a value or an error, after a Use it made aborted would
 // lose the failure, so Build panics naming the constructor and the Use.
 //
-// An observer that panics makes Build panic with a "graph: " message that
-// names the node it was called with and carries the panic's value, wrapped
-// when it is an error, whether the node is a root or one a Use reached.
+// An observer that panics makes Build panic naming the node, as
+// [Graph.Observe] states.
 //
 // Wiring mistakes panic with a "graph: " message, as each symbol's
 // documentation states: a dependency cycle, a node used on a Graph it was
@@ -126,9 +116,7 @@
 // observer, an After or In naming a nil handle, a zero-value literal, or
 // one from another Graph, and a name that is empty, contains a comma or a
 // newline, or is already taken by a node or a group, which share one name
-// space. Define, Value, Fresh, and Group check everything before they
-// change the Graph, so one that panics leaves it as it was. Build checks
-// its roots, for a nil node or group or one defined on another Graph,
-// before it constructs any of them, so a mistake in any root panics before
-// a constructor runs.
+// space. Build checks its roots, for a nil node or group or one defined
+// on another Graph, before it constructs any of them, so a mistake in any
+// root panics before a constructor runs.
 package graph

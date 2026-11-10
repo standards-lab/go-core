@@ -85,9 +85,9 @@ func (c *Coordinator) OnReady(fn func()) {
 // watch once startup has completed, alongside the System's [Monitored]
 // values: the first non-nil error received ends the run and joins the
 // return wrapped "run:", with no node name, since a registered channel has
-// no node. A nil error is ignored, and a closed channel
-// retires quietly — the expected end of a source that stopped cleanly.
-// Registration after Exec or Run panics.
+// no node. A nil error is ignored, and a closed channel retires quietly —
+// the expected end of a source that stopped cleanly. Registration after
+// Exec or Run panics.
 func (c *Coordinator) Monitor(errs <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,10 +122,10 @@ func (c *Coordinator) Checks() []Check {
 // shutdown begins, and a monitored failure ends fn's context. It returns
 // fn's error as fn returned it, joined with any monitored failure wrapped
 // "run:", a [Monitored] value's labelled with its node's name, and with the
-// shutdown's error. When startup fails, or ctx ends
-// before startup completes, fn does not run and Exec returns the startup
-// error, or ctx's, wrapped "startup:" and joined with the shutdown's. A second call to Exec or
-// [Coordinator.Run] panics.
+// shutdown's error. When startup fails, or ctx ends before startup
+// completes, fn does not run and Exec returns the startup error, or ctx's,
+// wrapped "startup:" and joined with the shutdown's. A second call to Exec
+// or [Coordinator.Run] panics.
 func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) error {
 	return c.execute(ctx, "Exec", false, func(runCtx context.Context, monitored func() error) error {
 		err := fn(runCtx)
