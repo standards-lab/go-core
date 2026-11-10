@@ -1,8 +1,8 @@
 # goal · graph-ergonomics
 
-- **State:** idle
-- **Task:** none
-- **Branch:** none
+- **State:** building
+- **Task:** release
+- **Branch:** release
 
 ## Tasks
 
@@ -12,51 +12,125 @@
 4. [ ] migrate-templates
 5. [ ] migrate-service
 
-## Task brief · design-review
+## Task brief · release
 
 ```
-
-Problem       go-core's graph and lifecycle behave correctly but read badly: names written three
-              times, constructors that return constructors, layer placement hidden in scattered
-              s.After calls, value-only closures, name-only introspection, and a web composition
-              root that repeats ~30 lines the CLI side gets from cli.Run. go-ai and the client SDK
-              build on this API in wave C, so its design must be settled — and proven in a spike —
-              first.
-Behaviors     1. go-core trails nothing: its currency command exits 0 and its check passes.
-              2. go-core's working context holds a design note for the redesign, stating:
-                 a. the pain points, each with consumer evidence (repo and site);
-                 b. the behavior that must not change: edges discovered through s.Use (so a CLI
-                    run builds only what a command declares), build-once, longest-path layers,
-                    panics for wiring mistakes, the participation interfaces, and lifecycle's
-                    startup, readiness, and shutdown semantics;
-                 c. the one candidate API from decisions 9–14, with code sketches of a web
-                    composition root, a CLI command, and a layer test written against it;
-                 d. the open forks the spike tests (arity adapters beside methods on *Nodes);
-                 e. the rejected alternatives (uber-go/fx, dig, samber/do, google/wire) and why;
-                 f. the spike's question and the decision its answer changes;
-                 g. the migration: one breaking go-core release (no deprecation period), then one
-                    migration task per tier (libraries with go-cli-sdk, templates,
-                    go-web-service), go-web-sdk gaining web.Run, and composition-terms.md amended
-                    for CLI command packages once the spike settles the API.
-              3. go-core's context index points to the note.
-              4. The goal record holds decisions 1–14 and a pending edit correcting the goal
-                 summary's "nodes are string-keyed" claim.
-Test seams    go-core's check (`mise run check`) and currency command; the note is read for
-              coherence against the code it cites.
-Slices        1. Upgrade go-core: go 1.27.3, golangci-lint 2.15.0, mise-action v5.2.7,
-                 create-gh-release-action v1.12.0; currency exits 0, check passes.
-              2. The design note and its index entry (behaviors 2–3).
-Out of scope  Any change to graph or lifecycle's exported API; the spike repository; changes to
-              the nine consumers, standards-lab, or the architecture repository (pending edits
-              only).
-Ship order    Before this task ships, the architect runs `marathon experiment graph` (creating
-              experiment.graph and spike-graph) and `marathon plan` (staging spike-graph into
-              active, adding graph-ergonomics' release and per-tier migration tasks waiting on
-              experiment.graph's intake, and naming the spike a prerequisite of
-              capstone.data-intelligence), so design-review is not the goal's last task and
-              does not sync it.
-Door          two-way (documentation and tooling bumps; nothing released)
+Problem       go-core v0.10.0's graph and lifecycle read badly. Order is hidden in s.After calls
+              inside constructors, fixed and fresh values need closures, introspection gives only
+              names, and a Monitored failure doesn't say which node failed. spike-graph proved the
+              settled API on the full go-web-service and slab, and the release's two plan rounds
+              settled what was left open. Three migration tasks and wave C's go-ai and client SDK
+              wait on one breaking release that ships it.
+Behaviors     1. go-core trails nothing: Go is 1.27.4, the currency command exits 0, and the check
+                 passes.
+              2. Order and groups are declared at Define. graph.After(refs...) orders a node after
+                 each node or group it names, each defined earlier, and graph.In(group) makes the
+                 node a member of a group. g.Group(name) returns a group handle, which is a Ref.
+                 A Build given a group, as a root or as an After target, expands it to its members
+                 in definition order, and an empty group builds and orders nothing. An After never
+                 builds its target. Scope has only Use, and Scope.After no longer exists. A cycle
+                 closed by an After panics, naming its path, including any group it passes
+                 through.
+              3. Define, Value, Fresh, and Group panic with a "graph: " message naming the call in
+                 each of these cases:
+                 a. after the first Build;
+                 b. an empty name;
+                 c. a name containing a comma or a newline;
+                 d. a name already taken by a node or a group (they share one name space);
+                 e. a nil constructor or a nil option;
+                 f. an After or In naming a nil ref, a zero-value ref, or a ref from another
+                    Graph. For a nil ref the message asks whether its Define or Group comes later.
+                 Each one checks everything before it changes the Graph, so a call that panics
+                 leaves the Graph as it was.
+              4. System.Dropped lists, as Drop{Node, After} with the handles as declared, each
+                 After of a built node that ordered nothing: its target is a node not in the
+                 System, or a group with no member in it. Drops are listed in the declaring nodes'
+                 definition order, then in each node's declaration order. A group with any member
+                 present is not dropped. A Build of the full root set drops nothing.
+              5. Replace swaps only a node's constructor; the node keeps its After and In. Replace
+                 panics on a nil or zero-value handle, after the first Build, on a node from
+                 another Graph, and on a nil constructor.
+              6. g.Value(name, v, opts...) defines a node whose value is v in every Build, with T
+                 inferred from v's static type. g.Fresh[T](name, opts...) defines a node whose
+                 value is a new zero *T in each Build, distinct from one Build to the next. Both
+                 take Define's options, so a value can join a group.
+              7. Introspection uses the handles that Define, Value, Fresh, and Group return:
+                 - Dependency carries Ref, the node's handle.
+                 - Observe takes func(Ref) and calls it with the handle as each node begins,
+                   before its constructor runs, once per node per Build, depth-first.
+                 - An observer persists for every later Build of its Graph, and the docs say so.
+                 On a nil or zero-value handle, Name returns "", and Get panics with a "graph: "
+                 message.
+              8. System.LayerOf(ref) returns a node's layer and panics for a nil ref, a group, or
+                 a node not in the System. System.Has(ref) reports whether the node is in the
+                 System, and panics for a nil ref or a group. System.Dependencies() returns a
+                 fresh copy of every built node in layer order, then definition order, equal to
+                 flattening Layers().
+              9. System.String prints the layer table, one line per layer in the form
+                 "0: config, logger", with no trailing newline. It prints "" for an empty System.
+              10. An observer that panics makes Build panic with a "graph: " message that names
+                  the node and carries the original value, wrapped when that value is an error.
+                  This holds whether the node is a root or was reached through a Use.
+              11. A Graph is safe for concurrent use:
+                  - Concurrent Builds pass the race detector, as do describing calls and Observe
+                    made beside a Build.
+                  - Describing still panics after the first Build.
+                  - An observer added while a Build runs applies from the next Build on.
+                  - Concurrent Builds may call an observer concurrently, and the docs say so.
+              12. graph/graphtest.NameErrors(nodes any) []error checks a struct of handles, or a
+                  pointer to one. For each exported field whose type implements Ref, it returns an
+                  error when the field holds no handle (nil or zero-value), and when the node's or
+                  group's name, lowercased with its spaces removed, differs from the field name
+                  lowercased. It skips other fields. Anything that is not a struct or a non-nil
+                  pointer to one is a single error. It returns nil when every field passes.
+                  CheckNames(t, nodes) reports each error as a test error, without stopping the
+                  test.
+              13. A Monitored value's runtime failure ends the run as "run: <node>: <error>",
+                  wrapping the error. A channel registered with Monitor still reports
+                  "run: <error>".
+              14. Behavior that must not change still holds: edges discovered through Use,
+                  build-once, longest-path layers, panics for wiring mistakes, the participation
+                  interfaces, and the startup, readiness, and shutdown semantics. go-core's
+                  existing graph and lifecycle tests, ported to the new API, prove it.
+              15. The package docs for graph, graphtest, and lifecycle and the README describe the
+                  shipped API. The CHANGELOG holds a dated v0.11.0 section with its compare link.
+                  It marks each break **Breaking:**: Scope.After removed, Observe's signature, the
+                  name rule, Dependency's added field, and the run-failure text.
+              16. go-core's design note states the shipped API, not a candidate: no open forks,
+                  Fresh as a method, the round decisions included, and web.Run and the runners
+                  left to go-web-sdk and go-cli-sdk. The context index describes the note as it
+                  now stands.
+Test seams    go-core's check (`mise run check`). It runs the graph, graphtest, and lifecycle
+              tests under the race detector through their exported API. Also go-core's currency
+              command. The note and docs are read against the code.
+Slices        1. Upgrade go-core to Go 1.27.4. Currency exits 0 and the check passes
+                 (behavior 1).
+              2. Placement at Define: After, In, and Group; Build expanding groups; Scope.After
+                 removed; Dropped; Replace keeping placement; the name rule; graph's tests ported
+                 (behaviors 2-5, 14).
+              3. Value and Fresh with Define's options (behavior 6).
+              4. Introspection: Ref, Observe(func(Ref)), LayerOf, Has, Dependencies, String, and
+                 the labelled observer panic (behaviors 7-10).
+              5. A Graph safe for concurrent use, with race tests (behavior 11).
+              6. graphtest's NameErrors and CheckNames (behavior 12).
+              7. lifecycle's node-named run failure, with lifecycle's tests ported
+                 (behaviors 13-14).
+              8. Release preparation: package docs, README, the CHANGELOG v0.11.0 section, and
+                 the design note and its index entry (behaviors 15-16).
+Out of scope  The consumers' migrations: the libraries, go-cli-sdk, the templates, and
+              go-web-service with slab. web.Run, and cli or scenario reporting the node-named
+              failure. Amending composition-terms.md. The spike repositories. Group.Members.
+              Replace removing an edge or a membership. A way to stop an observer. Arity adapters.
+              Any lifecycle change beyond the run-failure label.
+Door          Two-way until the tag; the code and docs land on main by pull request. One-way at
+              the tag: once the module proxy fetches v0.11.0, the checksum database pins it and
+              the tag is never re-cut.
+Release       v0.11.0 (go-core)
 ```
+
+## Progress
+
+slices 0/8 committed · standards — · spec — · editor —
 
 ## Decisions
 
@@ -78,9 +152,24 @@ Door          two-way (documentation and tooling bumps; nothing released)
 - design-review: golangci-lint 2.15's errcheck findings are fixed in code, not in lint config: processtest.Run and a reactor test now signal completion by closing a chan struct{}.
 - design-review: the note leaves three details to the spike: what web.Run returns and reports, and where the ready, failed, and stopped logs go; the rule the name check applies; and how a *Nodes method reaches a plain New argument such as an io.Writer field.
 
+- release: LayerOf stays a panicking int; System.Has(ref) bool is added for membership.
+- release: no Group.Members; Group exports only Name.
+- release: observers persist across every later Build of their Graph, documented.
+- release: Replace swaps only the constructor and keeps the node's After and In.
+- release: adopt Go 1.27.4 in an opening upgrade slice, with no CHANGELOG entry.
+- release: fix all four unassigned spike findings here: String's ambiguity, a panicking observer escaping Build, concurrent Builds racing, no list of built nodes.
+- release: the release is go-core v0.11.0.
+- release: Define, Value, Fresh, and Group refuse a name containing a comma or a newline; String stays unquoted.
+- release: an observer's panic re-panics with a "graph: " message naming the node and wrapping the original value.
+- release: a sync.Mutex makes the Graph safe for concurrent use; Build holds it only to set built and copy the observers.
+- release: System.Dependencies() []Dependency lists the built nodes in layer order, then definition order.
+
 ## Pending edits
 
 - coordinator · roadmap: correct graph-ergonomics' summary: nodes are typed *Node[T] handles; the string is a required name that introspection exposes as the only identity, not the key.
 - coordinator · standards-lab/context/auth-strategy.md:199-200: the auth plan names an auth.go layer file with a define function; revise it once the spike settles the constructor shape.
 - architecture · principles/composition-terms.md: amend it to admit CLI command packages taking the nodes they declare, once the spike settles the API (decision 5).
 - architecture · standards/go-elemental/principles/domain-files.md:47-48: reconcile it with the composition-terms.md amendment.
+- coordinator · standards-lab/context/graph-ergonomics.md "Open findings": replace the release's bullet with its outcomes (LayerOf + Has, no Group.Members, observers persist, Replace keeps placement, the four further findings fixed); keep the migrate-libraries bullet.
+- coordinator · standards-lab/context/graph-ergonomics.md "The settled API": decision 13 gains Has, Dependencies, String's format, and the name rule; decision 9 gains the concurrency-safe Graph.
+- coordinator · roadmap: migrate-templates' and migrate-service's summaries name Has and Dependencies for the layer tests in place of scanning Layers().
