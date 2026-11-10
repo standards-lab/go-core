@@ -118,10 +118,13 @@
 // completed: an Err channel is read then, so a value may create it in
 // Start. The first non-nil error any of them yields cancels the run
 // context, ending Exec's function or Run's serving, and joins Exec's or
-// Run's return wrapped "run:". A nil received error is ignored, and a
-// channel closing retires its watcher quietly: that is the expected end of
-// a source that stopped cleanly. A nil channel never yields, so it is not
-// watched.
+// Run's return wrapped "run:". A Monitored value's failure is labelled with
+// its node's name inside that, as "run: <node>: <error>"; a channel
+// registered with Monitor has no node, so its failure reads "run: <error>".
+// The label wraps the error, so errors.Is and errors.As still reach it. A
+// nil received error is ignored, and a channel closing retires its watcher
+// quietly: that is the expected end of a source that stopped cleanly. A nil
+// channel never yields, so it is not watched.
 //
 // # Shutdown
 //
