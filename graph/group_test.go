@@ -30,10 +30,10 @@ func TestGroup_RootBuildsEveryMemberInDefinitionOrder(t *testing.T) {
 	c := counter{}
 	g := graph.New()
 	var seen []string
-	g.Observe(func(name string) { seen = append(seen, name) })
+	g.Observe(func(r graph.Ref) { seen = append(seen, r.Name()) })
 	workers := g.Group("workers")
 	g.Define("first", constant(c, "first", 1), graph.In(workers))
-	g.Define("outsider", constant(c, "outsider", 2))
+	outsider := g.Define("outsider", constant(c, "outsider", 2))
 	g.Define("second", constant(c, "second", 3), graph.In(workers))
 	g.Define("third", constant(c, "third", 4), graph.In(workers))
 
@@ -41,12 +41,12 @@ func TestGroup_RootBuildsEveryMemberInDefinitionOrder(t *testing.T) {
 	if want := []string{"first", "second", "third"}; !slices.Equal(seen, want) {
 		t.Fatalf("built %v, want %v in that order", seen, want)
 	}
-	if c["outsider"] != 0 || contains(sys, "outsider") {
-		t.Fatalf("a node outside the group was built: runs %v, layers %v", c, names(sys))
+	if c["outsider"] != 0 || sys.Has(outsider) {
+		t.Fatalf("a node outside the group was built: runs %v, layers:\n%s", c, sys)
 	}
-	want := [][]string{{"first", "second", "third"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: first, second, third"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -64,21 +64,21 @@ func TestAfter_GroupOrdersAfterEachMemberInTheSystem(t *testing.T) {
 
 	// Both members are in the System, so the server sits above the higher.
 	sys := mustBuild(t, g, server, low, high)
-	want := [][]string{{"base", "low"}, {"high"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: base, low\n1: high\n2: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
 	// After a group never builds its members, and orders only on the ones
 	// in the System.
 	clear(c)
 	sys = mustBuild(t, g, server, low)
-	if c["high"] != 0 || contains(sys, "high") {
-		t.Fatalf("After of the group pulled high in: runs %v, layers %v", c, names(sys))
+	if c["high"] != 0 || sys.Has(high) {
+		t.Fatalf("After of the group pulled high in: runs %v, layers:\n%s", c, sys)
 	}
-	want = [][]string{{"low"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want = "0: low\n1: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -92,16 +92,16 @@ func TestGroup_MembershipDefinedAfterItsUse(t *testing.T) {
 	g.Define("relay", zero, graph.In(workers))
 
 	sys := mustBuild(t, g, server, workers)
-	want := [][]string{{"base", "relay"}, {"sweeper"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: base, relay\n1: sweeper\n2: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestGroup_EmptyBuildsAndOrdersNothing(t *testing.T) {
 	g := graph.New()
 	var seen []string
-	g.Observe(func(name string) { seen = append(seen, name) })
+	g.Observe(func(r graph.Ref) { seen = append(seen, r.Name()) })
 	empty := g.Group("empty")
 	g.Define("unreached", zero)
 	base := g.Define("base", zero)
@@ -109,13 +109,13 @@ func TestGroup_EmptyBuildsAndOrdersNothing(t *testing.T) {
 
 	sys := mustBuild(t, g, empty)
 	if len(seen) != 0 || len(sys.Layers()) != 0 {
-		t.Fatalf("an empty group root built %v, layers %v", seen, names(sys))
+		t.Fatalf("an empty group root built %v, layers:\n%s", seen, sys)
 	}
 
 	sys = mustBuild(t, g, server, empty)
-	want := [][]string{{"base"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: base\n1: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -133,9 +133,9 @@ func TestReplace_KeepsAfterAndIn(t *testing.T) {
 	if got := sys.Get(worker); got != "fake" {
 		t.Fatalf("worker = %q, want the substitute's fake", got)
 	}
-	want := [][]string{{"gate"}, {"worker"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: gate\n1: worker"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestOptions_WiringPanics(t *testing.T) {
 		top := g.Define("top", zero)
 		sys := mustBuild(t, g, workers)
 		if len(sys.Layers()) != 0 {
-			t.Fatalf("the failed Define joined the group: layers %v", names(sys))
+			t.Fatalf("the failed Define joined the group: layers:\n%s", sys)
 		}
 		mustBuild(t, g, top)
 	})

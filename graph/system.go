@@ -25,24 +25,29 @@ type Drop struct {
 	After Ref
 }
 
-// Dependency is one built node: its name and its constructed value. A
-// lifecycle reads what the node takes part in from the value's methods.
+// Dependency is one built node: its name, its constructed value, and its
+// handle. A lifecycle reads what the node takes part in from the value's
+// methods.
 type Dependency struct {
 	Name  string
 	Value any
+	// Ref is the handle [Graph.Define], [Graph.Value], or [Graph.Fresh]
+	// returned for the node, so dep.Ref == graph.Ref(handle) holds and a
+	// test compares handles rather than names.
+	Ref Ref
 }
 
-// Get returns n's value in s. It panics when n is not in s: a node the
-// roots did not reach, or one defined on another Graph.
+// Get returns n's value in s. It panics when n is nil or a zero-value
+// literal, or not in s: a node the roots did not reach, or one defined on
+// another Graph.
 func (s *System) Get[T any](n *Node[T]) T {
 	core := n.ref()
+	if core == nil {
+		panic("graph: Get of a nil node")
+	}
 	e, ok := s.entries[core]
 	if !ok {
-		name := "<nil>"
-		if core != nil {
-			name = core.name
-		}
-		panic(fmt.Sprintf("graph: Get of %q, a node not in the System", name))
+		panic(fmt.Sprintf("graph: Get of %q, a node not in the System", core.name))
 	}
 	v, _ := e.value.(T)
 	return v
@@ -58,13 +63,97 @@ func (s *System) Layers() [][]Dependency {
 	for i, layer := range s.layers {
 		out[i] = make([]Dependency, len(layer))
 		for j, e := range layer {
-			out[i][j] = Dependency{
-				Name:  e.node.name,
-				Value: e.value,
-			}
+			out[i][j] = e.dependency()
 		}
 	}
 	return out
+}
+
+// Dependencies returns every node in s, in layer order, layer 0 first, and
+// then in definition order within a layer: [System.Layers] flattened. Each
+// call returns a fresh copy; nil for an empty System.
+func (s *System) Dependencies() []Dependency {
+	var out []Dependency
+	for _, layer := range s.layers {
+		for _, e := range layer {
+			out = append(out, e.dependency())
+		}
+	}
+	return out
+}
+
+// dependency returns e as the Dependency a caller sees.
+func (e *entry) dependency() Dependency {
+	return Dependency{Name: e.node.name, Value: e.value, Ref: e.node.handle}
+}
+
+// LayerOf returns the layer of ref's node in s, numbered as
+// [System.Layers] numbers them, layer 0 first. It panics when ref is nil,
+// a nil node or group, or a zero-value literal of one; when ref is a
+// [Group], which has no layer of its own; or when the node is not in s,
+// one the roots did not reach or one defined on another Graph.
+// [System.Has] reports whether it is.
+func (s *System) LayerOf(ref Ref) int {
+	core := s.lookup(ref, "LayerOf")
+	e, ok := s.entries[core]
+	if !ok {
+		panic(fmt.Sprintf("graph: LayerOf of %q, a node not in the System", core.name))
+	}
+	return e.layer
+}
+
+// Has reports whether ref's node is in s: a node the roots reached. A node
+// defined on another Graph is not. Has panics when ref is nil, a nil node
+// or group, or a zero-value literal of one, or a [Group], which is not a
+// node of its own.
+func (s *System) Has(ref Ref) bool {
+	_, ok := s.entries[s.lookup(ref, "Has")]
+	return ok
+}
+
+// lookup returns the node ref names, for LayerOf and Has, which op names.
+// It panics when ref is nil, a zero-value literal, or a group.
+func (s *System) lookup(ref Ref, op string) *node {
+	if ref == nil {
+		panic(fmt.Sprintf("graph: %s of a nil node", op))
+	}
+	owner, nodes := ref.expand()
+	if owner == nil {
+		panic(fmt.Sprintf("graph: %s of a nil %s", op, ref.kind()))
+	}
+	if _, ok := ref.(*Group); ok {
+		panic(fmt.Sprintf("graph: %s of %q, a group, which is not a node", op, ref.Name()))
+	}
+	return nodes[0]
+}
+
+// String returns the layer table, one line per layer, layer 0 first: the
+// layer's number, a colon, and its nodes' names in definition order,
+// separated by commas, as in
+//
+//	0: config, logger
+//	1: database
+//	2: server
+//
+// with no newline after the last line. A name cannot contain a comma or a
+// newline, so the table is unambiguous unquoted. It is for a failing
+// test's message. An empty System returns the empty string.
+func (s *System) String() string {
+	var b strings.Builder
+	for i, layer := range s.layers {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "%d:", i)
+		for j, e := range layer {
+			if j > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteByte(' ')
+			b.WriteString(e.node.name)
+		}
+	}
+	return b.String()
 }
 
 // Dropped returns each [After] that orders nothing in s, which Build drops
@@ -137,6 +226,7 @@ func (b *build) system() *System {
 	var layers [][]*entry
 	for _, e := range ordered {
 		l := layer(e.node)
+		e.layer = l
 		for len(layers) <= l {
 			layers = append(layers, nil)
 		}

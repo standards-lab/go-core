@@ -11,48 +11,16 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// names returns the names in each of sys's layers, layer 0 first.
-func names(sys *graph.System) [][]string {
-	var out [][]string
-	for _, layer := range sys.Layers() {
-		var ns []string
-		for _, d := range layer {
-			ns = append(ns, d.Name)
-		}
-		out = append(out, ns)
-	}
-	return out
-}
-
-// contains reports whether a node named name is in sys.
-func contains(sys *graph.System, name string) bool {
-	return layerOf(sys, name) >= 0
-}
-
-// layerOf returns the index of the layer holding name in sys, or -1.
-func layerOf(sys *graph.System, name string) int {
-	for i, layer := range sys.Layers() {
-		for _, d := range layer {
-			if d.Name == name {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-// dependency returns the Dependency named name in sys, failing the test
-// when there is none.
-func dependency(t *testing.T, sys *graph.System, name string) graph.Dependency {
+// dependency returns ref's Dependency in sys, failing the test when there
+// is none.
+func dependency(t *testing.T, sys *graph.System, ref graph.Ref) graph.Dependency {
 	t.Helper()
-	for _, layer := range sys.Layers() {
-		for _, d := range layer {
-			if d.Name == name {
-				return d
-			}
+	for _, d := range sys.Dependencies() {
+		if d.Ref == ref {
+			return d
 		}
 	}
-	t.Fatalf("no dependency %q in %v", name, names(sys))
+	t.Fatalf("no dependency %q in the System; layers:\n%s", ref.Name(), sys)
 	return graph.Dependency{}
 }
 
@@ -189,8 +157,8 @@ func TestBuild_ConstructsOnlyWhatRootsReach(t *testing.T) {
 	if want := (counter{"a": 1}); !maps.Equal(c, want) {
 		t.Fatalf("constructor runs = %v, want %v", c, want)
 	}
-	if got := names(sys); !slices.EqualFunc(got, [][]string{{"a"}}, slices.Equal) {
-		t.Fatalf("layers = %v, want [[a]]", got)
+	if got := sys.String(); got != "0: a" {
+		t.Fatalf("layers:\n%s\nwant:\n0: a", got)
 	}
 }
 
@@ -209,9 +177,9 @@ func TestLayers_AreLongestPath(t *testing.T) {
 
 	sys := mustBuild(t, g, e)
 	// e uses a (layer 0) and d (layer 2): its longest path puts it at 3.
-	want := [][]string{{"b", "a"}, {"c"}, {"d"}, {"e"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: b, a\n1: c\n2: d\n3: e"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -228,20 +196,20 @@ func TestAfter_OrdersOnlyWithinTheSystem(t *testing.T) {
 
 	// gate is in the System through the root list, so worker sits above it.
 	sys := mustBuild(t, g, worker, gate)
-	want := [][]string{{"base"}, {"gate"}, {"worker"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: base\n1: gate\n2: worker"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
 	// Without gate in the System, After neither builds it nor orders on it.
 	clear(c)
 	sys = mustBuild(t, g, worker)
-	if c["gate"] != 0 || contains(sys, "gate") {
-		t.Fatalf("After pulled gate in: runs %v, layers %v", c, names(sys))
+	if c["gate"] != 0 || sys.Has(gate) {
+		t.Fatalf("After pulled gate in: runs %v, layers:\n%s", c, sys)
 	}
-	want = [][]string{{"worker"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want = "0: worker"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -252,9 +220,9 @@ func TestAfter_TargetBuiltLaterStillOrders(t *testing.T) {
 	// when early's constructor runs.
 	early := g.Define("early", func(*graph.Scope) (int, error) { return 0, nil }, graph.After(late))
 	sys := mustBuild(t, g, early, late)
-	want := [][]string{{"late"}, {"early"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: late\n1: early"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -319,15 +287,15 @@ func TestBuild_ForeignPanicsPassThrough(t *testing.T) {
 	t.Fatal("Build returned")
 }
 
-func TestLayers_DependencyCarriesNameAndValue(t *testing.T) {
+func TestLayers_DependencyCarriesNameValueAndRef(t *testing.T) {
 	g := graph.New()
 	db := g.Define("database", func(*graph.Scope) (string, error) { return "pool", nil })
 	top := g.Define("top", func(s *graph.Scope) (string, error) { return "over " + s.Use(db), nil })
 	sys := mustBuild(t, g, top)
 
 	want := [][]graph.Dependency{
-		{{Name: "database", Value: "pool"}},
-		{{Name: "top", Value: "over pool"}},
+		{{Name: "database", Value: "pool", Ref: db}},
+		{{Name: "top", Value: "over pool", Ref: top}},
 	}
 	if got := sys.Layers(); !slices.EqualFunc(got, want, slices.Equal) {
 		t.Fatalf("Layers = %v, want %v", got, want)
@@ -433,20 +401,20 @@ func TestReplace_SubstitutesTheConstructor(t *testing.T) {
 	if runs != 1 {
 		t.Fatalf("substitute ran %d times, want 1", runs)
 	}
-	want := [][]string{{"config"}, {"store"}, {"top", "other"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: config\n1: store\n2: top, other"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
-	if got := dependency(t, sys, "store").Value; got != "fake:dsn" {
+	if got := dependency(t, sys, store).Value; got != "fake:dsn" {
 		t.Fatalf("store's Value = %v, want fake:dsn", got)
 	}
 }
 
-func TestObserve_SeesEachNodeABuildBegins(t *testing.T) {
+func TestObserve_SeesEachNodeABuildBeginsByItsHandle(t *testing.T) {
 	g := graph.New()
-	var seen, again []string
-	g.Observe(func(name string) { seen = append(seen, name) })
-	g.Observe(func(name string) { again = append(again, name) })
+	var seen, again []graph.Ref
+	g.Observe(func(r graph.Ref) { seen = append(seen, r) })
+	g.Observe(func(r graph.Ref) { again = append(again, r) })
 	var order []string
 	leaf := g.Define("leaf", func(*graph.Scope) (int, error) {
 		order = append(order, "construct leaf")
@@ -455,17 +423,18 @@ func TestObserve_SeesEachNodeABuildBegins(t *testing.T) {
 	g.Define("unreached", func(*graph.Scope) (int, error) { return 0, nil })
 	mid := g.Define("mid", func(s *graph.Scope) (int, error) { return s.Use(leaf), nil })
 	top := g.Define("top", func(s *graph.Scope) (int, error) { return s.Use(mid) + s.Use(leaf), nil })
-	g.Observe(func(name string) { order = append(order, "observe "+name) })
+	g.Observe(func(r graph.Ref) { order = append(order, "observe "+r.Name()) })
 
 	if _, err := g.Build(top); err == nil {
 		t.Fatal("Build succeeded, want the leaf's error")
 	}
 
 	// Depth-first from the root, each node once, the failing leaf included,
-	// and never a node the root does not reach.
-	want := []string{"top", "mid", "leaf"}
+	// and never a node the root does not reach. Interface equality: each is
+	// the handle Define returned, not a copy carrying the same node.
+	want := []graph.Ref{top, mid, leaf}
 	if !slices.Equal(seen, want) || !slices.Equal(again, want) {
-		t.Fatalf("observed %v and %v, want %v from each observer", seen, again, want)
+		t.Fatalf("observed %v and %v, want %v from each observer", refNames(seen), refNames(again), refNames(want))
 	}
 	// An observer sees a node before its constructor runs.
 	if wantOrder := []string{"observe top", "observe mid", "observe leaf", "construct leaf"}; !slices.Equal(order, wantOrder) {

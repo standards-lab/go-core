@@ -42,7 +42,7 @@ func TestDropped_FullBuildReportsNone(t *testing.T) {
 	g, h := ordered()
 	sys := mustBuild(t, g, h.server, h.api, h.db, h.cache, h.workers)
 	if got := sys.Dropped(); len(got) != 0 {
-		t.Fatalf("Dropped() = %v, want none; layers %v", dropNames(got), names(sys))
+		t.Fatalf("Dropped() = %v, want none; layers:\n%s", dropNames(got), sys)
 	}
 }
 
@@ -55,8 +55,8 @@ func TestDropped_SubsetReportsTheAbsentNodeTarget(t *testing.T) {
 		t.Fatalf("Dropped() = %v, want %v", got, want)
 	}
 	// The drop is silent at Build: the System still orders what is present.
-	if layerOf(sys, "server") != 1 {
-		t.Fatalf("server is not above its present targets; layers %v", names(sys))
+	if sys.LayerOf(h.server) != 1 {
+		t.Fatalf("server is not above its present targets; layers:\n%s", sys)
 	}
 }
 

@@ -3,7 +3,6 @@ package graph_test
 import (
 	"bytes"
 	"io"
-	"slices"
 	"testing"
 
 	"github.com/standards-lab/go-core/graph"
@@ -26,7 +25,7 @@ func TestValue_IsVInEveryBuild(t *testing.T) {
 	if first.Get(n) != cfg || second.Get(n) != cfg {
 		t.Fatalf("Get = %p and %p, want %p in both Builds", first.Get(n), second.Get(n), cfg)
 	}
-	if got := dependency(t, first, "config").Value; got != cfg {
+	if got := dependency(t, first, n).Value; got != cfg {
 		t.Fatalf("config's Value = %v, want %v", got, cfg)
 	}
 }
@@ -83,9 +82,9 @@ func TestValueAndFresh_AreUseTargets(t *testing.T) {
 	if seen == nil || seen != sys.Get(ready) {
 		t.Fatalf("Use gave %p, Get gives %p; want the same non-nil pointer", seen, sys.Get(ready))
 	}
-	want := [][]string{{"config", "readiness"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: config, readiness\n1: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -98,15 +97,15 @@ func TestValueAndFresh_AreAfterTargets(t *testing.T) {
 
 	// Named as roots, both order the server above them.
 	sys := mustBuild(t, g, server, cfg, ready)
-	want := [][]string{{"config", "readiness"}, {"server"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: config, readiness\n1: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
 	// After builds neither.
 	sys = mustBuild(t, g, server)
-	if contains(sys, "config") || contains(sys, "readiness") {
-		t.Fatalf("After pulled a value in: layers %v", names(sys))
+	if sys.Has(cfg) || sys.Has(ready) {
+		t.Fatalf("After pulled a value in: layers:\n%s", sys)
 	}
 }
 
@@ -139,9 +138,9 @@ func TestValueAndFresh_TakeInAndAfter(t *testing.T) {
 	// The group as a root builds both members, and After orders each above
 	// base and below the node ordered after the group.
 	sys := mustBuild(t, g, top, workers, base)
-	want := [][]string{{"base"}, {"config", "readiness"}, {"top"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: base\n1: config, readiness\n2: top"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 	if sys.Get(cfg) != 1 || sys.Get(ready) == nil {
 		t.Fatalf("config = %v, readiness = %v; want 1 and a non-nil gate", sys.Get(cfg), sys.Get(ready))
@@ -149,9 +148,9 @@ func TestValueAndFresh_TakeInAndAfter(t *testing.T) {
 
 	// After builds nothing: the group alone brings up only its members.
 	sys = mustBuild(t, g, workers)
-	want = [][]string{{"config", "readiness"}}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want = "0: config, readiness"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -248,7 +247,7 @@ func TestValueAndFresh_Panics(t *testing.T) {
 				// The name is still free, and the group gained no member.
 				top := g.Define("top", zero)
 				if sys := mustBuild(t, g, workers); len(sys.Layers()) != 0 {
-					t.Fatalf("the failed %s joined the group: layers %v", c.call, names(sys))
+					t.Fatalf("the failed %s joined the group: layers:\n%s", c.call, sys)
 				}
 				mustBuild(t, g, top)
 			})

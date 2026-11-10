@@ -15,7 +15,8 @@ type node struct {
 	// and drops the targets not in the System when it computes the layers.
 	after []Ref
 	// handle is the *Node[T] that defined the node, the one handle a
-	// [Drop] carries, so a caller compares it with what Define returned.
+	// [Drop], a [Dependency], and an observer carry, so a caller compares
+	// it with what Define returned.
 	handle Ref
 }
 
@@ -59,5 +60,11 @@ func (n *Node[T]) expand() (*Graph, []*node) {
 
 func (*Node[T]) kind() string { return "node" }
 
-// Name returns the name the node was defined with.
-func (n *Node[T]) Name() string { return n.core.name }
+// Name returns the name the node was defined with, or the empty string for
+// a nil handle or a zero-value literal, &Node[T]{}.
+func (n *Node[T]) Name() string {
+	if core := n.ref(); core != nil {
+		return core.name
+	}
+	return ""
+}

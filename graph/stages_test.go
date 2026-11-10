@@ -1,7 +1,6 @@
 package graph_test
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/standards-lab/go-core/graph"
@@ -64,35 +63,20 @@ func TestLayers_WebServiceStageOrder(t *testing.T) {
 	// only orders on them.
 	sys := mustBuild(t, w.graph, w.server, w.reactors)
 
-	layer := func(name string) int {
+	below := func(low, high graph.Ref) {
 		t.Helper()
-		l := layerOf(sys, name)
-		if l < 0 {
-			t.Fatalf("%s is not in the System: %v", name, names(sys))
-		}
-		return l
-	}
-	for _, infra := range []string{"database", "store"} {
-		if layer(infra) >= layer("schema") {
-			t.Errorf("%s (layer %d) is not below schema (layer %d)", infra, layer(infra), layer("schema"))
+		if l, h := sys.LayerOf(low), sys.LayerOf(high); l >= h {
+			t.Errorf("%s (layer %d) is not below %s (layer %d); layers:\n%s", low.Name(), l, high.Name(), h, sys)
 		}
 	}
-	if layer("schema") >= layer("reactors") {
-		t.Errorf("schema (layer %d) is not below reactors (layer %d)", layer("schema"), layer("reactors"))
-	}
-	if layer("reactors") >= layer("server") {
-		t.Errorf("reactors (layer %d) is not below server (layer %d)", layer("reactors"), layer("server"))
-	}
+	below(w.database, w.schema)
+	below(w.store, w.schema)
+	below(w.schema, w.reactors)
+	below(w.reactors, w.server)
 
-	want := [][]string{
-		{"config"},
-		{"database", "store"},
-		{"domain", "schema", "storage"},
-		{"reactors"},
-		{"server"},
-	}
-	if got := names(sys); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Fatalf("layers = %v, want %v", got, want)
+	want := "0: config\n1: database, store\n2: domain, schema, storage\n3: reactors\n4: server"
+	if got := sys.String(); got != want {
+		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 	// Every After's target is in the System, so none was dropped.
 	if got := sys.Dropped(); len(got) != 0 {
@@ -106,14 +90,14 @@ func TestLayers_WebServiceStageOrder(t *testing.T) {
 func TestBuild_WebServiceSubset(t *testing.T) {
 	w := newWebService()
 	sys := mustBuild(t, w.graph, w.schema)
-	for _, name := range []string{"config", "database", "schema"} {
-		if !contains(sys, name) {
-			t.Errorf("%s is missing from the schema-only System", name)
+	for _, n := range []graph.Ref{w.config, w.database, w.schema} {
+		if !sys.Has(n) {
+			t.Errorf("%s is missing from the schema-only System", n.Name())
 		}
 	}
-	for _, name := range []string{"store", "domain", "storage", "reactors", "server"} {
-		if contains(sys, name) {
-			t.Errorf("%s is in the schema-only System", name)
+	for _, n := range []graph.Ref{w.store, w.domain, w.storage, w.reactors, w.server} {
+		if sys.Has(n) {
+			t.Errorf("%s is in the schema-only System", n.Name())
 		}
 	}
 }

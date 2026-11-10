@@ -10,7 +10,8 @@ import (
 // inert: [Graph.Define], [Graph.Value], [Graph.Fresh], [Graph.Group], and
 // [Graph.Replace] record nodes, groups, and constructors and run none, and
 // only [Graph.Build] constructs anything. The first Build freezes the
-// description: Define, Value, Fresh, Group, and Replace panic after it. A Graph is not safe for concurrent use.
+// description: Define, Value, Fresh, Group, and Replace panic after it. A
+// Graph is not safe for concurrent use.
 type Graph struct {
 	nodes []*node
 	// groups are the groups [Graph.Group] defined, in definition order. They
@@ -20,8 +21,8 @@ type Graph struct {
 	// Define, Value, Fresh, Group, and Replace panic after it.
 	built bool
 	// observers are called, in the order added, as a Build begins each
-	// node.
-	observers []func(name string)
+	// node. They are never removed: each applies to every later Build.
+	observers []func(Ref)
 }
 
 // New returns an empty Graph.
@@ -184,14 +185,18 @@ func (g *Graph) Replace[T any](n *Node[T], ctor func(*Scope) (T, error)) {
 	core.ctor = erase(ctor)
 }
 
-// Observe adds fn, which every later Build calls with a node's name as it
+// Observe adds fn, which every later Build calls with a node's handle as it
 // begins to construct the node, before the constructor runs: each node a
 // Build reaches, once, in the order it reaches them depth-first, the one
-// whose constructor fails included. It is for tracing what a Build
-// constructs, such as a test asserting which nodes a run brought up; fn
-// sees only the name and cannot change the Build. Observe panics on a nil
-// fn.
-func (g *Graph) Observe(fn func(name string)) {
+// whose constructor fails included. The handle is the one [Graph.Define],
+// [Graph.Value], or [Graph.Fresh] returned, so fn compares it with a held
+// handle rather than a name. An observer is never removed: fn applies to
+// every later Build of g, not only the next one. It is for tracing what a
+// Build constructs, such as a test asserting which nodes a run brought up;
+// fn cannot change the Build. When fn panics, Build panics with a "graph: "
+// message naming the node and carrying fn's value, wrapping it when it is
+// an error. Observe panics on a nil fn.
+func (g *Graph) Observe(fn func(Ref)) {
 	if fn == nil {
 		panic("graph: Observe with a nil function")
 	}

@@ -22,8 +22,9 @@
 //     [Group.Name], its name
 //   - [Graph.Replace], which swaps a node's constructor before Build, for a
 //     test's substitute, keeping its options
-//   - [Graph.Observe], which adds a function a Build calls with each node's
-//     name as it begins to construct it, for tracing what a Build reaches
+//   - [Graph.Observe], which adds a function every later Build calls with
+//     each node's handle as it begins to construct it, for tracing what a
+//     Build reaches
 //   - [Graph.Build], which constructs what the roots reach into a System
 //   - [Node], a typed handle on one node, and [Node.Name], its name
 //   - [Ref], any Node whatever its type or a Group, sealed to the two, and
@@ -33,10 +34,14 @@
 //     needed
 //   - [System], what one Build constructed
 //   - [System.Get], which returns a node's value
-//   - [System.Layers], which returns the built nodes in layers
+//   - [System.Layers], which returns the built nodes in layers, and
+//     [System.Dependencies], which returns them flattened, in layer order
+//   - [System.LayerOf], which returns a node's layer, and [System.Has],
+//     which reports whether a node is in the System
+//   - [System.String], which prints the layer table, one line per layer
 //   - [System.Dropped], which returns each [After] that ordered nothing, as
 //     a [Drop]
-//   - [Dependency], one built node: its name and value
+//   - [Dependency], one built node: its name, its value, and its handle
 //
 // # Discovery
 //
@@ -71,6 +76,16 @@
 // layers, so the nodes of one layer can start together once the layers
 // below them have.
 //
+// # Introspection
+//
+// A System and an observer name a node by the handle [Graph.Define],
+// [Graph.Value], or [Graph.Fresh] returned: [Dependency] carries it as its
+// Ref, an observer receives it, and [System.LayerOf] and [System.Has] take
+// it, so a test compares handles rather than names. [System.String] prints
+// the layer table for a failing test's message; a name cannot contain a
+// comma or a newline, so the table is unambiguous unquoted. An observer is
+// never removed: it applies to every later Build of its Graph.
+//
 // # Errors and panics
 //
 // A constructor's error fails the Build, labelled with its node's name and
@@ -82,12 +97,17 @@
 // that returns, with a value or an error, after a Use it made aborted would
 // lose the failure, so Build panics naming the constructor and the Use.
 //
+// An observer that panics makes Build panic with a "graph: " message that
+// names the node it was called with and carries the panic's value, wrapped
+// when it is an error, whether the node is a root or one a Use reached.
+//
 // Wiring mistakes panic with a "graph: " message, as each symbol's
 // documentation states: a dependency cycle, a node used on a Graph it was
 // not defined on, a Scope used after its constructor returned, a recovered
-// abort, a Define, Value, Fresh, Group, or Replace after Build, a Get of a
-// node not in the System, a nil constructor, option, or observer, an After
-// or In naming a nil handle, a zero-value literal, or one from another
+// abort, a Define, Value, Fresh, Group, or Replace after Build, a Get or
+// LayerOf of a node not in the System, a Get, LayerOf, or Has of a nil
+// handle, a LayerOf or Has of a group, a nil constructor, option, or
+// observer, an After or In naming a nil handle, a zero-value literal, or one from another
 // Graph, and a name that is empty, contains a comma or a newline, or is
 // already taken by a node or a group, which share one name space. Define,
 // Value, Fresh, and Group check everything before they change the Graph,

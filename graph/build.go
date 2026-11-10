@@ -12,6 +12,9 @@ type entry struct {
 	node     *node
 	building bool
 	value    any
+	// layer is the node's layer in the System, set once the Build has
+	// computed the layers.
+	layer int
 	// uses are the nodes the constructor reached through Use, deduplicated,
 	// in the order it first reached them.
 	uses []*node
@@ -40,12 +43,14 @@ type abort struct {
 // an empty one builds nothing. An [After] never builds its target. Each
 // Build is independent and constructs fresh values. A constructor's error
 // fails the Build, labelled with its node's name and wrapping the error,
-// whether the node is a root or a dependency some Use reached. Build panics
-// on a nil root, a root defined on another Graph, or a dependency cycle,
-// among the nodes Use reaches or the order-only edges [After] adds among
-// them, a group's included; the message names the cycle's path. It checks
-// every root before it constructs any, so a wiring mistake in one root
-// panics before another root's constructor runs.
+// whether the node is a root or a dependency some Use reached. Each
+// observer [Graph.Observe] added is called as Build begins a node; one that
+// panics makes Build panic with a "graph: " message naming the node.
+// Build panics on a nil root, a root defined on another Graph, or a
+// dependency cycle, among the nodes Use reaches or the order-only edges
+// [After] adds among them, a group's included; the message names the
+// cycle's path. It checks every root before it constructs any, so a wiring
+// mistake in one root panics before another root's constructor runs.
 // It also panics when a constructor returns after a Use it made aborted,
 // which only a recover in the constructor allows: a constructor must not
 // recover. The first Build freezes g: [Graph.Define], [Graph.Value],
@@ -93,8 +98,8 @@ func (b *build) construct(n *node) error {
 	e := &entry{node: n, building: true}
 	b.entries[n] = e
 	b.stack = append(b.stack, n)
-	for _, observe := range b.graph.observers {
-		observe(n.name)
+	for _, fn := range b.graph.observers {
+		observe(fn, n)
 	}
 	s := &Scope{build: b, entry: e}
 	defer func() {
@@ -111,6 +116,27 @@ func (b *build) construct(n *node) error {
 	e.value = v
 	e.building = false
 	return nil
+}
+
+// observe calls fn with n's handle. When fn panics, observe recovers the
+// panic here, at the call, and panics again with a "graph: " message naming
+// n and carrying the value, wrapped when it is an error; the new panic
+// passes through any Use and constructor between n and Build unchanged, so
+// it is the same for a root and for a node some Use reached. A
+// runtime.Goexit, the t.FailNow of a test's observer, is not a panic:
+// recover returns nil for it, and it unwinds the Build untouched.
+func observe(fn func(Ref), n *node) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if err, ok := r.(error); ok {
+			panic(fmt.Errorf("graph: observer of %q panicked: %w", n.name, err))
+		}
+		panic(fmt.Sprintf("graph: observer of %q panicked: %v", n.name, r))
+	}()
+	fn(n.handle)
 }
 
 // cyclePath names the cycle that reaching n again closes, from n's place in

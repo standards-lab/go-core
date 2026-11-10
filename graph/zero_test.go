@@ -65,22 +65,59 @@ func TestZeroLiteral_PanicsAsANilHandle(t *testing.T) {
 			graph.New().Replace(&graph.Node[int]{}, zero)
 		})
 	})
+	t.Run("get of a zero node", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: Get of a nil node", func() { sys.Get(&graph.Node[int]{}) })
+	})
+	t.Run("layer of a zero node", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: LayerOf of a nil node", func() { sys.LayerOf(&graph.Node[int]{}) })
+	})
+	t.Run("layer of a zero group", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: LayerOf of a nil group", func() { sys.LayerOf(&graph.Group{}) })
+	})
+	t.Run("has of a zero node", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: Has of a nil node", func() { sys.Has(&graph.Node[int]{}) })
+	})
+	t.Run("has of a zero group", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: Has of a nil group", func() { sys.Has(&graph.Group{}) })
+	})
+}
+
+// built returns a System of one real node, for the calls that take a
+// handle on a System.
+func built(t *testing.T) *graph.System {
+	t.Helper()
+	g := graph.New()
+	return mustBuild(t, g, g.Define("real", zero))
 }
 
 // A nil handle panics with the same message a zero-value literal does.
-func TestNilHandle_ReplacePanics(t *testing.T) {
+func TestNilHandle_Panics(t *testing.T) {
 	var n *graph.Node[int]
-	panicExactly(t, "graph: Replace of a nil node", func() { graph.New().Replace(n, zero) })
+	t.Run("get", func(t *testing.T) {
+		sys := built(t)
+		panicExactly(t, "graph: Get of a nil node", func() { sys.Get(n) })
+	})
+	t.Run("replace", func(t *testing.T) {
+		panicExactly(t, "graph: Replace of a nil node", func() { graph.New().Replace(n, zero) })
+	})
 }
 
-// Name of a group handle no Group made is the empty string, not a nil
+// Name of a handle no Define or Group made is the empty string, not a nil
 // dereference.
-func TestGroupName_OfANilOrZeroHandleIsEmpty(t *testing.T) {
+func TestName_OfANilOrZeroHandleIsEmpty(t *testing.T) {
+	var n *graph.Node[int]
 	var grp *graph.Group
 	for _, c := range []struct {
 		name string
 		ref  graph.Ref
 	}{
+		{"nil node", n},
+		{"zero node", &graph.Node[int]{}},
 		{"nil group", grp},
 		{"zero group", &graph.Group{}},
 	} {
