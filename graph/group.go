@@ -1,10 +1,10 @@
 package graph
 
 // Group is a named set of nodes, defined by [Graph.Group]: a [Ref] that
-// stands for its members. A node joins it with [In] at Define. A Build
-// given a group, as a root or as an [After] target, expands it to its
-// members in definition order; since Define panics after the first Build,
-// the membership is complete by then. An empty group builds and orders
+// stands for its members. A node joins it with [In] at Define, Value, or
+// Fresh. A Build given a group, as a root or as an [After] target, expands
+// it to its members in definition order; since those panic after the first
+// Build, the membership is complete by then. An empty group builds and orders
 // nothing.
 type Group struct {
 	graph *Graph

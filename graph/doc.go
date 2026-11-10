@@ -12,9 +12,12 @@
 //     empty one
 //   - [Graph.Define], which adds a node with its constructor and its
 //     options, and runs nothing
-//   - [Option], which places a node at Define: [After], which orders it
-//     after nodes or groups without their values, and [In], which makes it
-//     a member of a group
+//   - [Graph.Value], which adds a node whose value is a fixed value in
+//     every Build, and [Graph.Fresh], which adds one whose value is a new
+//     zero pointer in each Build; both take Define's options
+//   - [Option], which places a node at Define, Value, or Fresh: [After],
+//     which orders it after nodes or groups without their values, and
+//     [In], which makes it a member of a group
 //   - [Graph.Group], which defines a [Group], a named set of nodes, and
 //     [Group.Name], its name
 //   - [Graph.Replace], which swaps a node's constructor before Build, for a
@@ -82,13 +85,13 @@
 // Wiring mistakes panic with a "graph: " message, as each symbol's
 // documentation states: a dependency cycle, a node used on a Graph it was
 // not defined on, a Scope used after its constructor returned, a recovered
-// abort, a Define, Group, or Replace after Build, a Get of a node not in
-// the System, a nil constructor, option, or observer, an After or In naming
-// a nil handle, a zero-value literal, or one from another Graph, and a name
-// that is empty, contains a comma or a newline, or is already taken by a
-// node or a group, which share one name space. Define and Group check
-// everything before they change the Graph, so one that panics leaves it as
-// it was. Build checks its roots, for a nil node or group or one defined
-// on another Graph, before it constructs any of them, so a mistake in any
-// root panics before a constructor runs.
+// abort, a Define, Value, Fresh, Group, or Replace after Build, a Get of a
+// node not in the System, a nil constructor, option, or observer, an After
+// or In naming a nil handle, a zero-value literal, or one from another
+// Graph, and a name that is empty, contains a comma or a newline, or is
+// already taken by a node or a group, which share one name space. Define,
+// Value, Fresh, and Group check everything before they change the Graph,
+// so one that panics leaves it as it was. Build checks its roots, for a
+// nil node or group or one defined on another Graph, before it constructs
+// any of them, so a mistake in any root panics before a constructor runs.
 package graph

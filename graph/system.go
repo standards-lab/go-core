@@ -17,8 +17,9 @@ type System struct {
 
 // Drop is one [After] that orders nothing in a [System]: Node declared it,
 // and After is its target as declared, a node not in the System or a
-// [Group] with no member in it. Both are the handles [Graph.Define] or
-// [Graph.Group] returned, so d.Node == graph.Ref(handle) holds.
+// [Group] with no member in it. Both are the handles [Graph.Define],
+// [Graph.Value], [Graph.Fresh], or [Graph.Group] returned, so
+// d.Node == graph.Ref(handle) holds.
 type Drop struct {
 	Node  Ref
 	After Ref

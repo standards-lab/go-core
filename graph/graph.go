@@ -7,17 +7,17 @@ import (
 )
 
 // Graph describes a set of nodes and their constructors. Describing is
-// inert: [Graph.Define], [Graph.Group], and [Graph.Replace] record nodes,
-// groups, and constructors and run none, and only [Graph.Build] constructs
-// anything. The first Build freezes the description: Define, Group, and
-// Replace panic after it. A Graph is not safe for concurrent use.
+// inert: [Graph.Define], [Graph.Value], [Graph.Fresh], [Graph.Group], and
+// [Graph.Replace] record nodes, groups, and constructors and run none, and
+// only [Graph.Build] constructs anything. The first Build freezes the
+// description: Define, Value, Fresh, Group, and Replace panic after it. A Graph is not safe for concurrent use.
 type Graph struct {
 	nodes []*node
 	// groups are the groups [Graph.Group] defined, in definition order. They
 	// share the name space with nodes.
 	groups []*Group
 	// built is set by the first Build, which freezes the description:
-	// Define, Group, and Replace panic after it.
+	// Define, Value, Fresh, Group, and Replace panic after it.
 	built bool
 	// observers are called, in the order added, as a Build begins each
 	// node.
@@ -50,9 +50,33 @@ func (g *Graph) Define[T any](name string, ctor func(*Scope) (T, error), opts ..
 	return define(g, "Define", name, ctor, opts)
 }
 
-// define adds a node: it checks the name, the constructor, and every
-// option before it changes g. call names the exported function for a
-// panic's message.
+// Value defines a node named name whose value is v in every Build, and
+// returns its handle, a [Node] like any Define returns: a Use target, a
+// root, an [After] target, and replaceable. T is v's static type. It takes
+// Define's options: [After] orders the node after other nodes or groups,
+// and [In] makes it a member of a group. Every Build's value is v itself,
+// so a pointer or map v is shared across Builds; a value a run mutates,
+// such as a lifecycle participant or a readiness flag, belongs in
+// [Graph.Fresh] or [Graph.Define], or every System would start, stop, or
+// set the one shared value. Value panics as [Graph.Define] does, the
+// message naming Value, and checks everything before it changes g.
+func (g *Graph) Value[T any](name string, v T, opts ...Option) *Node[T] {
+	return define(g, "Value", name, func(*Scope) (T, error) { return v, nil }, opts)
+}
+
+// Fresh defines a node named name whose value is a new zero *T in each
+// Build, and returns its handle, a [Node] like any Define returns. It takes
+// Define's options, [After] and [In]. Two Builds give two distinct
+// pointers, so a value a run mutates, a readiness flag or a gate, starts
+// zero in every System. Fresh panics as [Graph.Define] does, the message
+// naming Fresh, and checks everything before it changes g.
+func (g *Graph) Fresh[T any](name string, opts ...Option) *Node[*T] {
+	return define(g, "Fresh", name, func(*Scope) (*T, error) { return new(T), nil }, opts)
+}
+
+// define is Define, Value, and Fresh: it checks the name, the constructor,
+// and every option before it changes g, then adds the node. call names the
+// exported function for a panic's message.
 func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), opts []Option) *Node[T] {
 	g.checkName(call, name)
 	if ctor == nil {

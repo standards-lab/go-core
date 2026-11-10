@@ -19,8 +19,8 @@ type node struct {
 	handle Ref
 }
 
-// Node is one node of a [Graph], defined by [Graph.Define]: a name and a
-// constructor of a T. It is a handle, not a value; a constructor reaches
+// Node is one node of a [Graph], defined by [Graph.Define], [Graph.Value],
+// or [Graph.Fresh]: a name and a constructor of a T. It is a handle, not a value; a constructor reaches
 // the value through [Scope.Use], and a program through [System.Get].
 type Node[T any] struct {
 	core *node
@@ -49,7 +49,7 @@ func (n *Node[T]) ref() *node {
 }
 
 // expand treats a zero-value literal, &Node[T]{}, as a nil handle: it has
-// no core, since only Define makes one.
+// no core, since only Define, Value, and Fresh make one.
 func (n *Node[T]) expand() (*Graph, []*node) {
 	if core := n.ref(); core != nil {
 		return core.graph, []*node{core}

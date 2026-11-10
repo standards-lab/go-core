@@ -48,8 +48,8 @@ type abort struct {
 // panics before another root's constructor runs.
 // It also panics when a constructor returns after a Use it made aborted,
 // which only a recover in the constructor allows: a constructor must not
-// recover. The first Build freezes g: [Graph.Define], [Graph.Group], and
-// [Graph.Replace] panic after it.
+// recover. The first Build freezes g: [Graph.Define], [Graph.Value],
+// [Graph.Fresh], [Graph.Group], and [Graph.Replace] panic after it.
 func (g *Graph) Build(roots ...Ref) (sys *System, err error) {
 	g.built = true
 	b := &build{graph: g, entries: make(map[*node]*entry)}
