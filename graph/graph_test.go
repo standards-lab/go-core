@@ -599,7 +599,7 @@ func TestWiring_Panics(t *testing.T) {
 			mustPanic(t, fmt.Sprintf("Define of %q, a name with a comma or a newline", name), func() {
 				g.Define(name, func(*graph.Scope) (int, error) { return 0, nil })
 			})
-			// The refused name left nothing behind.
+			// The Graph is still usable: the refused call released its lock.
 			if g.Define("ok", func(*graph.Scope) (int, error) { return 0, nil }).Name() != "ok" {
 				t.Fatal("Define after the refused name failed")
 			}

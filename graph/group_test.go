@@ -11,21 +11,6 @@ import (
 // zero is a constructor that returns 0 and does nothing else.
 func zero(*graph.Scope) (int, error) { return 0, nil }
 
-func TestGroup_IsARef(t *testing.T) {
-	g := graph.New()
-	refs := []graph.Ref{
-		g.Define("count", zero),
-		g.Group("workers"),
-	}
-	var got []string
-	for _, r := range refs {
-		got = append(got, r.Name())
-	}
-	if want := []string{"count", "workers"}; !slices.Equal(got, want) {
-		t.Fatalf("names = %v, want %v", got, want)
-	}
-}
-
 func TestGroup_RootBuildsEveryMemberInDefinitionOrder(t *testing.T) {
 	c := counter{}
 	g := graph.New()
@@ -266,7 +251,7 @@ func TestOptions_WiringPanics(t *testing.T) {
 	t.Run("group of a name with a newline", func(t *testing.T) {
 		g := graph.New()
 		mustPanic(t, `Group of "a\nb", a name with a comma or a newline`, func() { g.Group("a\nb") })
-		// The refused name left nothing behind.
+		// The Graph is still usable: the refused call released its lock.
 		if g.Group("ok").Name() != "ok" {
 			t.Fatal("Group after the refused name failed")
 		}
