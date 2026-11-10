@@ -1,8 +1,8 @@
 // Package graphtest is the test toolkit for a program built on the graph
-// package. It holds a program's struct of node and group handles to the
-// graph those handles were defined on, so a test catches a field whose
-// handle is missing or names another node, and nothing in the graph package
-// exists for the tests' sake.
+// package. It checks a program's struct of node and group handles against
+// the names those handles were defined with, so a test catches a field
+// whose handle is missing or names another node, and nothing in the graph
+// package exists for the tests' sake.
 //
 // The package exports:
 //

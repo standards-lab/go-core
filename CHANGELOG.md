@@ -6,6 +6,78 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-11-10
+
+A node's place in the graph is declared where it is defined, not in its constructor, and the
+System and observers name nodes by their handles. `graph.After` and `graph.In` place a node at
+`Define`, `Value`, or `Fresh`; groups stand for their members; and a Monitored failure names the
+node that failed.
+
+### Added
+
+- `graph.After`, a Define option that orders a node after each node or group it names, each
+  defined earlier. It never builds its target: the edge holds only when the target is in the
+  System by another path. A cycle it closes panics, naming its path.
+- `graph.In`, a Define option that makes a node a member of a group, and `graph.Graph.Group`,
+  which defines a `graph.Group`, a `Ref` that a Build, as a root or as an After target, expands
+  to its members in definition order. Nodes and groups share one name space.
+- `graph.Option`, the sealed type `After` and `In` return; `Define` takes them variadically.
+- `graph.System.Dropped`, which lists each After of a built node that ordered nothing, as a
+  `graph.Drop` of the declaring node and its target.
+- `graph.Graph.Value`, which defines a node whose value is a fixed value in every Build, `T`
+  inferred from its static type, and `graph.Graph.Fresh`, which defines one whose value is a new
+  zero `*T` in each Build. Both take Define's options.
+- `graph.System.LayerOf`, which returns a node's layer, panicking for a node not in the System,
+  a nil handle, or a group; `graph.System.Has`, which reports whether a node is in the System;
+  and `graph.System.Dependencies`, a fresh copy of every built node in layer, then definition,
+  order.
+- `graph.System.String`, which prints the layer table, one line per layer in the form
+  `0: config, logger`.
+- `graph/graphtest`: `NameErrors` checks each handle field of a struct of node and group
+  handles: that it holds a handle, and that its name, lowercased with spaces removed, is the
+  field's name lowercased. `CheckNames` reports each failure as a test error.
+- `graph`: an observer that panics makes Build panic with a `graph: ` message naming the node,
+  carrying the original value and wrapping it when it is an error.
+
+### Changed
+
+- `graph.Graph.Replace` swaps only a node's constructor; the node keeps its After and In.
+- `graph.Graph` is safe for concurrent use: Builds may run concurrently, and a describing call
+  or `Observe` may run beside one. An observer added during a Build applies from the next Build,
+  concurrent Builds may call an observer concurrently, and an observer persists for every later
+  Build of its Graph.
+- `graph`: `Node.Name` and `Group.Name` return the empty string for a nil or zero-value handle,
+  and `System.Get` panics with a `graph: ` message for one. `After` and `In` panic on a nil
+  handle, a zero-value literal, or one from another Graph; for a nil handle, the message asks
+  whether its definition comes later. Define, Value, Fresh, and Group check everything before
+  changing the Graph, so one that panics leaves it as it was.
+- **Breaking:** `graph.Graph.Observe` takes `func(graph.Ref)` and calls it with the node's
+  handle as each node begins, in place of `func(string)` with its name.
+- **Breaking:** `graph.Graph.Define`, `Value`, `Fresh`, and `Group` panic on a name containing a
+  comma or a newline, so `System.String`'s table is unambiguous unquoted.
+- **Breaking:** `graph.Dependency` gains a `Ref` field, the node's handle; a `Dependency`
+  composite literal without field names no longer compiles.
+- **Breaking:** `lifecycle`: a `Monitored` value's runtime failure ends the run as
+  `run: <node>: <error>`, labelled with its node's name and wrapping the error. A channel
+  registered with `Coordinator.Monitor` still reports `run: <error>`.
+
+### Removed
+
+- **Breaking:** `graph.Scope.After`. A node's order-only edges are declared at Define with
+  `graph.After`; `Scope` has only `Use`.
+
+### Migrating from v0.10.0
+
+- **`s.After(x)` becomes `graph.After(x)` on the Define line.** Move each order-only edge out of
+  the constructor into the node's options; `x` must be defined first. A slice of extra roots
+  that one node orders after becomes a group: define it with `g.Group`, add `graph.In(group)` to
+  each member, and name the group in the After and the roots.
+- **Closures for fixed and fresh values become `g.Value` and `g.Fresh`.**
+- **An observer takes a `graph.Ref`.** Read the name with `ref.Name()`, or compare the handle.
+- **A name with a comma or a newline must change.**
+- **A test that matches `"run: <error>"` for a Monitored value** expects the node's name after
+  `run: `.
+
 ## [v0.10.0] - 2026-10-13
 
 ### Added
@@ -309,7 +381,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/standards-lab/go-core/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-core/compare/v0.9.0...v0.10.0
 [v0.9.0]: https://github.com/standards-lab/go-core/compare/v0.8.0...v0.9.0
 [v0.8.0]: https://github.com/standards-lab/go-core/compare/v0.7.0...v0.8.0

@@ -84,7 +84,9 @@
 // it, so a test compares handles rather than names. [System.String] prints
 // the layer table for a failing test's message; a name cannot contain a
 // comma or a newline, so the table is unambiguous unquoted. An observer is
-// never removed: it applies to every later Build of its Graph.
+// never removed: it applies to every later Build of its Graph. The
+// graphtest package checks a program's struct of handles against the names
+// its nodes and groups were defined with.
 //
 // # Concurrency
 //
@@ -121,11 +123,12 @@
 // abort, a Define, Value, Fresh, Group, or Replace after Build, a Get or
 // LayerOf of a node not in the System, a Get, LayerOf, or Has of a nil
 // handle, a LayerOf or Has of a group, a nil constructor, option, or
-// observer, an After or In naming a nil handle, a zero-value literal, or one from another
-// Graph, and a name that is empty, contains a comma or a newline, or is
-// already taken by a node or a group, which share one name space. Define,
-// Value, Fresh, and Group check everything before they change the Graph,
-// so one that panics leaves it as it was. Build checks its roots, for a
-// nil node or group or one defined on another Graph, before it constructs
-// any of them, so a mistake in any root panics before a constructor runs.
+// observer, an After or In naming a nil handle, a zero-value literal, or
+// one from another Graph, and a name that is empty, contains a comma or a
+// newline, or is already taken by a node or a group, which share one name
+// space. Define, Value, Fresh, and Group check everything before they
+// change the Graph, so one that panics leaves it as it was. Build checks
+// its roots, for a nil node or group or one defined on another Graph,
+// before it constructs any of them, so a mistake in any root panics before
+// a constructor runs.
 package graph
