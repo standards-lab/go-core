@@ -1,15 +1,15 @@
 # goal · graph-ergonomics
 
-- **State:** building
-- **Task:** migrate-templates
-- **Branch:** migrate-templates
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] design-review
 2. [x] release
 3. [x] migrate-libraries
-4. [ ] migrate-templates
+4. [x] migrate-templates
 5. [ ] migrate-service
 
 ## Task brief · migrate-templates
@@ -149,10 +149,6 @@ Door          Two-way until each tag (pull requests to main). One-way at each
 Release       go-web-sdk-template: template/v0.14.0
               go-cli-sdk-template: template/v0.2.0
 ```
-
-## Progress
-
-slices 10/10 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
