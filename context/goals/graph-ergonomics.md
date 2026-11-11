@@ -1,8 +1,8 @@
 # goal · graph-ergonomics
 
-- **State:** brief ready
-- **Task:** migrate-service
-- **Branch:** migrate-service
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
@@ -10,7 +10,7 @@
 2. [x] release
 3. [x] migrate-libraries
 4. [x] migrate-templates
-5. [ ] migrate-service
+5. [x] migrate-service
 
 ## Task brief · migrate-service
 
@@ -155,10 +155,6 @@ Out of scope  go-core, the SDKs, the libraries, and the templates; moving
 Door          Two-way: pull requests to main, no tag, nothing published; the
               compose image bumps reach only the local stack.
 ```
-
-## Progress
-
-slices 7/7 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
