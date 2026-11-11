@@ -1,14 +1,14 @@
 # goal · graph-ergonomics
 
-- **State:** building
-- **Task:** migrate-libraries
-- **Branch:** migrate-libraries
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] design-review
 2. [x] release
-3. [ ] migrate-libraries
+3. [x] migrate-libraries
 4. [ ] migrate-templates
 5. [ ] migrate-service
 
@@ -138,10 +138,6 @@ Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
               middleware/rate-limit/v0.4.0; go-observability v0.3.0, otlp/v0.3.0;
               go-storage v0.7.0, s3/v0.2.0, azureblob/v0.6.0; go-cli-sdk v0.3.0
 ```
-
-## Progress
-
-slices 14/14 committed · standards done · spec done (2 rounds) · editor done
 
 ## Decisions
 
