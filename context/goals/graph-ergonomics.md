@@ -158,7 +158,7 @@ Door          Two-way: pull requests to main, no tag, nothing published; the
 
 ## Progress
 
-slices 7/7 committed · standards ✓ · spec ✓ · editor —
+slices 7/7 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -248,6 +248,15 @@ slices 7/7 committed · standards ✓ · spec ✓ · editor —
 - migrate-templates: standards review changed the web Build-failure test's fixture error to "unavailable", so the stderr match finds "logger" only in the node's name.
 - migrate-service: go-web-service's Roots lists only the server and the reactors group; the router reaches telemetry and the schema through Use, and the root guard expects no Drop.
 - migrate-service: go-web-service and slab stay untagged; the migration is recorded under the CHANGELOG's Unreleased section, and the door is two-way.
+- migrate-service: New defines the config and writer Value nodes, then telemetry, before the infrastructure, since an After takes a handle already defined.
+- migrate-service: the reactors group always has members, so the service's root guard allows no Drop, unlike the web template's one allowed Drop.
+- migrate-service: the layer tests keep the check that the database, storage, and broker share one layer, so they start together, beside 4(d)'s order checks.
+- migrate-service: reactor-group membership is checked by comparing Builds, since go-core lists no group members; the check can't see an extra member the sweeper or relay already reaches through Use.
+- migrate-service: slab's apptest Recorder is generic, Recorder[T], with Names([]graph.Ref); the build recorder holds handles, and the HTTP recorder stays Recorder[string].
+- migrate-service: slab's leaf guard takes the Nodes, and a second fixture shows the grafana-up-above-service guard can fail.
+- migrate-service: the README states failure reporting: a startup, run, or drain failure logs "service failed"; a Build failure goes to stderr.
+- migrate-service: the CHANGELOG records App.Run taking stderr and Nodes.Reactors becoming a *graph.Group; only go-core's pin names its from-version; x/sys and x/term take no entry.
+- migrate-service: behaviors 2(a) and 2(b), "server ready" and the clean drain, are proven by the integration tier and the running binary, not by unit tests, which have no infrastructure.
 
 ## Pending edits
 
@@ -259,3 +268,5 @@ slices 7/7 committed · standards ✓ · spec ✓ · editor —
 - architecture · standards/go-elemental/principles/tests-and-docs.md ("The unit tier"): cites go-web-sdk-template's AppendReactor in internal/app/export_test.go as the fixture-node hook example; migrate-templates deletes it — cite a fixture reactor joining with graph.In(Reactors) instead, or drop the clause.
 - coordinator · context/graph-ergonomics.md (opening paragraph): name the templates' releases, go-web-sdk-template template/v0.14.0 and go-cli-sdk-template template/v0.2.0, beside the libraries' releases that moved onto go-core v0.11.0.
 - architecture · standards/go-elemental/principles/topology-and-naming.md:88-92: names `Run` as building the graph and running it under the lifecycle coordinator, and a reactor's node as "also joining `Nodes.Reactors`"; say instead that `Run` is one runner call (`web.Service`, `cli.Program`), and that a reactor joins the reactors group with `graph.In` on its Define line.
+- coordinator · context/roadmap.toml:12–15, 30–31: the header comments still say the templates are next and the per-tier migrations have only the libraries done; at sync, drop graph-ergonomics from them and name api-maintenance as next in the exclusive group.
+- coordinator · context/graph-ergonomics.md (opening paragraph): name go-web-service and slab as moved onto go-core v0.11.0, untagged, so the note no longer implies the service is still pending.
