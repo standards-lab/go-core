@@ -158,7 +158,7 @@ Door          Two-way: pull requests to main, no tag, nothing published; the
 
 ## Progress
 
-slices 5/7 committed · standards — · spec — · editor —
+slices 6/7 committed · standards — · spec — · editor —
 
 ## Decisions
 
