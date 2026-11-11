@@ -1,8 +1,8 @@
 # goal · api-maintenance
 
-- **State:** idle
-- **Task:** none
-- **Branch:** none
+- **State:** building
+- **Task:** core
+- **Branch:** core
 
 ## Tasks
 
@@ -96,6 +96,10 @@ Door          One-way for the four tags, which reach every consumer's
 Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
               sqlint/v0.4.0
 ```
+
+## Progress
+
+slices 0/7 committed · standards — · spec — · editor —
 
 ## Decisions
 
