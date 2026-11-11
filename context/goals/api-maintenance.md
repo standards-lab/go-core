@@ -8,139 +8,94 @@
 
 1. [x] core
 2. [x] libraries
-3. [ ] storage-cli
+3. [x] storage-cli
 4. [ ] messaging
 5. [ ] blobfs
 6. [ ] template
 7. [ ] service
 
-## Task brief · libraries
+## Task brief · storage-cli
 
 ```
-Problem       go-database's sweep.New and go-web-sdk's middleware.RequestID
-              take functional options, and web.WriteProblem takes five
-              inputs. All three break the construction-and-execution rule.
-              go-observability's docs name the WithIDSource option that
-              goes away. All three repositories trail go-core v0.12.0, and
-              go-database also trails sqlate v0.7.0 and pgx v5.13.0. Their
-              sub-modules re-tag on each base's new release before the
-              next tier migrates.
-Behaviors     1. sweep.New takes a db, its registrations, the shutdown
-                 drain, a logger, and a trailing sweep.Options{Unlocked,
-                 Gate, OnPass}. The zero Options keeps today's defaults:
-                 each pass claims its advisory lock, a dialect without
-                 the try-lock capability is refused with ErrNoTryLocker,
-                 no gate is held, and failed passes are logged at warn.
-                 New still refuses its invalid inputs, with an error and
-                 before any I/O, and still panics on a nil db or logger.
-              2. Options.Unlocked runs the sweeper without claiming
-                 locks, on any dialect. A non-nil Options.Gate is held
-                 shared for each pass, as Gated does today. A non-nil
-                 Options.OnPass receives each Pass in place of the warn
-                 log, as OnPass does today.
-              3. sweep no longer exports the Option type or the
-                 Unlocked, Gated, and OnPass option functions.
-              4. The sweeper's reactor still cancels a pass that is
-                 still running at half the shutdown drain. On go-core
-                 v0.12.0 it sets this through
-                 reactor.Options.CancelAfter.
-              5. middleware.RequestID takes a
-                 middleware.RequestIDOptions{Source, TrustedHeader}. The
-                 id is the first of these that yields one: Source's
-                 non-empty return; then TrustedHeader's inbound value,
-                 when it is 1 to 128 visible ASCII characters; then a
-                 generated 16-byte hex id. The id still reaches the
-                 request's context and the X-Request-Id response
-                 header. A nil Source or an empty TrustedHeader is
-                 unset and doesn't panic, so the zero value always
-                 generates.
-              6. middleware no longer exports RequestIDOption,
-                 WithIDSource, or WithTrustedHeader.
-              7. web no longer exports WriteProblem. Recoverer,
-                 ContentType, and rate-limit's limited and failed
-                 responses send the same problems as before through
-                 Problem.WriteFor: the same status, the defaulted
-                 title, detail, the request path as instance, and the
-                 request_id member.
-              8. go-observability's package docs and README name
-                 RequestIDOptions.Source where they named WithIDSource.
-                 RequestIDSource's behavior is unchanged.
-              9. go-database requires sqlate v0.7.0 and go-core v0.12.0.
-                 postgres requires pgx v5.13.0 and go-database v0.12.0.
-                 go-web-sdk requires go-core v0.12.0. rate-limit
-                 requires go-core v0.12.0 and go-web-sdk v0.17.0.
-                 go-observability requires go-core v0.12.0. otlp
-                 requires go-observability v0.4.0. Every module passes
-                 its check with the workspace off.
-             10. go-database's and go-web-sdk's READMEs, guides, and
-                 package docs show only the new forms. Each base
-                 changelog lists the removals as Breaking, with a
-                 "Migrating from" section, and marks its go-core
-                 requirement (and, for go-database, its sqlate
-                 requirement) as Breaking. go-observability's v0.4.0
-                 marks its go-core requirement Breaking and records the
-                 doc fix. postgres, rate-limit, and otlp each carry one
-                 Breaking line for their base's new requirement.
-             11. go-observability's standards file points to the
-                 construction-and-execution principle. go-database's
-                 and go-web-sdk's pointers name the converted forms:
-                 sweep.Options, RequestIDOptions, and Problem.WriteFor.
-             12. All three repositories' currency commands exit 0, and
-                 every check passes.
-Test seams    The exported constructors, exercised from external test
-              packages: sweep.New with Options values over sqlate's
-              sqltest recording driver and its locking and non-locking
-              dialects, and middleware.RequestID, Recoverer, ContentType,
-              and rate-limit's New, driven through net/http/httptest and
-              their recorded responses.
-Slices        1. go-database upgrade: sqlate v0.7.0 and go-core v0.12.0,
-                 with sweep's reactor call moved to
-                 reactor.Options{CancelAfter} (4), and postgres onto
-                 pgx v5.13.0. Done when currency exits 0 and the check
-                 passes.
-              2. go-web-sdk upgrade: the base and rate-limit onto
-                 go-core v0.12.0, with nothing to adapt.
-              3. go-observability upgrade: the base onto go-core
-                 v0.12.0, with nothing to adapt. (Slices 2-3: the proxy
-                 doesn't list go-core v0.12.0 yet, so currency exits 0
-                 either way; done when go.mod requires v0.12.0 and the
-                 check passes.)
-              4. sweep.Options, with sweep's tests on the new form
-                 (1-3).
-              5. go-database's docs, changelog v0.12.0 with its
-                 migration section, the updated standards pointer, and
-                 postgres's changelog. Release preparation moves
-                 postgres onto go-database v0.12.0 once it is tagged
-                 (9-11, go-database).
-              6. RequestIDOptions, with RequestID's tests on the new
-                 form (5-6).
-              7. WriteProblem removed. Recoverer, ContentType, and
-                 rate-limit move to Problem.WriteFor, with their
-                 response tests unchanged (7).
-              8. go-web-sdk's docs, changelog v0.17.0 with its migration
-                 section, the updated standards pointer, and
-                 rate-limit's changelog. Release preparation moves
-                 rate-limit onto go-web-sdk v0.17.0 once it is tagged
-                 (9-11, go-web-sdk).
-              9. go-observability's docs fix, changelog v0.4.0, and
-                 standards pointer, and otlp's changelog. Release
-                 preparation moves otlp onto go-observability v0.4.0
-                 once it is tagged (8-11, go-observability).
-Out of scope  go-web-service's RequestID and WriteProblem calls, which
-              move in the service task. The templates. webtest's
-              variadic Header parameters, left as data lists. The
-              variadic data lists Chain, Use, ContentType, Readiness,
-              NewErrorWriter's matchers, and ErrorWriter.Detail.
-              admin.New, which already conforms. go-storage,
-              go-messaging, blobfs, and go-cli-sdk, which are later
-              tasks. The architecture notes that cite WriteProblem, and
-              the principle page's context-exemption sentence, at sync.
-Door          One-way for the six tags, which reach every consumer's
+Problem       go-storage's storagetest.NewFake takes functional options,
+              and go-cli-sdk's StringsVar takes five inputs. Both break
+              the construction-and-execution rule. Both repositories
+              trail go-core v0.12.0. go-storage's sub-modules re-tag on
+              its new release before the next tier migrates.
+Behaviors     1. storagetest.NewFake takes a trailing
+                 storagetest.Options{Clock, PageSize, Capabilities,
+                 NoContainer}. The zero Options keeps today's defaults:
+                 time.Now stamped in UTC, a list page size of 3, the
+                 default key rules, and an existing container.
+              2. A non-nil Options.Clock stamps objects in place of
+                 time.Now. A PageSize above zero sets the list page
+                 size; zero or less means 3. An Options.Capabilities
+                 with MaxKeyLength or ValidateKey set replaces the
+                 default key rules whole; a set MaxKeyLength with a nil
+                 ValidateKey accepts every key. NoContainer makes the
+                 fake behave as a store whose container is missing, as
+                 WithoutContainer does today.
+              3. storagetest no longer exports Option, WithClock,
+                 WithPageSize, WithCapabilities, or WithoutContainer.
+              4. cli.StringsValue(p *[]string, value []string)
+                 flag.Value is registered with fs.Var. It copies value
+                 into *p before returning, so the default isn't
+                 aliased. The first use on the command line replaces
+                 the default and later uses append in order. Help shows
+                 the flag as repeatable with its default, and a tree
+                 dispatched again restores the default, as StringsVar
+                 does today.
+              5. cli no longer exports StringsVar.
+              6. go-storage requires go-core v0.12.0. azureblob and s3
+                 require go-storage v0.8.0. go-cli-sdk requires go-core
+                 v0.12.0. Every module passes its check with the
+                 workspace off.
+              7. go-storage's and go-cli-sdk's package docs and comments
+                 show only the new forms. Each base changelog lists the
+                 removals as Breaking, with a "Migrating from" section,
+                 and marks its go-core v0.12.0 requirement Breaking.
+                 azureblob and s3 each carry one Breaking line for the
+                 go-storage v0.8.0 requirement.
+              8. Each repository's standards pointer to the
+                 construction-and-execution principle names the
+                 converted form: storagetest.Options and
+                 cli.StringsValue.
+              9. Both repositories' currency commands exit 0, and every
+                 check passes.
+Test seams    The exported constructors, from external test packages:
+              storagetest.NewFake with Options values, exercised through
+              storage.Store; and cli.StringsValue registered through
+              Command.Flags() and fs.Var, driven by cli.Program{Root}.Run
+              and its help output.
+Slices        1. go-storage upgrade: go-core v0.12.0, nothing to adapt.
+                 Done when currency exits 0 and the check passes.
+              2. go-cli-sdk upgrade: go-core v0.12.0, nothing to adapt.
+                 Same done condition.
+              3. storagetest.Options, with the fake's and the store's
+                 tests on the new form (1-3).
+              4. go-storage's docs, changelog v0.8.0 with its migration
+                 section, the standards pointer, and azureblob's and
+                 s3's changelogs. Release preparation moves azureblob
+                 and s3 onto go-storage v0.8.0 once it is tagged (6-8,
+                 go-storage).
+              5. cli.StringsValue, with the flag tests on the new form
+                 (4-5).
+              6. go-cli-sdk's docs, changelog v0.4.0 with its migration
+                 section, and the standards pointer (6-8, go-cli-sdk).
+Out of scope  go-web-service's NewFake calls and slab's StringsVar call,
+              which move in the service task. go-cli-sdk-template's
+              requirement, in the template task. blobfs's example
+              module's go-storage requirement, in the blobfs task. The
+              variadic data lists Command.Add, Use, Require, Exclusive,
+              Usagef, scenario.Commands, WriteListing, and Reporter.Note.
+              Conforming APIs: Store.Put/Get/List, storage.New, NewEnv,
+              azureblob.New, s3.New, storagetest.Run and
+              RunMissingContainer.
+Door          One-way for the four tags, which reach every consumer's
               module requirements. Two-way for the code and docs, which
               merge by pull request before tagging.
-Release       go-database v0.12.0, postgres/v0.7.0; go-web-sdk v0.17.0,
-              middleware/rate-limit/v0.5.0; go-observability v0.4.0,
-              otlp/v0.4.0
+Release       go-storage v0.8.0, azureblob/v0.7.0, s3/v0.3.0;
+              go-cli-sdk v0.4.0
 ```
 
 ## Decisions
@@ -174,6 +129,13 @@ Release       go-database v0.12.0, postgres/v0.7.0; go-web-sdk v0.17.0,
 - libraries: rate-limit v0.5.0 carries two Breaking lines, go-core v0.12.0 and go-web-sdk v0.17.0, because it requires both directly (one line per requirement, as in v0.4.0).
 - libraries: each repository's "Migrating from" section covers its own removals and points to go-core's and sqlate's changelogs for their call changes.
 - libraries: the go-database v0.12.0, go-web-sdk v0.17.0, and go-observability v0.4.0 changelog entries (and their sub-modules') are dated 2026-11-11; release preparation re-dates them if the tags land later.
+- storage-cli: storagetest.Options.Capabilities is a storage.Capabilities value; it replaces the default key rules whole when MaxKeyLength or ValidateKey is set, and a set MaxKeyLength with a nil ValidateKey accepts every key (per-field defaulting would turn a nil ValidateKey back into the default rules; a pointer was rejected).
+- storage-cli: go-cli-sdk's repeatable-flag constructor is cli.StringsValue(p *[]string, value []string) flag.Value, used through fs.Var, the flag package's shape for custom flags; its concrete type stays unexported (cli.Strings rejected).
+- storage-cli: azureblob's and s3's go.mod files stay on go-storage v0.7.0 (go-core v0.11.0 indirect) until go-storage v0.8.0 is tagged; release preparation moves them in a follow-up pull request before azureblob/v0.7.0 and s3/v0.3.0 tag, as go-storage's last release did (f894743).
+- storage-cli: a zero storagetest.Options.Capabilities keeps the default key rules, where WithCapabilities(storage.Capabilities{}) cleared them; go-storage's v0.8.0 "Migrating from v0.7.0" section says so.
+- storage-cli: test names drop the removed option names (TestFake_PageSizeIgnoresNonPositive, TestRun_FakeNoContainer, TestStringsValue_*).
+- storage-cli: the changelogs mark each break inline under Added, Changed, or Removed (Keep a Changelog), with an Added entry for the new form, as go-web-sdk v0.17.0 did.
+- storage-cli: standards review stated go-storage's Options.Capabilities replace-whole rule once, on the field (tests-and-docs: a contract is stated once, on its symbol), and made go-cli-sdk's aliasing test call StringsValue directly.
 
 ## Pending edits
 
