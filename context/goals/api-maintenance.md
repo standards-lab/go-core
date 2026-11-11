@@ -135,7 +135,7 @@ Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 
 ## Progress
 
-slices 0/4 committed (slice 5 runs at SHIP) · standards — · spec — · editor —
+slices 1/4 committed (slice 5 runs at SHIP) · standards — · spec — · editor —
 
 ## Decisions
 
@@ -184,6 +184,8 @@ slices 0/4 committed (slice 5 runs at SHIP) · standards — · spec — · edit
 - messaging: tags go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0; sub-modules move onto go-core v0.12.0, sqlate v0.7.0, sqlate/postgres v0.7.0, sqlint v0.4.0, and go-messaging v0.3.0 in a release-prep follow-up pull request after the base tags (f894743); one Breaking line per breaking direct requirement; nats's untagged Unreleased line folds into v0.3.0.
 - messaging: pgx v5.13.0, nats.go v1.55.0, and the mise, CI, and image pins move in the upgrade slice; only the go-core and sqlate items wait for the base tag.
 - messaging: marathon-architecture applies; its declared marathon version is a minimum.
+- messaging: held the nats image at 2.15.2-alpine: 2.15.3-alpine (latest) publishes an image index with no platforms and can't be pulled; go-web-service pins 2.15.2.
+- messaging: golangci-lint 2.15.0's errcheck flags a bare receive on a chan error; two relay tests now assert Receive returns nil.
 
 ## Pending edits
 
