@@ -1,15 +1,15 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** messaging
-- **Branch:** messaging
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] core
 2. [x] libraries
 3. [x] storage-cli
-4. [ ] messaging
+4. [x] messaging
 5. [ ] blobfs
 6. [ ] template
 7. [ ] service
@@ -132,10 +132,6 @@ Door          One-way for the three tags, which reach go-web-service's
               merge by pull request before tagging.
 Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 ```
-
-## Progress
-
-slices 4/4 committed (slice 5 runs at SHIP) · standards done (475a4e9) · spec done, no gaps · editor done
 
 ## Decisions
 
