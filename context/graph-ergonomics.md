@@ -61,15 +61,15 @@ unconditional. Each point names what answers it.
 7. **There is no web runner.** About thirty lines (Build, Get, `lifecycle.New`, `OnReady`,
    `Run`, and the logging around them) are identical in go-web-service
    `internal/app/app.go:118-148` and go-web-sdk-template `template/internal/app/app.go:76-106`.
-   The CLI side has `cli.Run` with `cli.WithGraph` (go-cli-sdk `run.go:32,245-249`). Left to
-   go-web-sdk's `web.Run` (see Migration).
+   The CLI side has `cli.Run` with `cli.WithGraph` (go-cli-sdk `run.go:32,245-249`). Answered
+   by go-web-sdk's `web.Service`.
 8. **`lifecycle.Config` arrives two ways.** A web root reads it off its config node,
    `sys.Get(n.Config).Config` (go-web-service `internal/app/app.go:137`); every CLI defines a
    lifecycle-config node with the same four-line constructor (go-cli-sdk-template
    `template/internal/app/infrastructure.go:31`; slab `internal/app/infrastructure.go:69`;
    spike-ai-pipeline `internal/docinfer/app/infrastructure.go:22`,
-   `internal/docproc/app/infrastructure.go:26`). Left to `web.Run`, which takes it as a node,
-   as `cli.WithGraph` does.
+   `internal/docproc/app/infrastructure.go:26`). Answered by `web.Service`, which takes it as a
+   node, as `cli.Program` does.
 9. **Introspection gives only names.** v0.10.0's `Observe` passed a string and `Dependency` was
    `{Name, Value}`, so a test that holds a handle compares names:
    `top[0].Name == n.Server.Name()` (go-web-service `internal/app/graph_test.go:62`). Answered
@@ -182,23 +182,11 @@ module to the standard library and go-core.
 
 ## Migration
 
-v0.11.0 ships go-core's part. The consumers move in one task per tier; the spike repositories
-that import `graph` or `lifecycle` (spike-ai-pipeline and others) are evidence, read and never
-migrated.
-
-1. **migrate-libraries:** go-database, go-observability, go-storage, go-web-sdk, and go-cli-sdk.
-   go-web-sdk gains `web.Run`, which the spike proved as
-   `web.Run[S Server](ctx, g, lifecycleConfig, logger, server, roots, stderr) int`, where
-   `Server` has one method, `Addr() string`: it matches `cli.Run`'s exit-code contract, takes
-   the lifecycle configuration as a `*graph.Node[lifecycle.Config]` as `cli.WithGraph` does,
-   logs "server ready", "service failed", and "server stopped" on the logger node, writes a
-   Build failure to stderr, and returns 1 on a failed shutdown. Its plan rounds settle its four
-   handles against an options struct. go-cli-sdk's monitored-failure test changes with the
-   node-named run failure, and its plan rounds settle that `cli.Command` has no children
-   accessor and that sdk/cli never reads `Dropped`.
-2. **migrate-templates:** go-web-sdk-template and go-cli-sdk-template. Their layer tests use
-   `Has` and `Dependencies` in place of scanning `Layers()`.
-3. **migrate-service:** go-web-service, with slab, likewise.
+v0.11.0 ships go-core's part. go-web-service, with slab, is planned to move onto it in task
+migrate-service. The libraries and both templates run on it, and their code is the target at full
+size: go-web-sdk's `web.Service` and go-cli-sdk's `cli.Program` run a composition root, and
+go-web-sdk-template's `internal/app` is a web root with its graph tests. The spike repositories that
+import `graph` or `lifecycle` (spike-ai-pipeline and others) are evidence, read and never migrated.
 
 `composition-terms.md` is amended to admit CLI command packages taking the nodes they declare
 (pain point 10).
@@ -251,9 +239,10 @@ func (a *App) Roots() []graph.Ref {
 	return []graph.Ref{n.Server, n.Schema, n.Telemetry, n.Reactors}
 }
 
-func (a *App) Run(ctx context.Context) int {
+func (a *App) Run(ctx context.Context, stderr io.Writer) int {
 	n := a.nodes
-	return web.Run(ctx, a.graph, n.Lifecycle, n.Logger, n.Server, a.Roots(), a.stderr)
+	return web.Service{Graph: a.graph, LifecycleConfig: n.Lifecycle, Logger: n.Logger,
+		Server: n.Server, Roots: a.Roots()}.Run(ctx, stderr)
 }
 ```
 
