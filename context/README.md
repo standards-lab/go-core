@@ -8,19 +8,22 @@ The README and each package's `doc.go` document this repository. The
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows.
 This context records only working knowledge the code and the README do not express.
 
-- [`graph-ergonomics.md`](graph-ergonomics.md) holds the design direction for the `graph` and
-  `lifecycle` redesign: its pain points, the behavior it keeps, the candidate API, the spike
-  that settles it, and the migration.
+- [`graph-ergonomics.md`](graph-ergonomics.md) holds what the code does not express about
+  v0.11.0's `graph` and `lifecycle` API: the pain points it answers, the behavior it kept, the
+  reasons behind its decisions, the rejected alternatives, and what the consumers' migrations
+  need, with sketches of their target.
 
 ## Capability map
 
-go-core has eight packages; the README lists them, and the code and each package's `doc.go`
+go-core has nine packages; the README lists them, and the code and each package's `doc.go`
 are authoritative for the API.
 
 - **config** — layered configuration.
 - **event** — the CloudEvents 1.0 envelope and its codec, and the event kinds, queue, and
   recorder a domain raises and emits its events with.
 - **graph** — the typed dependency graph the lifecycle runs.
+- **graph/graphtest** — the test toolkit beside `graph`: the check of a struct of handles
+  against its nodes' names.
 - **lifecycle** — the process lifecycle that runs the graph's layers, governed by the standard's
   [lifecycle and context ownership](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/principles/lifecycle-and-context.md)
   principle.

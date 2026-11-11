@@ -18,9 +18,10 @@ type Coordinator struct {
 	sys     *graph.System
 	timeout time.Duration
 	checks  []Check
-	// monitored are the System's [Monitored] values, in layer then
-	// definition order; their channels are read once startup completes.
-	monitored []Monitored
+	// monitored are the System's [Monitored] values with their nodes'
+	// names, in layer then definition order; their channels are read once
+	// startup completes.
+	monitored []monitoredNode
 
 	mu       sync.Mutex
 	state    state
@@ -55,7 +56,7 @@ func New(sys *graph.System, cfg Config) *Coordinator {
 				c.checks = append(c.checks, Check{Name: d.Name, Checker: v})
 			}
 			if v, ok := d.Value.(Monitored); ok {
-				c.monitored = append(c.monitored, v)
+				c.monitored = append(c.monitored, monitoredNode{name: d.Name, value: v})
 			}
 		}
 	}
@@ -83,9 +84,10 @@ func (c *Coordinator) OnReady(fn func()) {
 // Monitor registers a channel [Coordinator.Exec] and [Coordinator.Run]
 // watch once startup has completed, alongside the System's [Monitored]
 // values: the first non-nil error received ends the run and joins the
-// return wrapped "run:". A nil error is ignored, and a closed channel
-// retires quietly — the expected end of a source that stopped cleanly.
-// Registration after Exec or Run panics.
+// return wrapped "run:", with no node name, since a registered channel has
+// no node. A nil error is ignored, and a closed channel retires quietly —
+// the expected end of a source that stopped cleanly. Registration after
+// Exec or Run panics.
 func (c *Coordinator) Monitor(errs <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -119,10 +121,11 @@ func (c *Coordinator) Checks() []Check {
 // and its OnReady hooks have run when fn starts, it is not ready once
 // shutdown begins, and a monitored failure ends fn's context. It returns
 // fn's error as fn returned it, joined with any monitored failure wrapped
-// "run:" and with the shutdown's error. When startup fails, or ctx ends
-// before startup completes, fn does not run and Exec returns the startup
-// error, or ctx's, wrapped "startup:" and joined with the shutdown's. A second call to Exec or
-// [Coordinator.Run] panics.
+// "run:", a [Monitored] value's labelled with its node's name, and with the
+// shutdown's error. When startup fails, or ctx ends before startup
+// completes, fn does not run and Exec returns the startup error, or ctx's,
+// wrapped "startup:" and joined with the shutdown's. A second call to Exec
+// or [Coordinator.Run] panics.
 func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) error {
 	return c.execute(ctx, "Exec", false, func(runCtx context.Context, monitored func() error) error {
 		err := fn(runCtx)
@@ -138,8 +141,9 @@ func (c *Coordinator) Exec(ctx context.Context, fn func(context.Context) error) 
 // so is a ctx that ends before or during startup: whatever began to start is
 // shut down, and Run returns only the shutdown's error, nil when it is
 // clean. A startup failure returns the startup error wrapped "startup:", and
-// a monitored failure returns it wrapped "run:", each joined with the
-// shutdown's. A second call to Run or [Coordinator.Exec] panics.
+// a monitored failure returns it wrapped "run:", a [Monitored] value's
+// labelled with its node's name, each joined with the shutdown's. A second
+// call to Run or [Coordinator.Exec] panics.
 func (c *Coordinator) Run(ctx context.Context) error {
 	return c.execute(ctx, "Run", true, func(runCtx context.Context, monitored func() error) error {
 		<-runCtx.Done()
@@ -249,19 +253,38 @@ func (c *Coordinator) setState(s state) {
 	c.mu.Unlock()
 }
 
+// monitoredNode is a [Monitored] value and the name of the node whose
+// value it is, which labels its runtime failures.
+type monitoredNode struct {
+	name  string
+	value Monitored
+}
+
+// monitoredChannel is one channel watch reads, with the label its failures
+// take: a [Monitored] value's node name, or empty for a channel registered
+// with [Coordinator.Monitor], which has no node.
+type monitoredChannel struct {
+	label string
+	errs  <-chan error
+}
+
 // watch watches every channel registered with [Coordinator.Monitor] and
 // every [Monitored] value's Err channel, read now that startup has
 // completed, until ctx ends. The first non-nil error any of them yields
-// fails the run. A nil channel never yields, so it is not watched. watch
-// returns a function reporting the first monitored failure, nil until one
-// occurs.
+// fails the run; a Monitored value's is labelled with its node's name, as
+// a startup or shutdown error is. A nil channel never yields, so it is not
+// watched. watch returns a function reporting the first monitored failure,
+// nil until one occurs.
 func (c *Coordinator) watch(
 	ctx context.Context,
 	fail context.CancelCauseFunc,
 ) func() error {
-	channels := slices.Clone(c.monitors)
+	channels := make([]monitoredChannel, 0, len(c.monitors)+len(c.monitored))
+	for _, ch := range c.monitors {
+		channels = append(channels, monitoredChannel{errs: ch})
+	}
 	for _, m := range c.monitored {
-		channels = append(channels, m.Err())
+		channels = append(channels, monitoredChannel{label: m.name, errs: m.value.Err()})
 	}
 
 	var (
@@ -269,17 +292,20 @@ func (c *Coordinator) watch(
 		first error
 	)
 	for _, ch := range channels {
-		if ch == nil {
+		if ch.errs == nil {
 			continue
 		}
 		go func() {
 			for {
 				select {
-				case err, ok := <-ch:
+				case err, ok := <-ch.errs:
 					if !ok {
 						return
 					}
 					if err != nil {
+						if ch.label != "" {
+							err = fmt.Errorf("%s: %w", ch.label, err)
+						}
 						// Recording and failing under one lock keeps the
 						// failure reported the run's cause.
 						mu.Lock()
