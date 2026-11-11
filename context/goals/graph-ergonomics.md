@@ -152,7 +152,7 @@ Release       go-web-sdk-template: template/v0.14.0
 
 ## Progress
 
-slices 0/10 committed · standards — · spec — · editor —
+slices 10/10 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -228,6 +228,18 @@ slices 0/10 committed · standards — · spec — · editor —
 - migrate-templates: both templates release, marked **Breaking:**: go-web-sdk-template template/v0.14.0, go-cli-sdk-template template/v0.2.0.
 - migrate-templates: the upgrade slices carry only the break needed to compile and stay green (web: the reactors group; CLI: cli.Program); later slices finish the migration.
 - migrate-templates: the goal record changes on a migrate-templates branch in go-core, the root, as migrate-libraries did.
+- migrate-templates: the web template creates the reactors group in defineReactors, which New calls before defineServer, so the server's Define line can order after it.
+- migrate-templates: the web App keeps its own run-once guard, because web.Service keeps no state between runs.
+- migrate-templates: the web template's Roots lists only the server and the reactors group; the server reaches the config and logger nodes through Use.
+- migrate-templates: the web template adds a "writer" g.Value node for the logger's writer, and groups the Nodes fields by layer.
+- migrate-templates: the web router helpers (middleware, routes, mountAPI, mountAdmin) keep their (s, n) signatures.
+- migrate-templates: the web template's rootDrops test helper checks whether the reactors group is empty by building the group alone, since go-core exports no list of a group's members.
+- migrate-templates: the web starter README's database snippet names its node "db" and makes its constructor a *Nodes method, so it passes CheckNames.
+- migrate-templates: the CLI Leaves layer test's fixture leaf defines its nodes on the App's own Graph() and Root(), with no test-only export.
+- migrate-templates: the CLI layer test builds the lifecycle-config node even for a leaf that declares no nodes.
+- migrate-templates: both CHANGELOGs link go-core's migration guide at https://github.com/standards-lab/go-core/blob/main/CHANGELOG.md#migrating-from-v0100.
+- migrate-templates: the CLI template's context/README.md version line moves to template/v0.2.0; the web template records its version only in its CHANGELOG.
+- migrate-templates: standards review changed the web Build-failure test's fixture error to "unavailable", so the stderr match finds "logger" only in the node's name.
 
 ## Pending edits
 
@@ -236,3 +248,5 @@ slices 0/10 committed · standards — · spec — · editor —
 - architecture · standards/go-elemental/principles/construction-and-execution.md: new principle page (rule, graph.After/In exception, test-support scope); index it in the principles README and the go-elemental README.
 - go-web-sdk, go-cli-sdk, go-database, go-storage · STANDARDS.md: point to construction-and-execution.md.
 - architecture · standards/go-elemental/principles/cli-applications.md:39, 87: names cli.Run with WithGraph; name cli.Program{Root, Graph, LifecycleConfig}.Run instead.
+- architecture · standards/go-elemental/principles/tests-and-docs.md ("The unit tier"): cites go-web-sdk-template's AppendReactor in internal/app/export_test.go as the fixture-node hook example; migrate-templates deletes it — cite a fixture reactor joining with graph.In(Reactors) instead, or drop the clause.
+- coordinator · context/graph-ergonomics.md (opening paragraph): name the templates' releases, go-web-sdk-template template/v0.14.0 and go-cli-sdk-template template/v0.2.0, beside the libraries' releases that moved onto go-core v0.11.0.
