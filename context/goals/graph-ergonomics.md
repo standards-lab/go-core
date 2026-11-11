@@ -1,13 +1,13 @@
 # goal · graph-ergonomics
 
-- **State:** brief ready
-- **Task:** release
-- **Branch:** release
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] design-review
-2. [ ] release
+2. [x] release
 3. [ ] migrate-libraries
 4. [ ] migrate-templates
 5. [ ] migrate-service
@@ -128,10 +128,6 @@ Door          Two-way until the tag; the code and docs land on main by pull requ
 Release       v0.11.0 (go-core)
 ```
 
-## Progress
-
-slices 8/8 committed · standards ✓ · spec ✓ · editor ✓
-
 ## Decisions
 
 - design-review: redesign go-core's own graph and lifecycle; rejected uber-go/fx and dig (OnStart/OnStop hooks the lifecycle principle retired, run-time reflection), samber/do v2 (no layered concurrent startup), google/wire (archived 2025-08); go-core stays standard-library only.
@@ -169,6 +165,7 @@ slices 8/8 committed · standards ✓ · spec ✓ · editor ✓
 - release: an After naming an empty group is reported by Dropped even in a Build of the full root set, so the empty-Dropped assertion catches a forgotten In.
 - release: graph/doc.go keeps its overview list of wiring panics, which predates the task.
 - release: the CHANGELOG's v0.11.0 section carries a "Migrating from v0.10.0" subsection, as v0.6.0 does.
+- release: the CHANGELOG's v0.11.0 date is the day the tag is cut, 2026-11-11.
 
 ## Pending edits
 

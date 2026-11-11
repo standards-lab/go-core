@@ -6,7 +6,7 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
-## [v0.11.0] - 2026-11-10
+## [v0.11.0] - 2026-11-11
 
 A node's place in the graph is declared where it is defined, not in its constructor, and the
 System and observers name nodes by their handles. `graph.After` and `graph.In` place a node at
