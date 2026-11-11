@@ -1,8 +1,8 @@
 # goal · api-maintenance
 
-- **State:** idle
-- **Task:** none
-- **Branch:** none
+- **State:** building
+- **Task:** libraries
+- **Branch:** libraries
 
 ## Tasks
 
@@ -14,88 +14,138 @@
 6. [ ] template
 7. [ ] service
 
-## Task brief · core
+## Task brief · libraries
 
 ```
-Problem       go-core's reactor.New and event.NewRecorder take functional
-              options, and sqlate's Begin, Transact, and Beginner take
-              TxOption functions. Both break the construction-and-execution
-              rule. They sit at the bottom of the dependency order, so every
-              later task in the goal migrates onto their converted forms.
-              sqlate also trails its currency.
-Behaviors     1. reactor.New takes a source, a handler, and a trailing
-                 reactor.Options. The zero Options keeps today's default:
-                 handlers are cancelled only when Shutdown's context ends.
-              2. Options.CancelAfter d makes Shutdown cancel the handlers'
-                 contexts after d and then wait for them to unwind, bounded
-                 by Shutdown's context, as the CancelAfter option does today.
-              3. reactor.CancelWithin(drain) returns half of drain as a
-                 time.Duration, for Options.CancelAfter.
-              4. reactor no longer exports the Option type or the
-                 CancelAfter option function.
-              5. event.NewRecorder takes a sink, a source, and a trailing
-                 event.Options{Clock, IDs}. The zero Options stamps
-                 time.Now in UTC and version 7 UUIDs. A set Clock or IDs
-                 replaces its default. A nil sink or an empty source still
-                 panics with an "event: " message.
-              6. event no longer exports the Option type or the Clock and
-                 IDs option functions.
-              7. sqlate's DB.Begin takes a context and a *sql.TxOptions.
-                 nil opens a default transaction. A non-nil value's
-                 isolation level and read-only flag reach the driver as
-                 given.
-              8. DB.Transact and Transact take a trailing *sql.TxOptions
-                 and pass it to Begin. Commit on success, rollback on error
-                 with the rollback failure joined, and rollback then
-                 re-panic on panic are unchanged.
-              9. Beginner's Begin has the same signature as DB.Begin.
-                 *DB, and any type that embeds it, still satisfies it.
-             10. sqlate no longer exports TxOption, Isolation, or ReadOnly.
-             11. The postgres and sqlint sub-modules each require sqlate
-                 v0.7.0 and pass their checks with the workspace off.
-             12. The READMEs, guides, and package docs of both repositories
-                 show only the new forms. Each changelog's release lists
-                 the removals as Breaking, with a "Migrating from" section.
-                 Each repository's standards file points to the
-                 construction-and-execution principle.
-             13. go-core's and sqlate's currency commands exit 0, and both
-                 checks pass.
-Test seams    The exported constructors and runners, exercised from
-              external test packages: reactor.New and event.NewRecorder
-              with Options values, and sqlate's DB.Begin, DB.Transact, and
-              Transact over sqltest's recording driver, which records the
-              transaction options each begin receives.
-Slices        1. sqlate upgrade: go 1.27.4, golangci-lint 2.15.0,
-                 mise-action v5.2.7, create-gh-release-action v1.12.0,
-                 postgres onto pgx v5.12.0 and sqlate v0.6.1, sqlint onto
-                 sqlate v0.6.1. Done when currency exits 0 and the check
-                 passes. (go-core is current: no upgrade slice.)
-              2. reactor.Options and CancelWithin as a duration, with
-                 reactor's tests on the new form (1-4).
-              3. event.Options, with the recorder's tests on the new form
-                 (5-6).
-              4. go-core docs, changelog v0.12.0 with its migration
-                 section, and the standards pointer (12, go-core).
-              5. sqlate's Begin, Transact, and Beginner on *sql.TxOptions,
-                 with the library's own callers and tests moved (7-10).
-              6. The postgres sub-module's test implementer of Beginner and
-                 both sub-modules' changelogs. Release preparation moves
-                 postgres and sqlint onto sqlate v0.7.0 once it is tagged
-                 (11).
-              7. sqlate's guide, package docs, changelog v0.7.0 with its
-                 migration section, and the standards pointer (12, sqlate).
-Out of scope  Migrating any consumer: go-database's sweeper, go-messaging,
-              the templates, and go-web-service are later tasks.
-              reactor.Every, Wake, and Gate, which take no options.
-              query.Projection.Continue, whose context is exempt from the
-              count. graph.After and graph.In, the rule's named exception.
-              The principle page's context-exemption sentence, at sync.
-Door          One-way for the four tags, which reach every consumer's
+Problem       go-database's sweep.New and go-web-sdk's middleware.RequestID
+              take functional options, and web.WriteProblem takes five
+              inputs. All three break the construction-and-execution rule.
+              go-observability's docs name the WithIDSource option that
+              goes away. All three repositories trail go-core v0.12.0, and
+              go-database also trails sqlate v0.7.0 and pgx v5.13.0. Their
+              sub-modules re-tag on each base's new release before the
+              next tier migrates.
+Behaviors     1. sweep.New takes a db, its registrations, the shutdown
+                 drain, a logger, and a trailing sweep.Options{Unlocked,
+                 Gate, OnPass}. The zero Options keeps today's defaults:
+                 each pass claims its advisory lock, a dialect without
+                 the try-lock capability is refused with ErrNoTryLocker,
+                 no gate is held, and failed passes are logged at warn.
+                 New still refuses its invalid inputs, with an error and
+                 before any I/O, and still panics on a nil db or logger.
+              2. Options.Unlocked runs the sweeper without claiming
+                 locks, on any dialect. A non-nil Options.Gate is held
+                 shared for each pass, as Gated does today. A non-nil
+                 Options.OnPass receives each Pass in place of the warn
+                 log, as OnPass does today.
+              3. sweep no longer exports the Option type or the
+                 Unlocked, Gated, and OnPass option functions.
+              4. The sweeper's reactor still cancels a pass that is
+                 still running at half the shutdown drain. On go-core
+                 v0.12.0 it sets this through
+                 reactor.Options.CancelAfter.
+              5. middleware.RequestID takes a
+                 middleware.RequestIDOptions{Source, TrustedHeader}. The
+                 id is the first of these that yields one: Source's
+                 non-empty return; then TrustedHeader's inbound value,
+                 when it is 1 to 128 visible ASCII characters; then a
+                 generated 16-byte hex id. The id still reaches the
+                 request's context and the X-Request-Id response
+                 header. A nil Source or an empty TrustedHeader is
+                 unset and doesn't panic, so the zero value always
+                 generates.
+              6. middleware no longer exports RequestIDOption,
+                 WithIDSource, or WithTrustedHeader.
+              7. web no longer exports WriteProblem. Recoverer,
+                 ContentType, and rate-limit's limited and failed
+                 responses send the same problems as before through
+                 Problem.WriteFor: the same status, the defaulted
+                 title, detail, the request path as instance, and the
+                 request_id member.
+              8. go-observability's package docs and README name
+                 RequestIDOptions.Source where they named WithIDSource.
+                 RequestIDSource's behavior is unchanged.
+              9. go-database requires sqlate v0.7.0 and go-core v0.12.0.
+                 postgres requires pgx v5.13.0 and go-database v0.12.0.
+                 go-web-sdk requires go-core v0.12.0. rate-limit
+                 requires go-core v0.12.0 and go-web-sdk v0.17.0.
+                 go-observability requires go-core v0.12.0. otlp
+                 requires go-observability v0.4.0. Every module passes
+                 its check with the workspace off.
+             10. go-database's and go-web-sdk's READMEs, guides, and
+                 package docs show only the new forms. Each base
+                 changelog lists the removals as Breaking, with a
+                 "Migrating from" section, and marks its go-core
+                 requirement (and, for go-database, its sqlate
+                 requirement) as Breaking. go-observability's v0.4.0
+                 marks its go-core requirement Breaking and records the
+                 doc fix. postgres, rate-limit, and otlp each carry one
+                 Breaking line for their base's new requirement.
+             11. go-observability's standards file points to the
+                 construction-and-execution principle. go-database's
+                 and go-web-sdk's pointers name the converted forms:
+                 sweep.Options, RequestIDOptions, and Problem.WriteFor.
+             12. All three repositories' currency commands exit 0, and
+                 every check passes.
+Test seams    The exported constructors, exercised from external test
+              packages: sweep.New with Options values over sqlate's
+              sqltest recording driver and its locking and non-locking
+              dialects, and middleware.RequestID, Recoverer, ContentType,
+              and rate-limit's New, driven through net/http/httptest and
+              their recorded responses.
+Slices        1. go-database upgrade: sqlate v0.7.0 and go-core v0.12.0,
+                 with sweep's reactor call moved to
+                 reactor.Options{CancelAfter} (4), and postgres onto
+                 pgx v5.13.0. Done when currency exits 0 and the check
+                 passes.
+              2. go-web-sdk upgrade: the base and rate-limit onto
+                 go-core v0.12.0, with nothing to adapt.
+              3. go-observability upgrade: the base onto go-core
+                 v0.12.0, with nothing to adapt. (Slices 2-3: the proxy
+                 doesn't list go-core v0.12.0 yet, so currency exits 0
+                 either way; done when go.mod requires v0.12.0 and the
+                 check passes.)
+              4. sweep.Options, with sweep's tests on the new form
+                 (1-3).
+              5. go-database's docs, changelog v0.12.0 with its
+                 migration section, the updated standards pointer, and
+                 postgres's changelog. Release preparation moves
+                 postgres onto go-database v0.12.0 once it is tagged
+                 (9-11, go-database).
+              6. RequestIDOptions, with RequestID's tests on the new
+                 form (5-6).
+              7. WriteProblem removed. Recoverer, ContentType, and
+                 rate-limit move to Problem.WriteFor, with their
+                 response tests unchanged (7).
+              8. go-web-sdk's docs, changelog v0.17.0 with its migration
+                 section, the updated standards pointer, and
+                 rate-limit's changelog. Release preparation moves
+                 rate-limit onto go-web-sdk v0.17.0 once it is tagged
+                 (9-11, go-web-sdk).
+              9. go-observability's docs fix, changelog v0.4.0, and
+                 standards pointer, and otlp's changelog. Release
+                 preparation moves otlp onto go-observability v0.4.0
+                 once it is tagged (8-11, go-observability).
+Out of scope  go-web-service's RequestID and WriteProblem calls, which
+              move in the service task. The templates. webtest's
+              variadic Header parameters, left as data lists. The
+              variadic data lists Chain, Use, ContentType, Readiness,
+              NewErrorWriter's matchers, and ErrorWriter.Detail.
+              admin.New, which already conforms. go-storage,
+              go-messaging, blobfs, and go-cli-sdk, which are later
+              tasks. The architecture notes that cite WriteProblem, and
+              the principle page's context-exemption sentence, at sync.
+Door          One-way for the six tags, which reach every consumer's
               module requirements. Two-way for the code and docs, which
               merge by pull request before tagging.
-Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
-              sqlint/v0.4.0
+Release       go-database v0.12.0, postgres/v0.7.0; go-web-sdk v0.17.0,
+              middleware/rate-limit/v0.5.0; go-observability v0.4.0,
+              otlp/v0.4.0
 ```
+
+## Progress
+
+slices 0/9 committed · standards — · spec — · editor —
 
 ## Decisions
 
@@ -116,8 +166,12 @@ Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
 - core: Transact and DB.Transact take *sql.TxOptions as a required trailing parameter, not variadic; callers pass nil for a default transaction.
 - core: postgres v0.7.0 and sqlint v0.4.0 mark their sqlate v0.7.0 requirement Breaking, as their earlier entries did for breaking base releases.
 - core: behavior 12's "Migrating from" section applies to the changelogs that record removals (go-core, sqlate); postgres and sqlint remove nothing, so each carries one Breaking line for the sqlate v0.7.0 requirement.
+- libraries: web.WriteProblem is removed outright; callers use Problem{...}.WriteFor(w, r), the rule's existing struct-with-method form (no standard library form for RFC 9457).
+- libraries: middleware.RequestID takes RequestIDOptions{Source, TrustedHeader}; a nil Source or empty TrustedHeader is unset, and the old options' panics go.
+- libraries: webtest Client.Do, Get, Post, Put, and Delete keep their variadic Header parameters, which are data lists, not functional options.
+- libraries: go-observability releases v0.4.0 on go-core v0.12.0, marking the requirement Breaking per graph-ergonomics' precedent; otlp re-tags as otlp/v0.4.0.
 
 ## Pending edits
 
 - architecture · construction-and-execution principle: a context.Context parameter does not count toward the four required inputs.
-- libraries · plan round: go-observability's version (v0.3.1 patch, or a minor once it moves onto go-core v0.12.0, per graph-ergonomics' precedent) and whether otlp re-tags on it.
+- standards-lab · context/html-artifacts.md:409: replace go-web-sdk's `WriteProblem` with `Problem.WriteFor` (go-web-sdk v0.17.0).
