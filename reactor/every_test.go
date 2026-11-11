@@ -19,7 +19,7 @@ func TestEvery_DropsStaleTicks(t *testing.T) {
 		}
 		time.Sleep(3 * interval) // outlast several ticks
 		return nil
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestEvery_HandlerErrorEndsIt(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		calls++
 		return boom
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

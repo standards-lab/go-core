@@ -11,9 +11,9 @@
 //   - [Reactor.Ready], whether the reactor runs and its source is
 //     receiving, and [Reactor.Err],
 //     the channel that reports a failure while running
-//   - [Option], which configures a Reactor, with [CancelAfter], which
-//     bounds how long its drain lets the handling in flight run before it
-//     cancels the handlers, and [CancelWithin], which derives that bound
+//   - [Options], which configures a Reactor, with [Options.CancelAfter],
+//     which bounds how long its drain lets the handling in flight run before
+//     it cancels the handlers, and [CancelWithin], which derives that bound
 //     from a coordinator's drain timeout
 //   - [Draining], which returns a handler's drain signal
 //   - [Every], a Source that delivers the time on each tick of an interval
@@ -38,7 +38,7 @@
 //
 // A reactor's handling outlives the run context and ends at its layer's
 // drain: [Reactor.Start] and [Reactor.Shutdown] state the two phases, and
-// [CancelAfter] bounds the first. A handler that runs in several steps,
+// [Options.CancelAfter] bounds the first. A handler that runs in several steps,
 // such as a loop over bounded passes, reads [Draining] to stop between
 // steps once the drain begins.
 package reactor

@@ -30,7 +30,7 @@ func settle() { time.Sleep(50 * time.Millisecond) }
 // Wake without a nudge is an interval: it delivers on every tick.
 func TestWake_Interval(t *testing.T) {
 	c := newCounter()
-	r := reactor.New(reactor.Wake(5*time.Millisecond), c.fn)
+	r := reactor.New(reactor.Wake(5*time.Millisecond), c.fn, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestWake_NudgesCoalesce(t *testing.T) {
 	for range 5 {
 		w.Nudge()
 	}
-	r := reactor.New(w, c.fn)
+	r := reactor.New(w, c.fn, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestWake_NudgeDuringRun(t *testing.T) {
 			<-release
 		}
 		return nil
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestWake_NudgeDuringRun(t *testing.T) {
 func TestWake_NoRunAfterShutdown(t *testing.T) {
 	c := newCounter()
 	w := reactor.Wake(time.Hour)
-	r := reactor.New(w, c.fn)
+	r := reactor.New(w, c.fn, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestWake_NoRunAfterShutdown(t *testing.T) {
 func TestWake_HandlerErrorOnErr(t *testing.T) {
 	boom := errors.New("boom")
 	w := reactor.Wake(time.Hour)
-	r := reactor.New(w, func(context.Context, time.Time) error { return boom })
+	r := reactor.New(w, func(context.Context, time.Time) error { return boom }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
