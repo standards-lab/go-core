@@ -99,7 +99,7 @@ Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
 
 ## Progress
 
-slices 5/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86, 5 sqlate 838e3e9) · standards — · spec — · editor —
+slices 6/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86, 5 sqlate 838e3e9, 6 sqlate 980c58a) · standards — · spec — · editor —
 
 ## Decisions
 
@@ -118,6 +118,7 @@ slices 5/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 
 - core: sqlate's go.mod files stay at `go 1.27` with no toolchain line; the repository tracks only the Go minor version.
 - core: event.Options applies its defaults per field: a set Clock keeps UUID v7 IDs, a set IDs keeps time.Now in UTC, as the old options did.
 - core: Transact and DB.Transact take *sql.TxOptions as a required trailing parameter, not variadic; callers pass nil for a default transaction.
+- core: postgres v0.7.0 and sqlint v0.4.0 mark their sqlate v0.7.0 requirement Breaking, as their earlier entries did for breaking base releases.
 
 ## Pending edits
 
