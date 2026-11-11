@@ -1,13 +1,13 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** libraries
-- **Branch:** libraries
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
 1. [x] core
-2. [ ] libraries
+2. [x] libraries
 3. [ ] storage-cli
 4. [ ] messaging
 5. [ ] blobfs
@@ -142,10 +142,6 @@ Release       go-database v0.12.0, postgres/v0.7.0; go-web-sdk v0.17.0,
               middleware/rate-limit/v0.5.0; go-observability v0.4.0,
               otlp/v0.4.0
 ```
-
-## Progress
-
-slices 9/9 committed · standards ✓ · spec ✓ (no gaps) · editor ✓
 
 ## Decisions
 
