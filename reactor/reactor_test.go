@@ -60,7 +60,7 @@ func TestReactor_ShutdownDrainsInFlight(t *testing.T) {
 		ended.Store(ctx.Err() != nil)
 		finished.Store(true)
 		return nil
-	})
+	}, reactor.Options{})
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	if err := r.Start(runCtx); err != nil {
@@ -90,7 +90,7 @@ func TestReactor_RunContextDoesNotStop(t *testing.T) {
 	r := reactor.New(reactor.Every(2*time.Millisecond), func(context.Context, time.Time) error {
 		calls.Add(1)
 		return nil
-	})
+	}, reactor.Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := r.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestReactor_ShutdownDeadlineCancelsHandler(t *testing.T) {
 		<-ctx.Done()
 		cancelled <- ctx.Err()
 		return nil
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestReactor_CancelAfterCancelsThenWaits(t *testing.T) {
 		time.Sleep(20 * time.Millisecond) // the handler takes time to unwind
 		close(unwound)
 		return ctx.Err()
-	}, reactor.CancelAfter(20*time.Millisecond))
+	}, reactor.Options{CancelAfter: 20 * time.Millisecond})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestReactor_CancelAfterStillBoundedByContext(t *testing.T) {
 		started <- struct{}{}
 		<-release // ignores cancellation
 		return nil
-	}, reactor.CancelAfter(10*time.Millisecond))
+	}, reactor.Options{CancelAfter: 10 * time.Millisecond})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestReactor_CancelAfterStillBoundedByContext(t *testing.T) {
 func TestReactor_CancelAfterUnusedIsClean(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		return nil
-	}, reactor.CancelAfter(time.Second))
+	}, reactor.Options{CancelAfter: time.Second})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -183,15 +183,23 @@ func TestReactor_CancelAfterUnusedIsClean(t *testing.T) {
 	}
 }
 
-// CancelWithin cancels after half the drain timeout it is given: a handler
-// that ignores the drain is cancelled once that half passes.
-func TestReactor_CancelWithinIsHalfTheDrain(t *testing.T) {
+// CancelWithin returns half the drain timeout it is given, the period a
+// reactor's Options.CancelAfter takes under that coordinator.
+func TestCancelWithin_ReturnsHalfTheDrain(t *testing.T) {
+	if got := reactor.CancelWithin(40 * time.Millisecond); got != 20*time.Millisecond {
+		t.Errorf("CancelWithin(40ms) = %v, want 20ms", got)
+	}
+}
+
+// A handler that ignores the drain is cancelled once the CancelAfter period
+// passes, and not before.
+func TestReactor_CancelAfterWaitsThePeriod(t *testing.T) {
 	started := make(chan struct{}, 1)
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
 		started <- struct{}{}
 		<-ctx.Done()
 		return ctx.Err()
-	}, reactor.CancelWithin(40*time.Millisecond))
+	}, reactor.Options{CancelAfter: 20 * time.Millisecond})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +221,7 @@ func TestReactor_HandlerErrorOnErr(t *testing.T) {
 	boom := errors.New("boom")
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		return boom
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +242,7 @@ func TestReactor_HandlerErrorOnErr(t *testing.T) {
 func TestReactor_UnreadErrReachesShutdown(t *testing.T) {
 	boom := errors.New("boom")
 	src := failing{err: boom, fail: make(chan struct{})}
-	r := reactor.New[int](src, func(context.Context, int) error { return nil })
+	r := reactor.New[int](src, func(context.Context, int) error { return nil }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +261,7 @@ func TestReactor_UnreadErrReachesShutdown(t *testing.T) {
 func TestReactor_ErrorWhileDrainingGoesToShutdown(t *testing.T) {
 	boom := errors.New("boom")
 	src := &stub{err: boom}
-	r := reactor.New[int](src, func(context.Context, int) error { return nil })
+	r := reactor.New[int](src, func(context.Context, int) error { return nil }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +275,7 @@ func TestReactor_ErrorWhileDrainingGoesToShutdown(t *testing.T) {
 }
 
 func TestReactor_Ready(t *testing.T) {
-	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
+	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	if r.Ready() {
 		t.Error("ready before Start")
 	}
@@ -299,7 +307,7 @@ func TestReactor_NotReadyWhileDraining(t *testing.T) {
 		}
 		<-release
 		return nil
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +327,7 @@ func TestReactor_NotReadyWhileDraining(t *testing.T) {
 }
 
 func TestReactor_StartTwice(t *testing.T) {
-	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
+	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +340,7 @@ func TestReactor_StartTwice(t *testing.T) {
 }
 
 func TestReactor_ShutdownBeforeStart(t *testing.T) {
-	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
+	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	if err := shutdown(t, r, failsafe); err != nil {
 		t.Errorf("Shutdown before Start = %v", err)
 	}
@@ -347,7 +355,7 @@ func TestReactor_ShutdownBeforeStart(t *testing.T) {
 // A second Shutdown of a reactor retired before Start returns nil: it has
 // no source to stop.
 func TestReactor_ShutdownTwiceBeforeStart(t *testing.T) {
-	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
+	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	for i := range 2 {
 		if err := shutdown(t, r, failsafe); err != nil {
 			t.Errorf("Shutdown %d before Start = %v", i+1, err)
@@ -358,7 +366,7 @@ func TestReactor_ShutdownTwiceBeforeStart(t *testing.T) {
 // A second Shutdown of a drained reactor returns at once, with the first's
 // outcome.
 func TestReactor_ShutdownTwiceAfterStart(t *testing.T) {
-	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil })
+	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +401,7 @@ func TestReactor_DrainingClosesWhenShutdownBegins(t *testing.T) {
 			case <-time.After(time.Millisecond):
 			}
 		}
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -428,7 +436,7 @@ func TestReactor_HandlerKeepsStartValues(t *testing.T) {
 		default:
 		}
 		return nil
-	})
+	}, reactor.Options{})
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKey("start"), "run"))
 	if err := r.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -459,7 +467,7 @@ func TestReactor_HandlerKeepsSourceDeadline(t *testing.T) {
 		<-ctx.Done()
 		got <- result{ok, v, ctx.Err()}
 		return nil
-	})
+	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

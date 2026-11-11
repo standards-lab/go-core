@@ -57,30 +57,25 @@ const (
 	reactorStopped
 )
 
-// Option configures a Reactor.
-type Option func(*reactorOptions)
-
-type reactorOptions struct {
-	cancelAfter time.Duration
+// Options configures a Reactor. The zero value cancels the handlers only
+// when Shutdown's context ends.
+type Options struct {
+	// CancelAfter bounds how long Shutdown lets the handling in flight run
+	// before it cancels the handlers' contexts. Shutdown then waits for them
+	// to unwind, until its own context ends. Set it below the coordinator's
+	// drain timeout, so a reactor that had to cancel its handlers says so in
+	// Run's result; the coordinator drops any error that arrives after its
+	// own deadline.
+	CancelAfter time.Duration
 }
 
-// CancelAfter bounds how long Shutdown lets the handling in flight run
-// before it cancels the handlers' contexts. Shutdown then waits for them to
-// unwind, until its own context ends. Set it below the coordinator's drain
-// timeout, so a reactor that had to cancel its handlers says so in Run's
-// result; the coordinator drops any error that arrives after its own
-// deadline. Without CancelAfter, the handlers are cancelled only when
-// Shutdown's context ends.
-func CancelAfter(d time.Duration) Option {
-	return func(o *reactorOptions) { o.cancelAfter = d }
-}
-
-// CancelWithin sets CancelAfter for a reactor that drains under a
-// coordinator whose drain timeout is drain, to half of it: the handlers are
-// cancelled inside the drain timeout, and a reactor that had to cancel them
-// reports it well before the coordinator's deadline drops the report.
-func CancelWithin(drain time.Duration) Option {
-	return CancelAfter(drain / 2)
+// CancelWithin returns the [Options.CancelAfter] period for a reactor that
+// drains under a coordinator whose drain timeout is drain: half of it, so
+// the handlers are cancelled inside the drain timeout, and a reactor that
+// had to cancel them reports it well before the coordinator's deadline
+// drops the report.
+func CancelWithin(drain time.Duration) time.Duration {
+	return drain / 2
 }
 
 // Reactor runs a Source into a Func. It is single use: Start once,
@@ -88,7 +83,7 @@ func CancelWithin(drain time.Duration) Option {
 type Reactor[T any] struct {
 	src  Source[T]
 	fn   Func[T]
-	opts reactorOptions
+	opts Options
 
 	mu       sync.Mutex
 	state    reactorState
@@ -100,17 +95,15 @@ type Reactor[T any] struct {
 	errs     chan error
 }
 
-// New returns a reactor that runs src into fn.
-func New[T any](src Source[T], fn Func[T], opts ...Option) *Reactor[T] {
+// New returns a reactor that runs src into fn, configured by opts.
+func New[T any](src Source[T], fn Func[T], opts Options) *Reactor[T] {
 	r := &Reactor[T]{
 		src:      src,
 		fn:       fn,
 		draining: make(chan struct{}),
 		done:     make(chan struct{}),
 		errs:     make(chan error, 1),
-	}
-	for _, opt := range opts {
-		opt(&r.opts)
+		opts:     opts,
 	}
 	return r
 }
@@ -162,13 +155,13 @@ func (r *Reactor[T]) Start(ctx context.Context) error {
 
 // Shutdown drains the reactor in two phases. It closes the drain signal
 // ([Draining]), stops the source, and waits for the handling in flight;
-// once the [CancelAfter] period passes, it cancels the handlers' contexts
-// and waits for them to unwind. It returns once Receive returns, or when
-// ctx ends, which cancels the handlers and stops waiting. The error reports
-// a failure sent on Err that nothing read, the handlers' cancellation once
-// the CancelAfter period passed, or ctx's error, or else Receive's error.
-// Shutdown before Start retires the reactor, so it never starts, and a
-// later Shutdown of a retired reactor returns nil.
+// once the [Options.CancelAfter] period passes, it cancels the handlers'
+// contexts and waits for them to unwind. It returns once Receive returns,
+// or when ctx ends, which cancels the handlers and stops waiting. The error
+// reports a failure sent on Err that nothing read, the handlers'
+// cancellation once the CancelAfter period passed, or ctx's error, or else
+// Receive's error. Shutdown before Start retires the reactor, so it never
+// starts, and a later Shutdown of a retired reactor returns nil.
 func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	switch r.state {
@@ -195,8 +188,8 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	defer r.abort()
 
 	var cancelAt <-chan time.Time
-	if r.opts.cancelAfter > 0 {
-		t := time.NewTimer(r.opts.cancelAfter)
+	if r.opts.CancelAfter > 0 {
+		t := time.NewTimer(r.opts.CancelAfter)
 		defer t.Stop()
 		cancelAt = t.C
 	}
@@ -230,7 +223,7 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 					err = nil
 				}
 				return errors.Join(
-					fmt.Errorf("reactor: handlers cancelled after %v", r.opts.cancelAfter),
+					fmt.Errorf("reactor: handlers cancelled after %v", r.opts.CancelAfter),
 					err,
 				)
 			}

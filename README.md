@@ -43,9 +43,9 @@ stable as the standard library, this repository depends on the standard library 
   reads its exit code, and relays a backing service's connection so a test can sever it. `Run`
   runs the program once and returns its stdout, stderr, and exit code.
 - `reactor` — joins one source of occurrences to one function for the process lifetime: a
-  lifecycle component that drains the handling in flight at shutdown and cancels it once its
-  `CancelAfter` period passes. `Every` delivers on an interval, and `Wake` also delivers on each
-  `Waker.Nudge` a producer calls. `Gate` pauses background work while an operation runs
+  lifecycle component that drains the handling in flight at shutdown and cancels it once the
+  `Options.CancelAfter` period passes. `Every` delivers on an interval, and `Wake` also delivers
+  on each `Waker.Nudge` a producer calls. `Gate` pauses background work while an operation runs
   exclusively.
 
 ## Development

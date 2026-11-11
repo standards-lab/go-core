@@ -6,7 +6,7 @@
 
 ## Tasks
 
-1. [ ] core
+1. [x] core
 2. [ ] libraries
 3. [ ] storage-cli
 4. [ ] messaging
@@ -110,6 +110,12 @@ Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
 - plan: go-cli-sdk and go-cli-sdk-template join the goal; StringsVar becomes a flag.Value constructor used through fs.Var, the standard library's shape for custom flags.
 - core: reactor.CancelWithin stays, as a plain function returning half the drain as a duration.
 - core: sqlate takes the standard library's *sql.TxOptions in place of TxOption (existing solution adopted).
+- core: took pgx v5.13.0 (released 2026-11-11, after the brief named v5.12.0) in the upgrade slice; a minor bump with nothing to adapt, and the slice is done only when currency exits 0.
+- core: sqlate's go.mod files stay at `go 1.27` with no toolchain line; the repository tracks only the Go minor version.
+- core: event.Options applies its defaults per field: a set Clock keeps UUID v7 IDs, a set IDs keeps time.Now in UTC, as the old options did.
+- core: Transact and DB.Transact take *sql.TxOptions as a required trailing parameter, not variadic; callers pass nil for a default transaction.
+- core: postgres v0.7.0 and sqlint v0.4.0 mark their sqlate v0.7.0 requirement Breaking, as their earlier entries did for breaking base releases.
+- core: behavior 12's "Migrating from" section applies to the changelogs that record removals (go-core, sqlate); postgres and sqlint remove nothing, so each carries one Breaking line for the sqlate v0.7.0 requirement.
 
 ## Pending edits
 

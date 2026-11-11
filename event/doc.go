@@ -18,8 +18,8 @@
 //     which emits a command's events through one, with [NewRecorder], which
 //     returns one, and [Recorder.Emit], which wraps a command's body into
 //     the function a transaction runs
-//   - [Option], which configures a Recorder, with [Clock], the time it
-//     stamps, and [IDs], how it mints an event id
+//   - [Options], which configures a Recorder: [Options.Clock], the time it
+//     stamps, and [Options.IDs], how it mints an event id
 //   - [Permanent], which marks a handler's error as one redelivery cannot
 //     fix, and [IsPermanent], which reports the mark
 //

@@ -44,9 +44,10 @@ var (
 func fixed(s *sink) *event.Recorder[*tx] {
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.FixedZone("x", 3600))
 	n := 0
-	return event.NewRecorder[*tx](s, "/exercise",
-		event.Clock(func() time.Time { return at }),
-		event.IDs(func() string { n++; return strings.Repeat("a", n) }))
+	return event.NewRecorder[*tx](s, "/exercise", event.Options{
+		Clock: func() time.Time { return at },
+		IDs:   func() string { n++; return strings.Repeat("a", n) },
+	})
 }
 
 func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
@@ -92,7 +93,7 @@ func TestEmitStampsOneTimeForTheWholeQueue(t *testing.T) {
 	s := &sink{}
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	tick := func() time.Time { at = at.Add(time.Second); return at }
-	_, err := event.NewRecorder[*tx](s, "/exercise", event.Clock(tick)).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{Clock: tick}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
 		kindStarted.Raise(q, "ex-1", started{Round: 0})
 		kindStarted.Raise(q, "ex-1", started{Round: 1})
 		kindStopped.Raise(q, "ex-1", struct{}{})
@@ -175,7 +176,7 @@ func TestEmitFailsTheCommandWhenARaiseFails(t *testing.T) {
 
 func TestEmitMintsVersion7IDs(t *testing.T) {
 	s := &sink{}
-	_, err := event.NewRecorder[*tx](s, "/exercise").Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
 		kindStarted.Raise(q, "", started{})
 		kindStarted.Raise(q, "", started{})
 		return 0, nil
@@ -201,7 +202,7 @@ func TestEmitMintsVersion7IDs(t *testing.T) {
 // than UTC, and the recorder stamps the time in UTC.
 func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 	s := &sink{}
-	_, err := event.NewRecorder[*tx](s, "/exercise").Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
 		kindStarted.Raise(q, "", started{})
 		return 0, nil
 	})(&tx{})
@@ -213,15 +214,50 @@ func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 	}
 }
 
+// Setting one Options field replaces that default alone: a set Clock keeps
+// the version 7 ids, and a set IDs keeps time.Now in UTC.
+func TestNewRecorderKeepsTheDefaultsLeftUnset(t *testing.T) {
+	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	raise := func(_ *tx, q *event.Queue) (int, error) {
+		kindStarted.Raise(q, "", started{})
+		return 0, nil
+	}
+
+	clocked := &sink{}
+	if _, err := event.NewRecorder[*tx](clocked, "/exercise", event.Options{
+		Clock: func() time.Time { return at },
+	}).Emit(t.Context(), raise)(&tx{}); err != nil {
+		t.Fatal(err)
+	}
+	v7 := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	if e := clocked.events[0]; !e.Time.Equal(at) || !v7.MatchString(e.ID) {
+		t.Errorf("with Clock set: time %v, id %q; want the set time and a version 7 UUID", e.Time, e.ID)
+	}
+
+	ided := &sink{}
+	before := time.Now()
+	if _, err := event.NewRecorder[*tx](ided, "/exercise", event.Options{
+		IDs: func() string { return "fixed" },
+	}).Emit(t.Context(), raise)(&tx{}); err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now()
+	e := ided.events[0]
+	if e.ID != "fixed" || e.Time.Before(before) || e.Time.After(after) || e.Time.Location() != time.UTC {
+		t.Errorf("with IDs set: id %q, time %v; want the set id and now in UTC", e.ID, e.Time)
+	}
+}
+
 func TestNewRecorderRejectsAWiringDefect(t *testing.T) {
 	for name, build := range map[string]func(){
-		"nil sink":     func() { event.NewRecorder[*tx](nil, "/exercise") },
-		"empty source": func() { event.NewRecorder[*tx](&sink{}, "") },
+		"nil sink":     func() { event.NewRecorder[*tx](nil, "/exercise", event.Options{}) },
+		"empty source": func() { event.NewRecorder[*tx](&sink{}, "", event.Options{}) },
 	} {
 		func() {
 			defer func() {
-				if recover() == nil {
-					t.Errorf("%s did not panic", name)
+				msg, _ := recover().(string)
+				if !strings.HasPrefix(msg, "event: ") {
+					t.Errorf("%s panicked with %q, want an \"event: \" message", name, msg)
 				}
 			}()
 			build()
