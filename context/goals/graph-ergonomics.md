@@ -1,8 +1,8 @@
 # goal · graph-ergonomics
 
-- **State:** idle
-- **Task:** none
-- **Branch:** none
+- **State:** building
+- **Task:** migrate-service
+- **Branch:** migrate-service
 
 ## Tasks
 
@@ -12,29 +12,36 @@
 4. [x] migrate-templates
 5. [ ] migrate-service
 
-## Task brief · migrate-templates
+## Task brief · migrate-service
 
 ```
-Problem       go-core v0.11.0 shipped the new graph and lifecycle API, and
-              go-web-sdk v0.16.0 and go-cli-sdk v0.3.0 moved onto it. The two
-              templates still pin go-core v0.10.0 / v0.8.0 and the old SDKs,
-              and they trail their Go, lint, and CI action pins. Their
-              composition roots use removed APIs (Scope.After, Observe taking
-              a name, cli.Run with WithGraph). The web root's Run is a
-              hand-written Build and Coordinator with a fallback logger, its
-              layer tests scan Layers() by name, and both roots name their
-              nodes in comments. gonew scaffolds only tagged versions, so
-              every new service and CLI starts on the old API until each
-              template ships a release.
-Behaviors     1. Both templates current: Go 1.27.4, golangci-lint 2.15.0,
-                 jdx/mise-action v5.2.7 and taiki-e/create-gh-release-action
-                 v1.12.0 in the repository's and the generated module's
-                 workflows; web requires go-core v0.11.0 + go-web-sdk
-                 v0.16.0, CLI requires go-core v0.11.0 + go-cli-sdk v0.3.0.
-                 Each currency command exits 0; each check and integration
-                 tier passes.
-              2. The web App runs as one web.Service call; Run(ctx, stderr)
-                 returns the exit code:
+Problem       go-core v0.11.0 shipped the new graph and lifecycle API; the
+              libraries, go-cli-sdk, and both templates have moved onto it.
+              go-web-service and its slab CLI still pin go-core v0.10.0 and
+              the old SDKs, and trail their Go, lint, CI action, and compose
+              image pins. Their composition roots use removed APIs
+              (Scope.After in seven constructors, Observe taking a name,
+              cli.Run with WithGraph). The service's Run is a hand-written
+              Build and Coordinator with a fallback logger, its reactors are
+              a Ref slice the server ranges over, its layer tests scan
+              Layers() by name, and both roots name their nodes in comments.
+              The service is the workspace's reference consumer, and the last
+              of the goal's nine repositories still on the old API.
+Behaviors     1. go-web-service current: Go 1.27.4, golangci-lint 2.15.0,
+                 jdx/mise-action v5.2.7, taiki-e/create-gh-release-action
+                 v1.12.0; compose images grafana 13.3.1, loki 3.7.9, mimir
+                 3.2.4, nats 2.15.2-alpine, otel-collector-contrib 0.165.0,
+                 tempo 3.1.1. The service module requires go-core v0.11.0,
+                 go-web-sdk v0.16.0 + rate-limit v0.4.0, go-database v0.11.0
+                 + postgres v0.6.0, go-storage v0.7.0 + azureblob v0.6.0,
+                 go-observability + otlp v0.3.0, grpc v1.85.0. slab requires
+                 go-core v0.11.0, go-cli-sdk v0.3.0, go-web-sdk v0.16.0,
+                 sqlate v0.6.1 + postgres v0.6.0, nats.go v1.55.0, x/sys
+                 v0.50.0, x/term v0.48.0. slab stays its own module. The
+                 currency command exits 0; the check and the integration
+                 tier pass.
+              2. The service App runs as one web.Service call; Run(ctx,
+                 stderr) returns the exit code:
                  a. on bind it logs "server ready" with the bound address;
                  b. after a clean drain it logs "server stopped", returns 0;
                  c. on startup failure it logs "service failed" with an
@@ -47,108 +54,111 @@ Behaviors     1. Both templates current: Go 1.27.4, golangci-lint 2.15.0,
               3. App.Roots() returns the server and the reactors group. A
                  Build of Roots plus the lifecycle-config node contains
                  exactly the nodes a real Run builds, compared by handle.
-              4. The server is alone in the top layer; a fixture node above
-                 it shows the guard fails. A reactor joins by its
-                 graph.In(Reactors) alone and sits below the server; a
-                 fixture reactor ordered after the router, added black-box
-                 through the group, proves it.
-              5. While the reactors group is empty, a Build of the web root
-                 set reports exactly one Drop (the server's After of the
-                 reactors group); with any member, none. Any other Drop fails
-                 the guard (shown by a fixture After of an unbuilt node). A
-                 failing guard prints the System's layer table.
-              6. In the web root each node's order and group membership are
-                 on its Define line, and no constructor body orders anything:
-                 configuration and the logger's writer are g.Value nodes,
-                 readiness is g.Fresh; a "lifecycle config" node yields the
-                 lifecycle block; every constructor that reads a node is a
-                 *Nodes method.
-              7. In both templates each Nodes field's node/group name,
+              4. Placement, asserted by handle (LayerOf, Has, Dependencies),
+                 never by scanning Layers():
+                 a. the server is alone in the top layer; a fixture node
+                    above it shows the guard fails;
+                 b. the reactors group's members are the sweeper and the
+                    relay, each joined by its graph.In alone, each below the
+                    server;
+                 c. telemetry sits beneath every lifecycle participant;
+                 d. the schema sits above the database, storage, and broker,
+                    and below the sweeper and the relay; the relay sits above
+                    the broker;
+                 e. each participant is built in exactly one node.
+              5. A Build of the root set reports no Drop. A fixture After of
+                 an unbuilt node shows the guard fails, and a failing guard
+                 prints the System's layer table.
+              6. In the service root each node's order and group membership
+                 are on its Define line, and no constructor body orders
+                 anything: telemetry is defined ahead of the connections that
+                 order after it; configuration and the logger's writer are
+                 g.Value nodes; the gate, the nudge, and readiness are
+                 g.Fresh; a "lifecycle config" node yields the lifecycle
+                 block; every constructor that reads a node is a *Nodes
+                 method. The reactor Ref slice is gone.
+              7. In both modules each Nodes field's node/group name,
                  lowercased without spaces, equals the field name lowercased;
                  graphtest.CheckNames checks it; no Nodes field carries a
                  name comment.
-              8. The CLI App dispatches through cli.Program with its graph
-                 and lifecycle-config node, exactly as before: existing tests
-                 pass unchanged in what they expect (root help, unknown
-                 command, version, New is cold, Halt, invalid shutdown
-                 timeout). The build-recording fixture reads names from
-                 handles.
-              9. The CLI layer test ranges over the root's Leaves(); for each
+              8. slab dispatches through cli.Program with its graph and
+                 lifecycle-config node, exactly as before: existing tests
+                 pass unchanged in what they expect (help, usage errors exit
+                 2, version, settings layering, scenario listing, need-node
+                 startup failures naming the mise task). Commands tested
+                 alone run through a cli.Program with only a Root. The
+                 build-recording fixture reads names from handles. "grafana
+                 up" orders after "service" on its Define line.
+              9. slab's layer test ranges over the root's Leaves(): for each
                  leaf, a Build of its node set plus the lifecycle-config node
-                 succeeds and drops nothing. A fixture leaf ordered after a
-                 node its path doesn't declare shows the guard fails, with
-                 the layer table.
-              10. The web template exports no test-only reactor hook; the
-                  lint testpackage note allows a clock or probe hook only;
-                  the testpackage skip stays for generated services.
-              11. Package docs and READMEs describe the shipped API — web:
-                  web.Service runs the service, Build failure to stderr,
-                  Roots is the root set, a reactor is added with graph.In on
-                  the reactors group (README snippet); CLI: cli.Program runs
-                  the tree, an App runs one command at a time because the
-                  dispatcher restores flags. Neither names Scope.After,
-                  cli.Run, WithGraph, appending to Nodes.Reactors, or name
-                  comments.
-              12. Each CHANGELOG has a dated section with compare link — web
-                  v0.14.0, CLI v0.2.0 — naming the new go-core and SDK
-                  requirements as **Breaking:** and listing what a generated
-                  app meets when porting (web: Run signature and web.Service,
-                  Build failure on stderr, Roots, reactors group and
-                  graph.In, lifecycle-config node, name check, removed hook
-                  and narrowed lint note; CLI: cli.Program for cli.Run, name
-                  check, Leaves layer test, one-line monitored failure). Each
-                  links go-core's "Migrating from v0.10.0". Tool and action
-                  bumps take no entry (design-review Decision).
-Test seams    Each template's check (`mise -C template run check`), its
-              integration tier, and its currency command. Web tests drive the
-              App through New, Run, Roots, Graph, Nodes and read placement by
-              handle (LayerOf, Has, Dependencies, Dropped). CLI tests drive
-              App.Run over buffered Streams with the apptest fixtures; the
-              layer test iterates Leaves(). Docs read against the code.
-Slices        1. Web template current (pins, go-core v0.11.0, go-web-sdk
-                 v0.16.0), absorbing only the break needed to compile and
-                 stay green: server's order after reactors via a reactors
-                 group on its Define line; fixture reactor joins with
-                 graph.In; test hook and lint note go; observers take
-                 handles. Done: currency exits 0, check passes. (1, 10)
-              2. CLI template current (pins, go-core v0.11.0, go-cli-sdk
-                 v0.3.0); App.Run moves to cli.Program; build recorder reads
-                 names from handles. Done: currency exits 0, check passes.
-                 (1, 8)
-              3. Web runner: App.Run(ctx, stderr) as one web.Service call,
-                 lifecycle-config node, Roots; fallback logger goes;
-                 entrypoint passes stderr; Build-failure test reads stderr.
-                 Demo: `mise run serve` logs "server ready". (2, 3)
-              4. Web Define lines: Value/Fresh nodes, *Nodes methods, every
-                 order on its Define line, CheckNames replaces name comments.
-                 (6, 7)
-              5. Web layer tests on handles: root set vs a real Run, server
-                 alone on top, server above a fixture reactor, the one
-                 allowed Drop; each guard shown failing; Layers()-scanning
-                 helpers go. (3-5)
-              6. CLI names and layers: CheckNames, Leaves layer test with its
-                 fixture guard. (7, 9)
-              7. Web docs: package doc, starter README, repository README,
-                 capability map. (11)
-              8. CLI docs: package doc, Run doc's reason, starter README,
-                 capability map. (11)
-              9. go-web-sdk-template release prep: v0.14.0 CHANGELOG section
-                 and link lines. (12)
-              10. go-cli-sdk-template release prep: v0.2.0 CHANGELOG section
-                  and link lines. (12)
-Out of scope  go-core, go-web-sdk, go-cli-sdk changes; go-web-service and
-              slab (migrate-service); defining any reactor, admin, or domain
-              node in the templates; either runner reading Dropped; the
-              construction-and-execution conversion (api-maintenance); the
-              architecture repository and the STANDARDS.md pointers already
-              pending at sync.
-Door          Two-way until each tag (pull requests to main). One-way at each
-              tag: the module proxy and checksum database pin it, gonew's
-              @latest resolves to it, it's never re-cut. Each tag is cut only
-              from a main whose CI, integration tier included, has passed.
-Release       go-web-sdk-template: template/v0.14.0
-              go-cli-sdk-template: template/v0.2.0
+                 succeeds and drops nothing, and wherever both are built,
+                 grafana up sits above service. A fixture leaf, defined on
+                 the App's own Graph() and Root(), ordered after a node its
+                 path doesn't declare, shows the guard fails, with the layer
+                 table.
+              10. Package docs, READMEs, and the working context describe the
+                  shipped API. Service: web.Service runs it, Build failure
+                  goes to stderr, Roots is the root set, a reactor joins the
+                  reactors group with graph.In. slab: cli.Program runs the
+                  tree, and an App runs one command at a time because the
+                  dispatcher restores flags. None names Scope.After, cli.Run,
+                  WithGraph, the reactor slice, or name comments.
+              11. The CHANGELOG's Unreleased section records, under Changed:
+                  the Pins (go-core v0.11.0 and the libraries' new versions
+                  in each module, grpc, nats.go, sqlate in slab), deferring
+                  to their CHANGELOGs; a Build failure on stderr as "service
+                  failed: <error>" in place of a log record; a Monitored
+                  node's runtime failure naming its node ("run: <node>:
+                  <error>"); slab reporting such a failure as one line; the
+                  composition root's order at Define, reactors group, and
+                  Roots. No tag. Tool, action, and image bumps take no entry
+                  (design-review Decision).
+Test seams    The repository's check (`mise run check`, which covers both
+              modules), its integration tier (`mise run integration`), and its
+              currency command. Service tests drive the App through New, Run,
+              Roots, Graph, Nodes and read placement by handle (LayerOf, Has,
+              Dependencies, Dropped). slab tests drive App.Run over buffered
+              Streams with the apptest fixtures; the layer test iterates
+              Leaves(). Docs are read against the code.
+Slices        1. go-web-service current (every pin in Behavior 1), absorbing
+                 only the break needed to compile and stay green: each After
+                 moves to its Define line (telemetry defined first), reactors
+                 join a reactors group the server orders after, observers
+                 take handles; slab's App.Run and its commands' tests move to
+                 cli.Program, and grafana up's After moves to its Define line.
+                 Done: currency exits 0, check and integration tier pass. (1)
+              2. Service runner: App.Run(ctx, stderr) as one web.Service call,
+                 lifecycle-config node, Roots; the fallback logger goes; the
+                 entrypoint passes stderr; the Build-failure test reads
+                 stderr. Demo: `mise run serve` logs "server ready". (2, 3)
+              3. Service Define lines: Value/Fresh nodes, *Nodes methods,
+                 every order on its Define line, CheckNames replaces name
+                 comments. (6, 7)
+              4. Service layer tests on handles: root set vs a real Run,
+                 server alone on top, reactor, telemetry, schema, and relay
+                 placement, no Drop; each guard shown failing; the
+                 Layers()-scanning helpers go. (3-5)
+              5. slab names and layers: CheckNames, a recorder on handles,
+                 the Leaves layer test with grafana up above service and its
+                 fixture guard. (7-9)
+              6. Docs: the service's package doc and READMEs, slab's package
+                 doc, Run doc's reason, README and usage, the working
+                 context. (10)
+              7. CHANGELOG: the Unreleased entries. (11)
+Out of scope  go-core, the SDKs, the libraries, and the templates; moving
+              go-messaging or blobfs onto go-core v0.11.0; folding slab into
+              the root module; any tag of go-web-service or slab; new
+              reactor, admin, or domain nodes; either runner reading Dropped;
+              the construction-and-execution conversions the service calls
+              (api-maintenance); the architecture repository and the
+              STANDARDS.md pointers pending at sync.
+Door          Two-way: pull requests to main, no tag, nothing published; the
+              compose image bumps reach only the local stack.
 ```
+
+## Progress
+
+slices 0/7 committed · standards — · spec — · editor —
 
 ## Decisions
 
@@ -236,6 +246,8 @@ Release       go-web-sdk-template: template/v0.14.0
 - migrate-templates: both CHANGELOGs link go-core's migration guide at https://github.com/standards-lab/go-core/blob/main/CHANGELOG.md#migrating-from-v0100.
 - migrate-templates: the CLI template's context/README.md version line moves to template/v0.2.0; the web template records its version only in its CHANGELOG.
 - migrate-templates: standards review changed the web Build-failure test's fixture error to "unavailable", so the stderr match finds "logger" only in the node's name.
+- migrate-service: go-web-service's Roots lists only the server and the reactors group; the router reaches telemetry and the schema through Use, and the root guard expects no Drop.
+- migrate-service: go-web-service and slab stay untagged; the migration is recorded under the CHANGELOG's Unreleased section, and the door is two-way.
 
 ## Pending edits
 
@@ -246,3 +258,4 @@ Release       go-web-sdk-template: template/v0.14.0
 - architecture · standards/go-elemental/principles/cli-applications.md:39, 87: names cli.Run with WithGraph; name cli.Program{Root, Graph, LifecycleConfig}.Run instead.
 - architecture · standards/go-elemental/principles/tests-and-docs.md ("The unit tier"): cites go-web-sdk-template's AppendReactor in internal/app/export_test.go as the fixture-node hook example; migrate-templates deletes it — cite a fixture reactor joining with graph.In(Reactors) instead, or drop the clause.
 - coordinator · context/graph-ergonomics.md (opening paragraph): name the templates' releases, go-web-sdk-template template/v0.14.0 and go-cli-sdk-template template/v0.2.0, beside the libraries' releases that moved onto go-core v0.11.0.
+- architecture · standards/go-elemental/principles/topology-and-naming.md:88-92: names `Run` as building the graph and running it under the lifecycle coordinator, and a reactor's node as "also joining `Nodes.Reactors`"; say instead that `Run` is one runner call (`web.Service`, `cli.Program`), and that a reactor joins the reactors group with `graph.In` on its Define line.
