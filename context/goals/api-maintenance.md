@@ -135,7 +135,7 @@ Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 
 ## Progress
 
-slices 3/4 committed (slice 5 runs at SHIP) · standards — · spec — · editor —
+slices 4/4 committed (slice 5 runs at SHIP) · standards — · spec — · editor —
 
 ## Decisions
 
