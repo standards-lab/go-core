@@ -99,7 +99,7 @@ Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
 
 ## Progress
 
-slices 3/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9) · standards — · spec — · editor —
+slices 4/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86) · standards — · spec — · editor —
 
 ## Decisions
 
