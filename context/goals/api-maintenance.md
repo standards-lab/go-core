@@ -1,12 +1,12 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** core
-- **Branch:** core
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
-1. [ ] core
+1. [x] core
 2. [ ] libraries
 3. [ ] storage-cli
 4. [ ] messaging
@@ -96,10 +96,6 @@ Door          One-way for the four tags, which reach every consumer's
 Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
               sqlint/v0.4.0
 ```
-
-## Progress
-
-slices 7/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86, 5 sqlate 838e3e9, 6 sqlate 980c58a, 7 sqlate cb9e580) · standards done (go-core 01a47bd, sqlate 38d203c) · spec done (no gaps; 11 deferred to release) · editor done
 
 ## Decisions
 
