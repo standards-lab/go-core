@@ -26,38 +26,38 @@ type Recorder[Tx any] struct {
 	id     func() string
 }
 
-// Option configures a [Recorder].
-type Option func(*options)
-
-type options struct {
-	now func() time.Time
-	id  func() string
+// Options configures a [Recorder]. The zero value stamps the time from
+// time.Now and mints version 7 UUIDs.
+type Options struct {
+	// Clock is the time a recorder stamps, which it records in UTC; nil
+	// uses time.Now.
+	Clock func() time.Time
+	// IDs mints an event id; nil mints a version 7 UUID, which orders by
+	// time.
+	IDs func() string
 }
-
-// Clock sets the time a recorder stamps; the default is time.Now.
-func Clock(now func() time.Time) Option { return func(o *options) { o.now = now } }
-
-// IDs sets how a recorder mints an event id; the default is a version 7
-// UUID, which orders by time.
-func IDs(id func() string) Option { return func(o *options) { o.id = id } }
 
 // NewRecorder builds the recorder that writes through sink and stamps every
 // event with source, the service's own URI-reference. Source is one value for
 // the whole service, never a replica's, because a consumer deduplicates on
-// the source and id together. A nil sink or an empty source is a wiring
-// defect and panics.
-func NewRecorder[Tx any](sink Sink[Tx], source string, opts ...Option) *Recorder[Tx] {
+// the source and id together. opts replaces the clock and the id minting
+// it sets; pass the zero Options for the defaults. A nil sink or an empty
+// source is a wiring defect and panics.
+func NewRecorder[Tx any](sink Sink[Tx], source string, opts Options) *Recorder[Tx] {
 	if sink == nil {
 		panic("event: recorder: nil sink")
 	}
 	if source == "" {
 		panic("event: recorder: empty source")
 	}
-	o := options{now: time.Now, id: func() string { return uuid.NewV7().String() }}
-	for _, opt := range opts {
-		opt(&o)
+	r := &Recorder[Tx]{sink: sink, source: source, now: opts.Clock, id: opts.IDs}
+	if r.now == nil {
+		r.now = time.Now
 	}
-	return &Recorder[Tx]{sink: sink, source: source, now: o.now, id: o.id}
+	if r.id == nil {
+		r.id = func() string { return uuid.NewV7().String() }
+	}
+	return r
 }
 
 // Emit wraps fn, a command's body, into the function a transaction runs, such
