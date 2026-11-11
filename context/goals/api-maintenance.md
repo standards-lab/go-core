@@ -135,7 +135,7 @@ Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 
 ## Progress
 
-slices 4/4 committed (slice 5 runs at SHIP) · standards done (475a4e9) · spec done, no gaps · editor —
+slices 4/4 committed (slice 5 runs at SHIP) · standards done (475a4e9) · spec done, no gaps · editor done
 
 ## Decisions
 
@@ -186,6 +186,15 @@ slices 4/4 committed (slice 5 runs at SHIP) · standards done (475a4e9) · spec 
 - messaging: marathon-architecture applies; its declared marathon version is a minimum.
 - messaging: held the nats image at 2.15.2-alpine: 2.15.3-alpine (latest) publishes an image index with no platforms and can't be pulled; go-web-service pins 2.15.2.
 - messaging: golangci-lint 2.15.0's errcheck flags a bare receive on a chan error; two relay tests now assert Receive returns nil.
+- messaging: the relay tests keep TestTimeoutEndsAHungHandler, TestDrain…, and TestNoDrain…, since Timeout and Drain stay field names; only the test named after RelayOption is renamed.
+- messaging: RelayOptions.Report's doc lists the gate's failures, other than its wait ending, among the errors it gets.
+- messaging: the typed-nil gate tests use a test-only gate type, since a nil *reactor.Gate panics in Shared.
+- messaging: Build's error tests match message prefixes.
+- messaging: changelog v0.3.0 omits the tool and action pins, as go-storage v0.8.0 and go-web-sdk v0.17.0 did.
+- messaging: changelog v0.3.0's go-core entry also summarizes v0.11.0's graph breaks, since the requirement moves from v0.10.0.
+- messaging: changelog v0.3.0 gives the Relay signature change its own Breaking entry under Changed.
+- messaging: standards review kept Relay's one panic message for poll, Timeout, and Drain; the changelog quotes it.
+- messaging: editor dropped go-messaging's context/README.md line naming the deleted v1.messaging record (stale since ca8621e).
 
 ## Pending edits
 
