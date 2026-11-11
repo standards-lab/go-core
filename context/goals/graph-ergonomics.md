@@ -8,124 +8,135 @@
 
 1. [x] design-review
 2. [x] release
-3. [ ] migrate-libraries
+3. [x] migrate-libraries
 4. [ ] migrate-templates
 5. [ ] migrate-service
 
-## Task brief · release
+## Task brief · migrate-libraries
 
 ```
-Problem       go-core v0.10.0's graph and lifecycle read badly. Order is hidden in s.After calls
-              inside constructors, fixed and fresh values need closures, introspection gives only
-              names, and a Monitored failure doesn't say which node failed. spike-graph proved the
-              settled API on the full go-web-service and slab, and the release's two plan rounds
-              settled what was left open. Three migration tasks and wave C's go-ai and client SDK
-              wait on one breaking release that ships it.
-Behaviors     1. go-core trails nothing: Go is 1.27.4, the currency command exits 0, and the check
-                 passes.
-              2. Order and groups are declared at Define. graph.After(refs...) orders a node after
-                 each node or group it names, each defined earlier, and graph.In(group) makes the
-                 node a member of a group. g.Group(name) returns a group handle, which is a Ref.
-                 A Build given a group, as a root or as an After target, expands it to its members
-                 in definition order, and an empty group builds and orders nothing. An After never
-                 builds its target. Scope has only Use, and Scope.After no longer exists. A cycle
-                 closed by an After panics, naming its path, including any group it passes
-                 through.
-              3. Define, Value, Fresh, and Group panic with a "graph: " message naming the call in
-                 each of these cases:
-                 a. after the first Build;
-                 b. an empty name;
-                 c. a name containing a comma or a newline;
-                 d. a name already taken by a node or a group (they share one name space);
-                 e. a nil constructor or a nil option;
-                 f. an After or In naming a nil ref, a zero-value ref, or a ref from another
-                    Graph. For a nil ref the message asks whether its Define or Group comes later.
-                 Each one checks everything before it changes the Graph, so a call that panics
-                 leaves the Graph as it was.
-              4. System.Dropped lists, as Drop{Node, After} with the handles as declared, each
-                 After of a built node that ordered nothing: its target is a node not in the
-                 System, or a group with no member in it. Drops are listed in the declaring nodes'
-                 definition order, then in each node's declaration order. A group with any member
-                 present is not dropped. A Build of the full root set drops nothing.
-              5. Replace swaps only a node's constructor; the node keeps its After and In. Replace
-                 panics on a nil or zero-value handle, after the first Build, on a node from
-                 another Graph, and on a nil constructor.
-              6. g.Value(name, v, opts...) defines a node whose value is v in every Build, with T
-                 inferred from v's static type. g.Fresh[T](name, opts...) defines a node whose
-                 value is a new zero *T in each Build, distinct from one Build to the next. Both
-                 take Define's options, so a value can join a group.
-              7. Introspection uses the handles that Define, Value, Fresh, and Group return:
-                 - Dependency carries Ref, the node's handle.
-                 - Observe takes func(Ref) and calls it with the handle as each node begins,
-                   before its constructor runs, once per node per Build, depth-first.
-                 - An observer persists for every later Build of its Graph, and the docs say so.
-                 On a nil or zero-value handle, Name returns "", and Get panics with a "graph: "
-                 message.
-              8. System.LayerOf(ref) returns a node's layer and panics for a nil ref, a group, or
-                 a node not in the System. System.Has(ref) reports whether the node is in the
-                 System, and panics for a nil ref or a group. System.Dependencies() returns a
-                 fresh copy of every built node in layer order, then definition order, equal to
-                 flattening Layers().
-              9. System.String prints the layer table, one line per layer in the form
-                 "0: config, logger", with no trailing newline. It prints "" for an empty System.
-              10. An observer that panics makes Build panic with a "graph: " message that names
-                  the node and carries the original value, wrapped when that value is an error.
-                  This holds whether the node is a root or was reached through a Use.
-              11. A Graph is safe for concurrent use:
-                  - Concurrent Builds pass the race detector, as do describing calls and Observe
-                    made beside a Build.
-                  - Describing still panics after the first Build.
-                  - An observer added while a Build runs applies from the next Build on.
-                  - Concurrent Builds may call an observer concurrently, and the docs say so.
-              12. graph/graphtest.NameErrors(nodes any) []error checks a struct of handles, or a
-                  pointer to one. For each exported field whose type implements Ref, it returns an
-                  error when the field holds no handle (nil or zero-value), and when the node's or
-                  group's name, lowercased with its spaces removed, differs from the field name
-                  lowercased. It skips other fields. Anything that is not a struct or a non-nil
-                  pointer to one is a single error. It returns nil when every field passes.
-                  CheckNames(t, nodes) reports each error as a test error, without stopping the
-                  test.
-              13. A Monitored value's runtime failure ends the run as "run: <node>: <error>",
-                  wrapping the error. A channel registered with Monitor still reports
-                  "run: <error>".
-              14. Behavior that must not change still holds: edges discovered through Use,
-                  build-once, longest-path layers, panics for wiring mistakes, the participation
-                  interfaces, and the startup, readiness, and shutdown semantics. go-core's
-                  existing graph and lifecycle tests, ported to the new API, prove it.
-              15. The package docs for graph, graphtest, and lifecycle and the README describe the
-                  shipped API. The CHANGELOG holds a dated v0.11.0 section with its compare link.
-                  It marks each break **Breaking:**: Scope.After removed, Observe's signature, the
-                  name rule, Dependency's added field, and the run-failure text.
-              16. go-core's design note states the shipped API, not a candidate: no open forks,
-                  Fresh as a method, the round decisions included, and web.Run and the runners
-                  left to go-web-sdk and go-cli-sdk. The context index describes the note as it
-                  now stands.
-Test seams    go-core's check (`mise run check`). It runs the graph, graphtest, and lifecycle
-              tests under the race detector through their exported API. Also go-core's currency
-              command. The note and docs are read against the code.
-Slices        1. Upgrade go-core to Go 1.27.4. Currency exits 0 and the check passes
-                 (behavior 1).
-              2. Placement at Define: After, In, and Group; Build expanding groups; Scope.After
-                 removed; Dropped; Replace keeping placement; the name rule; graph's tests ported
-                 (behaviors 2-5, 14).
-              3. Value and Fresh with Define's options (behavior 6).
-              4. Introspection: Ref, Observe(func(Ref)), LayerOf, Has, Dependencies, String, and
-                 the labelled observer panic (behaviors 7-10).
-              5. A Graph safe for concurrent use, with race tests (behavior 11).
-              6. graphtest's NameErrors and CheckNames (behavior 12).
-              7. lifecycle's node-named run failure, with lifecycle's tests ported
-                 (behaviors 13-14).
-              8. Release preparation: package docs, README, the CHANGELOG v0.11.0 section, and
-                 the design note and its index entry (behaviors 15-16).
-Out of scope  The consumers' migrations: the libraries, go-cli-sdk, the templates, and
-              go-web-service with slab. web.Run, and cli or scenario reporting the node-named
-              failure. Amending composition-terms.md. The spike repositories. Group.Members.
-              Replace removing an edge or a membership. A way to stop an observer. Arity adapters.
-              Any lifecycle change beyond the run-failure label.
-Door          Two-way until the tag; the code and docs land on main by pull request. One-way at
-              the tag: once the module proxy fetches v0.11.0, the checksum database pins it and
-              the tag is never re-cut.
-Release       v0.11.0 (go-core)
+Problem       go-core v0.11.0 shipped the new graph and lifecycle, and the libraries above it still
+              require older go-core versions (v0.7.0 to v0.10.0). They also trail their own
+              dependencies, tools, CI actions, and test images, and four docs still name the
+              removed Scope.After. A service still writes its own build-run-log sequence because
+              go-web-sdk has no runner, and go-cli-sdk's runner takes inputs in a shape the
+              api-shape rule retires. When a Monitored value fails, cli and scenario print a
+              useless "context canceled" line above the node-named failure. The templates,
+              go-web-service, and wave C wait on these libraries' tagged releases.
+Behaviors     1. Every repository is current. go-database, go-observability, go-storage,
+                 go-web-sdk, and go-cli-sdk each run Go 1.27.4 and golangci-lint 2.15.0, the
+                 latest CI action pins, the latest container images, and every module's direct
+                 requirements at their latest. Each repository's currency command exits 0 and its
+                 check passes, race detector included.
+              2. Every base module requires go-core v0.11.0 and each provider sub-module requires
+                 its base's new release. Each module's tests use the v0.11.0 graph and lifecycle
+                 API, and go-storage's acceptance suites pass against SeaweedFS and Azurite.
+              3. No package doc, README, or doc comment in the five repositories names
+                 Scope.After. Each one that described an order-only edge now describes
+                 graph.After on the Define line.
+              4. web.Service{Graph, LifecycleConfig, Logger, Server, Roots}.Run(ctx, stderr) int
+                 builds Roots, Server, and LifecycleConfig, runs the System under a lifecycle
+                 Coordinator configured with LifecycleConfig's value until ctx ends, and returns
+                 go-core's process exit codes:
+                 a. once startup completes, it logs "server ready" on the logger node's value,
+                    with the server's bound address as addr;
+                 b. when ctx ends and the System drains cleanly, it logs "server stopped" and
+                    returns ExitOK;
+                 c. when startup, a Monitored value at runtime, or shutdown fails, it logs
+                    "service failed" with the Coordinator's error, which names the node, and
+                    returns ExitFailure; a failed startup logs no "server ready";
+                 d. when the Build fails, it writes "service failed: <error>" to stderr, logs
+                    nothing, starts nothing, and returns ExitFailure.
+              5. Service.Run panics with a "web: " message naming the field when Graph,
+                 LifecycleConfig, Logger, or Server is nil or Roots is empty. It also panics with
+                 a "web: " message, before anything starts, when the Build did not reach the
+                 Logger.
+              6. cli.Program{Root, Graph, LifecycleConfig}.Run(ctx, args, streams) int dispatches
+                 exactly as cli.Run did: the same parse order, Use builds, lifecycle, flag
+                 restoration across dispatches, and exit codes. cli.Run, cli.Option, and
+                 cli.WithGraph no longer exist. Program.Run panics with a "cli: " message naming
+                 the field when Root is nil, and when only one of Graph and LifecycleConfig is
+                 set. A tree that declares Use with neither set panics, as before.
+              7. When a Monitored value fails while a leaf runs, and the leaf's error is only
+                 the end of its context, stderr holds one line: "<path>: run: <node>: <error>",
+                 e.g. "prog watch: run: watched: connection lost". When a scenario step fails
+                 because that failure ended its context, the line names the step:
+                 "prog scenario tour: step 1 (Wait): run: watched: connection lost". When the
+                 leaf returns an unrelated error, that error is still reported beside the run
+                 failure. A context the caller cancelled still reports "context canceled" as
+                 before. The exit code stays ExitFailure.
+              8. (*cli.Command).Leaves() iter.Seq2[string, []graph.Ref] yields, depth-first in
+                 the order commands were added, each leaf under the command. With each leaf it
+                 yields the leaf's command path and the union of the nodes declared with Use
+                 along that path, each node once in first-declared order: exactly the set a
+                 dispatch to that leaf builds, apart from the lifecycle configuration. Each
+                 yielded slice is the caller's own. Iteration stops when the consumer stops.
+              9. Neither web.Service.Run nor cli.Program.Run reads System.Dropped.
+              10. Each module's package docs and README describe its shipped API. go-web-sdk's
+                  doc example ends in a web.Service, go-cli-sdk's docs and README use
+                  cli.Program and describe the one-line run failure, and each repository's
+                  STANDARDS.md that names cli.Run names cli.Program.
+              11. Each released module's CHANGELOG has a dated section with its compare link.
+                  The section names each requirement the release changes, and marks the go-core
+                  requirement **Breaking:** (it pulls v0.11.0's graph break into importers). In a
+                  provider, the base requirement is marked **Breaking:**, and the section notes
+                  pgx v5.12.0's two security fixes (postgres) and the AWS SDK's Retry Behavior
+                  2.1 default (s3). go-cli-sdk marks cli.Run, Option, and WithGraph removed and
+                  the changed stderr text **Breaking:**; go-web-sdk adds web.Service, and
+                  go-cli-sdk adds Program and Leaves. go-database's postgres folds its untagged
+                  go-database v0.9.0 entry into its new section.
+              12. Behavior that must not change still holds: each library's existing tests pass
+                  with only their graph and lifecycle wiring migrated, and the expected text
+                  changes only where behavior 7 says.
+Test seams    Each repository's check (`mise run check`: build, vet, gofmt, go fix, tidy,
+              `go test -race`, golangci-lint) and its currency command. go-storage's acceptance
+              suites (`mise run acceptance`, SeaweedFS and Azurite under compose). go-database
+              has no container suite: its postgres tests run in the check. web.Service.Run is
+              exercised with a real *web.Server on port 0 and fake participant nodes that fail
+              at startup, at runtime, and at shutdown, ported from spike-graph's runner tests.
+              cli.Program.Run uses Streams buffers, and Leaves is exercised by iterating it. Docs
+              are read against the code.
+Slices        1. go-database current on go-core v0.11.0: Go, lint, actions, sqlate v0.6.1, pgx
+                 v5.12.0, postgres on go-database's latest tag; tests on the new graph API;
+                 admin's doc says graph.After. Currency exits 0, check passes (behaviors 1-3, 12).
+              2. go-web-sdk current on go-core v0.11.0, rate-limit on go-core v0.11.0 and
+                 go-web-sdk's latest tag. Currency exits 0, check passes (1-2, 12).
+              3. go-observability current on go-core v0.11.0, otlp on grpc v1.85.0; doc, README,
+                 and Telemetry's comment say graph.After. Currency exits 0, check passes
+                 (1-3, 12).
+              4. go-storage current on go-core v0.11.0, azureblob and s3 at their latest SDKs,
+                 SeaweedFS 4.53. Currency exits 0, check and acceptance pass (1-2, 12).
+              5. go-cli-sdk current on go-core v0.11.0, the monitored-failure test expecting the
+                 node-named failure. Currency exits 0, check passes (1-2, 12).
+              6. web.Service and its Run, with its panics and ported tests; go-web-sdk's doc
+                 example and README (4-5, 9-10).
+              7. cli.Program replacing cli.Run, Option, and WithGraph, with scenario and every
+                 test moved onto it (6, 9).
+              8. The one-line run-failure report in cli and scenario, with a scenario
+                 monitored-failure test (7).
+              9. (*cli.Command).Leaves (8).
+              10. Release preparation for go-database and postgres: docs, README, CHANGELOG
+                  sections. postgres requires go-database v0.11.0 once that tag exists
+                  (2, 10-11).
+              11. Release preparation for go-web-sdk and rate-limit, likewise (2, 10-11).
+              12. Release preparation for go-observability and otlp, likewise (2, 10-11).
+              13. Release preparation for go-storage, s3, and azureblob, likewise (2, 10-11).
+              14. Release preparation for go-cli-sdk: docs, README, STANDARDS.md's runner
+                  reference, CHANGELOG (10-11).
+Out of scope  go-core changes. The templates, go-web-service, and slab (migrate-templates,
+              migrate-service). Converting any other API to the api-shape rule: sweep.New,
+              middleware.RequestID, storagetest.NewFake, go-messaging, sqlate, blobfs, and
+              go-core's reactor and event options go to the api-maintenance goal. The api-shape
+              principle page and the STANDARDS.md pointers to it (pending edits at sync).
+              Amending composition-terms.md. Either runner reading Dropped. A general
+              Command.Children accessor. Arity adapters.
+Door          Two-way until each tag: the code and docs land on main by pull request in each
+              repository. One-way at each of the ten tags: once the module proxy fetches a
+              version, the checksum database pins it and the tag is never re-cut. A provider is
+              tagged only after its base's tag exists and its requirement moves to it.
+Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
+              middleware/rate-limit/v0.4.0; go-observability v0.3.0, otlp/v0.3.0;
+              go-storage v0.7.0, s3/v0.2.0, azureblob/v0.6.0; go-cli-sdk v0.3.0
 ```
 
 ## Decisions
@@ -167,6 +178,35 @@ Release       v0.11.0 (go-core)
 - release: the CHANGELOG's v0.11.0 section carries a "Migrating from v0.10.0" subsection, as v0.6.0 does.
 - release: the CHANGELOG's v0.11.0 date is the day the tag is cut, 2026-11-11.
 
+- migrate-libraries: web.Run ships as web.Service{Graph, LifecycleConfig, Logger, Server, Roots} with Run(ctx, stderr) int; Server and LifecycleConfig join every Build beside Roots, and a Logger the Build doesn't reach panics with a "web: " message before anything starts.
+- migrate-libraries: web.Service's Server is the concrete *graph.Node[*web.Server], with no type parameter; go-web-sdk's web.Server is already the struct.
+- migrate-libraries: a nil Service field or empty Roots panics with a "web: " message naming the field.
+- migrate-libraries: web.Service's tests port spike-graph's runner tests, with a real *web.Server on port 0 and fake participant nodes for the failures.
+- migrate-libraries: neither web.Service.Run nor cli.Program.Run reads System.Dropped; the composition roots' layer tests assert it is empty.
+- migrate-libraries: go-cli-sdk reports a Monitored failure during a leaf or scenario step as one line; the run failure (from context.Cause) replaces an error that is only the context's end, and an unrelated leaf error is still reported beside it.
+- migrate-libraries: cli.Program{Root, Graph, LifecycleConfig}.Run(ctx, args, streams) int replaces cli.Run, Option, and WithGraph; nil Root panics; Graph and LifecycleConfig are both set or both nil.
+- migrate-libraries: (*cli.Command).Leaves() iter.Seq2[string, []graph.Ref] yields each leaf's command path and the union of nodes its path declares with Use.
+- migrate-libraries: api-shape rule: at most 4 required positional inputs plus at most one trailing options struct whose zero value is the default; no functional options; more inputs, or an API that runs a configured thing, becomes an exported struct with a method; a nil required field panics naming the field with the package prefix.
+- migrate-libraries: graph.After and graph.In are a named exception to the api-shape rule.
+- migrate-libraries: the api-shape rule covers test-support packages for new API; existing helpers convert at their next break.
+- migrate-libraries: the other api-shape candidates (sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging New/Relay, sqlate TxOption, blobfs WriteFile/EnsureFile and their option families, go-core reactor/event options) go to a new maintenance goal, api-maintenance, handled after graph-ergonomics completes.
+- migrate-libraries: the providers ripple and are tagged in this task: postgres, otlp, s3, azureblob, middleware/rate-limit.
+- migrate-libraries: every touched repository is brought fully current (dependencies, container images, mise tools, CI actions), and each currency command exits 0.
+- migrate-libraries: every module takes a minor release with its go-core (or base) requirement marked **Breaking:** (versions as in the Release line).
+- migrate-libraries: an upgrade slice moves each provider to its base's latest existing tag; release preparation moves it to the base's new tag once that tag exists, since each check builds with GOWORK=off.
+- migrate-libraries: postgres's untagged go-database v0.9.0 entry folds into its v0.6.0 section.
+- migrate-libraries: the goal record changes on a migrate-libraries branch in go-core, the root, which the task otherwise leaves untouched, so it merges by pull request with the task.
+- migrate-libraries: web.Service.Run's panics read "web: Service.Run requires <field>"; the panic for a Logger the Build didn't reach fires after a successful Build, so a Build failure goes to stderr first.
+- migrate-libraries: empty Roots panics as the brief says, even when Server alone is the service; that Run doesn't write into the caller's Roots slice stays undocumented.
+- migrate-libraries: cli.Program's panics read "cli: Program.Root is nil", and, when only one of Graph and LifecycleConfig is set, name the missing field then the set one; Use without a Graph panics "cli: <path>: Use declared but Program.Graph is nil".
+- migrate-libraries: cli runs each leaf under a context detached from the run context; context.AfterFunc ends it with an unexported runFailure cause ("run: <node>: <error>"), which unwraps to the failure and matches context.Canceled. Err waits for that end and returns the caller's DeadlineExceeded. cli and scenario replace an error that is only the context's end with its cause only when errors.Is(cause, err), so a caller's own cause still reports "context canceled" or "context deadline exceeded".
+- migrate-libraries: a leaf error that wraps ctx.Err() is reported beside the run failure; a caller cancel racing a Monitored failure may still print two lines; a caller cause that wraps context.Canceled is reported in place of the context's end.
+- migrate-libraries: Leaves yields paths and node sets from the tree's root even when called on a subtree, a nil set for a leaf whose path declares no nodes, and nothing for a command with neither Run nor subcommands.
+- migrate-libraries: each CHANGELOG lists every break go-core marks **Breaking:** between the module's previous requirement and v0.11.0; postgres's range starts at v0.7.0, which postgres/v0.5.0 pulled.
+- migrate-libraries: go-storage's new CHANGELOG link lines are releases/tag links, following that repository's convention, not compare links.
+- migrate-libraries: go-storage's store test asserts lifecycle.ReadyStarter and that the Coordinator lists the Store's check under its node name; s3's docs drop AWS_NEW_RETRIES_2026, which aws-sdk-go-v2 v1.48.0 no longer reads.
+- migrate-libraries: tests whose constructors only returned a fixed or new zero value moved to g.Value and graph.Fresh.
+
 ## Pending edits
 
 - coordinator · roadmap: correct graph-ergonomics' summary: nodes are typed *Node[T] handles; the string is a required name, not the key, and v0.10.0's introspection exposed it as a node's only identity.
@@ -176,3 +216,10 @@ Release       v0.11.0 (go-core)
 - coordinator · standards-lab/context/graph-ergonomics.md "Open findings": remove the release's bullet, whose outcomes the next edit states; keep the migrate-libraries bullet. "Not shipped" gains Group.Members, a way to stop an observer, and Replace removing an edge or a membership.
 - coordinator · standards-lab/context/graph-ergonomics.md "The settled API": decision 9 gains that Replace swaps only the constructor, keeping After and In, and that a Graph is safe for concurrent use (concurrent Builds, describing calls and Observe beside a Build, observers possibly called concurrently). Decision 12 gains the name rule: Define, Value, Fresh, and Group refuse an empty name, a comma or a newline, and a name taken by a node or a group. Decision 13 becomes: `Ref` on a Dependency; `Observe(func(Ref))`, whose observers persist for every later Build and whose panic Build re-panics as a "graph: " message naming the node, wrapping an error value; `LayerOf`, which panics for a node not in the System, a nil ref, or a group; `Has(ref) bool`, false for a node not in the System or from another Graph; `Dependencies()`, every built node in layer, then definition, order; and `String()`, the unquoted layer table, one line per layer as "0: config, logger", with no trailing newline. "The three details": the name check's last clause names the comma and newline rule beside the empty name.
 - coordinator · roadmap: migrate-templates' and migrate-service's summaries name Has and Dependencies for the layer tests in place of scanning Layers().
+- coordinator · roadmap: add the maintenance goal api-maintenance at the top of `planned`, handled after graph-ergonomics completes: convert sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging's New and Relay, sqlate's TxOption, blobfs's WriteFile/EnsureFile and their option families, and go-core's reactor and event options to the api-shape rule.
+- coordinator · roadmap: migrate-templates' and migrate-service's summaries name web.Service's Run in place of web.Run, cli.Program in place of cli.Run and WithGraph, and Leaves() for the CLI layer tests.
+- coordinator · standards-lab/context/graph-ergonomics.md "The three details": the web.Run bullet becomes web.Service{…}.Run(ctx, stderr) int, Server a *graph.Node[*web.Server], Server and LifecycleConfig built beside Roots; "The settled API" decision 14 names web.Service and cli.Program.
+- coordinator · standards-lab/context/graph-ergonomics.md "Open findings": remove the migrate-libraries bullet (supersedes the earlier "keep" edit); remove the section once both bullets are gone.
+- coordinator · standards-lab/context/graph-ergonomics.md "The node-named run failure": go-cli-sdk reports it as one line.
+- architecture · standards/go-elemental/principles/api-shape.md: new principle page (rule, graph.After/In exception, test-support scope); index it in the principles README and the go-elemental README.
+- go-web-sdk, go-cli-sdk, go-database, go-storage · STANDARDS.md: point to api-shape.md.
