@@ -9,93 +9,128 @@
 1. [x] core
 2. [x] libraries
 3. [x] storage-cli
-4. [ ] messaging
+4. [x] messaging
 5. [ ] blobfs
 6. [ ] template
 7. [ ] service
 
-## Task brief · storage-cli
+## Task brief · messaging
 
 ```
-Problem       go-storage's storagetest.NewFake takes functional options,
-              and go-cli-sdk's StringsVar takes five inputs. Both break
-              the construction-and-execution rule. Both repositories
-              trail go-core v0.12.0. go-storage's sub-modules re-tag on
-              its new release before the next tier migrates.
-Behaviors     1. storagetest.NewFake takes a trailing
-                 storagetest.Options{Clock, PageSize, Capabilities,
-                 NoContainer}. The zero Options keeps today's defaults:
-                 time.Now stamped in UTC, a list page size of 3, the
-                 default key rules, and an existing container.
-              2. A non-nil Options.Clock stamps objects in place of
-                 time.Now. A PageSize above zero sets the list page
-                 size; zero or less means 3. An Options.Capabilities
-                 with MaxKeyLength or ValidateKey set replaces the
-                 default key rules whole; a set MaxKeyLength with a nil
-                 ValidateKey accepts every key. NoContainer makes the
-                 fake behave as a store whose container is missing, as
-                 WithoutContainer does today.
-              3. storagetest no longer exports Option, WithClock,
-                 WithPageSize, WithCapabilities, or WithoutContainer.
-              4. cli.StringsValue(p *[]string, value []string)
-                 flag.Value is registered with fs.Var. It copies value
-                 into *p before returning, so the default isn't
-                 aliased. The first use on the command line replaces
-                 the default and later uses append in order. Help shows
-                 the flag as repeatable with its default, and a tree
-                 dispatched again restores the default, as StringsVar
-                 does today.
-              5. cli no longer exports StringsVar.
-              6. go-storage requires go-core v0.12.0. azureblob and s3
-                 require go-storage v0.8.0. go-cli-sdk requires go-core
-                 v0.12.0. Every module passes its check with the
-                 workspace off.
-              7. go-storage's and go-cli-sdk's package docs and comments
-                 show only the new forms. Each base changelog lists the
-                 removals as Breaking, with a "Migrating from" section,
-                 and marks its go-core v0.12.0 requirement Breaking.
-                 azureblob and s3 each carry one Breaking line for the
-                 go-storage v0.8.0 requirement.
-              8. Each repository's standards pointer to the
-                 construction-and-execution principle names the
-                 converted form: storagetest.Options and
-                 cli.StringsValue.
-              9. Both repositories' currency commands exit 0, and every
-                 check passes.
+Problem       go-messaging's New takes six required inputs and functional
+              options, and Outbox.Relay takes functional options. Both
+              break the construction-and-execution rule. go-messaging
+              trails go-core v0.12.0 and sqlate v0.7.0, whose reactor,
+              event, and transaction calls it must adapt. Its postgres and
+              nats sub-modules can't take those releases until the base
+              tags, and then re-tag on it.
+Behaviors     1. messaging.Setup{Config, Broker, Outbox, Inbox, Shutdown,
+                 Logger, OnFailure, Gate}.Build() (*Runtime, error), with
+                 a value receiver, builds the Runtime New builds today.
+                 Before any I/O, it returns an error for an invalid
+                 Config, a Shutdown of zero or less, or an outbox or inbox
+                 engine missing a statement, with New's messages.
+              2. Build panics when Broker or Logger is nil, before
+                 anything else, with "messaging: Setup.Broker is nil" or
+                 "messaging: Setup.Logger is nil".
+              3. A nil OnFailure keeps the default hook: one warn line,
+                 "messaging failure", for each Failure. A non-nil
+                 OnFailure gets each Failure in its place. A nil Gate
+                 means the reactors hold no gate. A set Gate is held as
+                 Gated's is today: the relay holds it for each outbox
+                 row, and a Consume reactor for each delivery. A non-nil
+                 interface that wraps a nil pointer counts as set.
+              4. messaging no longer exports New, Option, OnFailure, or
+                 Gated.
+              5. Outbox.Relay(db, poll, RelayOptions{Report, Timeout,
+                 Drain, Gate}). The zero RelayOptions keeps today's
+                 defaults: reports are discarded, each row's handler is
+                 bounded at 10s, there is no last pass, and no gate is
+                 held. A non-nil Report gets every error the relay
+                 survives, as the report parameter does today. A
+                 positive Timeout bounds each row's handler, and the
+                 row's transaction at twice that. A positive Drain makes
+                 the last pass after cancellation. A set Gate is held
+                 shared for each row, as outbox.Gated's is today.
+              6. Relay panics when poll is zero or less, or Timeout or
+                 Drain is negative. A zero Timeout means 10s and no
+                 longer panics.
+              7. outbox no longer exports RelayOption, Timeout, Drain, or
+                 Gated.
+              8. Runtime.Relay keeps its behavior on the new form: the
+                 configuration's RelayTimeout bounds each publish, the
+                 last pass gets a quarter of the drain timeout, it holds
+                 Setup.Gate, and the reactor cancels its handlers at half
+                 the drain timeout. Runtime.Consume also keeps its
+                 behavior.
+              9. go-messaging requires go-core v0.12.0 and sqlate v0.7.0.
+                 postgres requires go-messaging v0.3.0, go-core v0.12.0,
+                 sqlate v0.7.0, sqlate/postgres v0.7.0, sqlint v0.4.0, and
+                 pgx v5.13.0. nats requires go-messaging v0.3.0, go-core
+                 v0.12.0, and nats.go v1.55.0. Every module passes its
+                 check with the workspace off, and both integration
+                 suites pass.
+              10. The README and every package doc show only the new
+                 forms. The base changelog's v0.3.0 has Added entries
+                 for Setup and RelayOptions and marks each removal
+                 Breaking under Changed or Removed. It marks the go-core
+                 v0.12.0 and sqlate v0.7.0 requirements Breaking. Its
+                 "Migrating from v0.2.0" section covers New to
+                 Setup.Build and the options to RelayOptions fields,
+                 notes that a zero Timeout now means the default, and
+                 points to go-core's and sqlate's changelogs for their
+                 call changes. postgres v0.3.0 and nats v0.3.0 each carry
+                 one Breaking line for each breaking direct requirement.
+                 nats's untagged Unreleased line folds into its v0.3.0.
+              11. STANDARDS.md points to the construction-and-execution
+                 principle and names messaging.Setup, whose Build panics
+                 naming a nil Broker or Logger; outbox.RelayOptions, the
+                 one options value Outbox.Relay takes; and every new
+                 exported function and constructor.
+              12. Currency exits 0 and every check passes.
 Test seams    The exported constructors, from external test packages:
-              storagetest.NewFake with Options values, exercised through
-              storage.Store; and cli.StringsValue registered through
-              Command.Flags() and fs.Var, driven by cli.Program{Root}.Run
-              and its help output.
-Slices        1. go-storage upgrade: go-core v0.12.0, nothing to adapt.
-                 Done when currency exits 0 and the check passes.
-              2. go-cli-sdk upgrade: go-core v0.12.0, nothing to adapt.
-                 Same done condition.
-              3. storagetest.Options, with the fake's and the store's
-                 tests on the new form (1-3).
-              4. go-storage's docs, changelog v0.8.0 with its migration
-                 section, the standards pointer, and azureblob's and
-                 s3's changelogs. Release preparation moves azureblob
-                 and s3 onto go-storage v0.8.0 once it is tagged (6-8,
-                 go-storage).
-              5. cli.StringsValue, with the flag tests on the new form
-                 (4-5).
-              6. go-cli-sdk's docs, changelog v0.4.0 with its migration
-                 section, and the standards pointer (6-8, go-cli-sdk).
-Out of scope  go-web-service's NewFake calls and slab's StringsVar call,
-              which move in the service task. go-cli-sdk-template's
-              requirement, in the template task. blobfs's example
-              module's go-storage requirement, in the blobfs task. The
-              variadic data lists Command.Add, Use, Require, Exclusive,
-              Usagef, scenario.Commands, WriteListing, and Reporter.Note.
-              Conforming APIs: Store.Put/Get/List, storage.New, NewEnv,
-              azureblob.New, s3.New, storagetest.Run and
-              RunMissingContainer.
-Door          One-way for the four tags, which reach every consumer's
+              messaging.Setup.Build, exercised through Runtime.Relay and
+              Runtime.Consume over the memory broker and a scripted
+              database; and Outbox.Relay with RelayOptions values, driven
+              through Relay.Receive. The postgres and nats integration
+              suites and messagingtest.Run cover the sub-modules.
+Slices        1. Upgrade. The base moves onto go-core v0.12.0 and sqlate
+                 v0.7.0 and adapts: reactor.Options and event.Options at
+                 the runtime's and the conformance suite's calls, and a
+                 nil *sql.TxOptions at the relay's Begin and the tests'
+                 Begin and Transact. postgres moves onto pgx v5.13.0 and
+                 nats onto nats.go v1.55.0. Go 1.27.4, golangci-lint
+                 2.15.0, the two action pins, and the nats image move to
+                 their latest. Done when the check and both integration
+                 suites pass, and currency reports only the sub-modules'
+                 go-core, sqlate, sqlate/postgres, and sqlint items held
+                 for release preparation.
+              2. outbox.RelayOptions, with the relay's tests and
+                 Runtime.Relay on the new form (5-8).
+              3. messaging.Setup, with the runtime's and gate's tests on
+                 the new form (1-4).
+              4. The base's docs and README, changelog v0.3.0 with its
+                 migration section, and the standards pointer (10-11,
+                 base).
+              5. Release preparation, at SHIP after go-messaging v0.3.0
+                 tags, as a follow-up pull request as go-storage's was
+                 (f894743). It moves postgres and nats onto the base's
+                 new requirement and the held releases, puts their
+                 integration tests on the new forms, and writes their
+                 v0.3.0 changelogs (9-10, sub-modules; 12).
+Out of scope  go-web-service's messaging.New call, which moves in the
+              service task. The coordinator's messaging design page,
+              which is a pending edit. The variadic data lists:
+              the outbox sink's Write and the internal engine check.
+              Conforming APIs: Runtime.Relay and Consume, Config's
+              methods, the Subscription helpers, inbox.New and Claim,
+              outbox.New and Sink, memory.New, nats.New and its Broker,
+              messagingtest.Run, pgtest, natstest, and the postgres
+              engine, migration, and retention functions.
+Door          One-way for the three tags, which reach go-web-service's
               module requirements. Two-way for the code and docs, which
               merge by pull request before tagging.
-Release       go-storage v0.8.0, azureblob/v0.7.0, s3/v0.3.0;
-              go-cli-sdk v0.4.0
+Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 ```
 
 ## Decisions
@@ -136,8 +171,29 @@ Release       go-storage v0.8.0, azureblob/v0.7.0, s3/v0.3.0;
 - storage-cli: test names drop the removed option names (TestFake_PageSizeIgnoresNonPositive, TestRun_FakeNoContainer, TestStringsValue_*).
 - storage-cli: the changelogs mark each break inline under Added, Changed, or Removed (Keep a Changelog), with an Added entry for the new form, as go-web-sdk v0.17.0 did.
 - storage-cli: standards review stated go-storage's Options.Capabilities replace-whole rule once, on the field (tests-and-docs: a contract is stated once, on its symbol), and made go-cli-sdk's aliasing test call StringsValue directly.
+- messaging: New becomes messaging.Setup{Config, Broker, Outbox, Inbox, Shutdown, Logger}.Build() (*Runtime, error), with a value receiver.
+- messaging: OnFailure Hook and Gate Gate are nil-default fields on Setup; Option, OnFailure, and Gated are removed with no aliases.
+- messaging: Build panics naming a nil Setup.Broker or Setup.Logger; Config, Shutdown, and engine problems stay returned errors.
+- messaging: the relay's options struct is outbox.RelayOptions (outbox.Options rejected: it would read as the Outbox's).
+- messaging: Outbox.Relay takes (db, poll, RelayOptions{Report, Timeout, Drain, Gate}); report moves into the options, being optional; RelayOption, Timeout, Drain, and outbox.Gated are removed.
+- messaging: a zero RelayOptions.Timeout means 10s and a zero Drain no last pass; a negative Timeout or Drain panics, as a poll of zero or less does.
+- messaging: tags go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0; sub-modules move onto go-core v0.12.0, sqlate v0.7.0, sqlate/postgres v0.7.0, sqlint v0.4.0, and go-messaging v0.3.0 in a release-prep follow-up pull request after the base tags (f894743); one Breaking line per breaking direct requirement; nats's untagged Unreleased line folds into v0.3.0.
+- messaging: pgx v5.13.0, nats.go v1.55.0, and the mise, CI, and image pins move in the upgrade slice; only the go-core and sqlate items wait for the base tag.
+- messaging: marathon-architecture applies; its declared marathon version is a minimum.
+- messaging: held the nats image at 2.15.2-alpine: 2.15.3-alpine (latest) publishes an image index with no platforms and can't be pulled; go-web-service pins 2.15.2.
+- messaging: golangci-lint 2.15.0's errcheck flags a bare receive on a chan error; two relay tests now assert Receive returns nil.
+- messaging: the relay tests keep TestTimeoutEndsAHungHandler, TestDrain…, and TestNoDrain…, since Timeout and Drain stay field names; only the test named after RelayOption is renamed.
+- messaging: RelayOptions.Report's doc lists the gate's failures, other than its wait ending, among the errors it gets.
+- messaging: the typed-nil gate tests use a test-only gate type, since a nil *reactor.Gate panics in Shared.
+- messaging: Build's error tests match message prefixes.
+- messaging: changelog v0.3.0 omits the tool and action pins, as go-storage v0.8.0 and go-web-sdk v0.17.0 did.
+- messaging: changelog v0.3.0's go-core entry also summarizes v0.11.0's graph breaks, since the requirement moves from v0.10.0.
+- messaging: changelog v0.3.0 gives the Relay signature change its own Breaking entry under Changed.
+- messaging: standards review kept Relay's one panic message for poll, Timeout, and Drain; the changelog quotes it.
+- messaging: editor dropped go-messaging's context/README.md line naming the deleted v1.messaging record (stale since ca8621e).
 
 ## Pending edits
 
 - architecture · construction-and-execution principle: a context.Context parameter does not count toward the four required inputs.
 - standards-lab · context/html-artifacts.md:409: replace go-web-sdk's `WriteProblem` with `Problem.WriteFor` (go-web-sdk v0.17.0); the `problem.go` citation stays, since `WriteFor` is defined there.
+- standards-lab · context/messaging.md:71,74,110: replace the `messaging.Gated` option with `Setup`'s `Gate` field, `messaging.OnFailure` with `Setup`'s `OnFailure` field, and `outbox.Drain` with `outbox.RelayOptions.Drain` (go-messaging v0.3.0).
