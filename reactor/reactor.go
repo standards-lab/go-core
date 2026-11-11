@@ -65,8 +65,7 @@ type Options struct {
 	// to unwind, until its own context ends. Set it below the coordinator's
 	// drain timeout, so a reactor that had to cancel its handlers says so in
 	// Run's result; the coordinator drops any error that arrives after its
-	// own deadline. Zero cancels the handlers only when Shutdown's context
-	// ends.
+	// own deadline.
 	CancelAfter time.Duration
 }
 

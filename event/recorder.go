@@ -29,8 +29,8 @@ type Recorder[Tx any] struct {
 // Options configures a [Recorder]. The zero value stamps the time from
 // time.Now and mints version 7 UUIDs.
 type Options struct {
-	// Clock is the time a recorder stamps, which it records in UTC; nil
-	// uses time.Now.
+	// Clock returns the time a recorder stamps, which the recorder converts
+	// to UTC; nil uses time.Now.
 	Clock func() time.Time
 	// IDs mints an event id; nil mints a version 7 UUID, which orders by
 	// time.
@@ -40,9 +40,9 @@ type Options struct {
 // NewRecorder builds the recorder that writes through sink and stamps every
 // event with source, the service's own URI-reference. Source is one value for
 // the whole service, never a replica's, because a consumer deduplicates on
-// the source and id together. opts replaces the clock and the id minting
-// it sets; pass the zero Options for the defaults. A nil sink or an empty
-// source is a wiring defect and panics.
+// the source and id together. Each field set in opts replaces that
+// default; the zero Options keeps both. A nil sink or an empty source is a
+// wiring defect and panics.
 func NewRecorder[Tx any](sink Sink[Tx], source string, opts Options) *Recorder[Tx] {
 	if sink == nil {
 		panic("event: recorder: nil sink")
