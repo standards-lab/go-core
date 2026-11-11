@@ -20,7 +20,7 @@ Problem       go-core v0.11.0 shipped the new graph and lifecycle, and the libra
               dependencies, tools, CI actions, and test images, and four docs still name the
               removed Scope.After. A service still writes its own build-run-log sequence because
               go-web-sdk has no runner, and go-cli-sdk's runner takes inputs in a shape the
-              api-shape rule retires. When a Monitored value fails, cli and scenario print a
+              construction-and-execution rule retires. When a Monitored value fails, cli and scenario print a
               useless "context canceled" line above the node-named failure. The templates,
               go-web-service, and wave C wait on these libraries' tagged releases.
 Behaviors     1. Every repository is current. go-database, go-observability, go-storage,
@@ -124,9 +124,9 @@ Slices        1. go-database current on go-core v0.11.0: Go, lint, actions, sqla
               14. Release preparation for go-cli-sdk: docs, README, STANDARDS.md's runner
                   reference, CHANGELOG (10-11).
 Out of scope  go-core changes. The templates, go-web-service, and slab (migrate-templates,
-              migrate-service). Converting any other API to the api-shape rule: sweep.New,
+              migrate-service). Converting any other API to the construction-and-execution rule: sweep.New,
               middleware.RequestID, storagetest.NewFake, go-messaging, sqlate, blobfs, and
-              go-core's reactor and event options go to the api-maintenance goal. The api-shape
+              go-core's reactor and event options go to the api-maintenance goal. The construction-and-execution
               principle page and the STANDARDS.md pointers to it (pending edits at sync).
               Amending composition-terms.md. Either runner reading Dropped. A general
               Command.Children accessor. Arity adapters.
@@ -186,10 +186,10 @@ Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
 - migrate-libraries: go-cli-sdk reports a Monitored failure during a leaf or scenario step as one line; the run failure (from context.Cause) replaces an error that is only the context's end, and an unrelated leaf error is still reported beside it.
 - migrate-libraries: cli.Program{Root, Graph, LifecycleConfig}.Run(ctx, args, streams) int replaces cli.Run, Option, and WithGraph; nil Root panics; Graph and LifecycleConfig are both set or both nil.
 - migrate-libraries: (*cli.Command).Leaves() iter.Seq2[string, []graph.Ref] yields each leaf's command path and the union of nodes its path declares with Use.
-- migrate-libraries: api-shape rule: at most 4 required positional inputs plus at most one trailing options struct whose zero value is the default; no functional options; more inputs, or an API that runs a configured thing, becomes an exported struct with a method; a nil required field panics naming the field with the package prefix.
-- migrate-libraries: graph.After and graph.In are a named exception to the api-shape rule.
-- migrate-libraries: the api-shape rule covers test-support packages for new API; existing helpers convert at their next break.
-- migrate-libraries: the other api-shape candidates (sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging New/Relay, sqlate TxOption, blobfs WriteFile/EnsureFile and their option families, go-core reactor/event options) go to a new maintenance goal, api-maintenance, handled after graph-ergonomics completes.
+- migrate-libraries: construction-and-execution rule: at most 4 required positional inputs plus at most one trailing options struct whose zero value is the default; no functional options; more inputs, or an API that runs a configured thing, becomes an exported struct with a method; a nil required field panics naming the field with the package prefix.
+- migrate-libraries: graph.After and graph.In are a named exception to the construction-and-execution rule.
+- migrate-libraries: the construction-and-execution rule covers test-support packages for new API; existing helpers convert at their next break.
+- migrate-libraries: the other construction-and-execution candidates (sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging New/Relay, sqlate TxOption, blobfs WriteFile/EnsureFile and their option families, go-core reactor/event options) go to a new maintenance goal, api-maintenance, handled after graph-ergonomics completes.
 - migrate-libraries: the providers ripple and are tagged in this task: postgres, otlp, s3, azureblob, middleware/rate-limit.
 - migrate-libraries: every touched repository is brought fully current (dependencies, container images, mise tools, CI actions), and each currency command exits 0.
 - migrate-libraries: every module takes a minor release with its go-core (or base) requirement marked **Breaking:** (versions as in the Release line).
@@ -206,6 +206,7 @@ Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
 - migrate-libraries: go-storage's new CHANGELOG link lines are releases/tag links, following that repository's convention, not compare links.
 - migrate-libraries: go-storage's store test asserts lifecycle.ReadyStarter and that the Coordinator lists the Store's check under its node name; s3's docs drop AWS_NEW_RETRIES_2026, which aws-sdk-go-v2 v1.48.0 no longer reads.
 - migrate-libraries: tests whose constructors only returned a fixed or new zero value moved to g.Value and graph.Fresh.
+- migrate-libraries: the principle is named construction-and-execution (page construction-and-execution.md), replacing the working name api-shape; the maintenance goal stays api-maintenance.
 
 ## Pending edits
 
@@ -216,10 +217,10 @@ Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
 - coordinator · standards-lab/context/graph-ergonomics.md "Open findings": remove the release's bullet, whose outcomes the next edit states; keep the migrate-libraries bullet. "Not shipped" gains Group.Members, a way to stop an observer, and Replace removing an edge or a membership.
 - coordinator · standards-lab/context/graph-ergonomics.md "The settled API": decision 9 gains that Replace swaps only the constructor, keeping After and In, and that a Graph is safe for concurrent use (concurrent Builds, describing calls and Observe beside a Build, observers possibly called concurrently). Decision 12 gains the name rule: Define, Value, Fresh, and Group refuse an empty name, a comma or a newline, and a name taken by a node or a group. Decision 13 becomes: `Ref` on a Dependency; `Observe(func(Ref))`, whose observers persist for every later Build and whose panic Build re-panics as a "graph: " message naming the node, wrapping an error value; `LayerOf`, which panics for a node not in the System, a nil ref, or a group; `Has(ref) bool`, false for a node not in the System or from another Graph; `Dependencies()`, every built node in layer, then definition, order; and `String()`, the unquoted layer table, one line per layer as "0: config, logger", with no trailing newline. "The three details": the name check's last clause names the comma and newline rule beside the empty name.
 - coordinator · roadmap: migrate-templates' and migrate-service's summaries name Has and Dependencies for the layer tests in place of scanning Layers().
-- coordinator · roadmap: add the maintenance goal api-maintenance at the top of `planned`, handled after graph-ergonomics completes: convert sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging's New and Relay, sqlate's TxOption, blobfs's WriteFile/EnsureFile and their option families, and go-core's reactor and event options to the api-shape rule.
+- coordinator · roadmap: add the maintenance goal api-maintenance at the top of `planned`, handled after graph-ergonomics completes: convert sweep.New, middleware.RequestID, storagetest.NewFake, go-messaging's New and Relay, sqlate's TxOption, blobfs's WriteFile/EnsureFile and their option families, and go-core's reactor and event options to the construction-and-execution rule.
 - coordinator · roadmap: migrate-templates' and migrate-service's summaries name web.Service's Run in place of web.Run, cli.Program in place of cli.Run and WithGraph, and Leaves() for the CLI layer tests.
 - coordinator · standards-lab/context/graph-ergonomics.md "The three details": the web.Run bullet becomes web.Service{…}.Run(ctx, stderr) int, Server a *graph.Node[*web.Server], Server and LifecycleConfig built beside Roots; "The settled API" decision 14 names web.Service and cli.Program.
 - coordinator · standards-lab/context/graph-ergonomics.md "Open findings": remove the migrate-libraries bullet (supersedes the earlier "keep" edit); remove the section once both bullets are gone.
 - coordinator · standards-lab/context/graph-ergonomics.md "The node-named run failure": go-cli-sdk reports it as one line.
-- architecture · standards/go-elemental/principles/api-shape.md: new principle page (rule, graph.After/In exception, test-support scope); index it in the principles README and the go-elemental README.
-- go-web-sdk, go-cli-sdk, go-database, go-storage · STANDARDS.md: point to api-shape.md.
+- architecture · standards/go-elemental/principles/construction-and-execution.md: new principle page (rule, graph.After/In exception, test-support scope); index it in the principles README and the go-elemental README.
+- go-web-sdk, go-cli-sdk, go-database, go-storage · STANDARDS.md: point to construction-and-execution.md.
