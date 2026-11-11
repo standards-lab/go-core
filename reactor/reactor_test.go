@@ -183,22 +183,23 @@ func TestReactor_CancelAfterUnusedIsClean(t *testing.T) {
 	}
 }
 
-// CancelWithin is a plain duration: half the drain timeout it is given.
+// CancelWithin returns half the drain timeout it is given, the period a
+// reactor's Options.CancelAfter takes under that coordinator.
 func TestCancelWithin_ReturnsHalfTheDrain(t *testing.T) {
 	if got := reactor.CancelWithin(40 * time.Millisecond); got != 20*time.Millisecond {
 		t.Errorf("CancelWithin(40ms) = %v, want 20ms", got)
 	}
 }
 
-// CancelWithin cancels after half the drain timeout it is given: a handler
-// that ignores the drain is cancelled once that half passes.
-func TestReactor_CancelWithinIsHalfTheDrain(t *testing.T) {
+// A handler that ignores the drain is cancelled once the CancelAfter period
+// passes, and not before.
+func TestReactor_CancelAfterWaitsThePeriod(t *testing.T) {
 	started := make(chan struct{}, 1)
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
 		started <- struct{}{}
 		<-ctx.Done()
 		return ctx.Err()
-	}, reactor.Options{CancelAfter: reactor.CancelWithin(40 * time.Millisecond)})
+	}, reactor.Options{CancelAfter: 20 * time.Millisecond})
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

@@ -157,12 +157,12 @@ func (r *Reactor[T]) Start(ctx context.Context) error {
 // Shutdown drains the reactor in two phases. It closes the drain signal
 // ([Draining]), stops the source, and waits for the handling in flight;
 // once the [Options.CancelAfter] period passes, it cancels the handlers'
-// contexts and waits for them to unwind. It returns once Receive returns, or when
-// ctx ends, which cancels the handlers and stops waiting. The error reports
-// a failure sent on Err that nothing read, the handlers' cancellation once
-// the CancelAfter period passed, or ctx's error, or else Receive's error.
-// Shutdown before Start retires the reactor, so it never starts, and a
-// later Shutdown of a retired reactor returns nil.
+// contexts and waits for them to unwind. It returns once Receive returns,
+// or when ctx ends, which cancels the handlers and stops waiting. The error
+// reports a failure sent on Err that nothing read, the handlers'
+// cancellation once the CancelAfter period passed, or ctx's error, or else
+// Receive's error. Shutdown before Start retires the reactor, so it never
+// starts, and a later Shutdown of a retired reactor returns nil.
 func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	switch r.state {

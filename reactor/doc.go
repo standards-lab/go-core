@@ -38,7 +38,7 @@
 //
 // A reactor's handling outlives the run context and ends at its layer's
 // drain: [Reactor.Start] and [Reactor.Shutdown] state the two phases, and
-// [Options.CancelAfter] bounds the first. A handler that runs in several steps,
-// such as a loop over bounded passes, reads [Draining] to stop between
-// steps once the drain begins.
+// [Options.CancelAfter] bounds the first. A handler that runs in several
+// steps, such as a loop over bounded passes, reads [Draining] to stop
+// between steps once the drain begins.
 package reactor
