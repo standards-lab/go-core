@@ -99,7 +99,7 @@ Release       go-core v0.12.0; sqlate v0.7.0, postgres/v0.7.0,
 
 ## Progress
 
-slices 7/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86, 5 sqlate 838e3e9, 6 sqlate 980c58a, 7 sqlate cb9e580) · standards done (go-core 01a47bd, sqlate 38d203c) · spec — · editor —
+slices 7/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 go-core f2a9b86, 5 sqlate 838e3e9, 6 sqlate 980c58a, 7 sqlate cb9e580) · standards done (go-core 01a47bd, sqlate 38d203c) · spec done (no gaps; 11 deferred to release) · editor —
 
 ## Decisions
 
@@ -119,6 +119,7 @@ slices 7/7 committed (1 sqlate b6178ba, 2 go-core ec89674, 3 go-core 8ebf7b9, 4 
 - core: event.Options applies its defaults per field: a set Clock keeps UUID v7 IDs, a set IDs keeps time.Now in UTC, as the old options did.
 - core: Transact and DB.Transact take *sql.TxOptions as a required trailing parameter, not variadic; callers pass nil for a default transaction.
 - core: postgres v0.7.0 and sqlint v0.4.0 mark their sqlate v0.7.0 requirement Breaking, as their earlier entries did for breaking base releases.
+- core: behavior 12's "Migrating from" section applies to the changelogs that record removals (go-core, sqlate); postgres and sqlint remove nothing, so each carries one Breaking line for the sqlate v0.7.0 requirement.
 
 ## Pending edits
 
