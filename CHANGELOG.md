@@ -6,6 +6,65 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.12.0] - 2026-11-11
+
+Constructors that take configuration take it as a trailing Options struct, not variadic option
+functions: `reactor.New` takes a `reactor.Options`, and `event.NewRecorder` an `event.Options`.
+The zero value of each keeps the defaults.
+
+### Added
+
+- `reactor.Options`, which configures a Reactor. `Options.CancelAfter` bounds how long Shutdown
+  lets the handling in flight run before it cancels the handlers' contexts; zero cancels them
+  only when Shutdown's context ends.
+- `event.Options`, which configures a Recorder. `Options.Clock` is the time it stamps, in UTC,
+  and `Options.IDs` mints an event id; a nil field keeps its default, `time.Now` and a version 7
+  UUID, so setting one field replaces that default alone.
+
+### Changed
+
+- **Breaking:** `reactor.New` takes a trailing `reactor.Options` in place of variadic
+  `reactor.Option` values. A call with no option passes `reactor.Options{}`.
+- **Breaking:** `reactor.CancelWithin` returns a `time.Duration`, half the drain timeout it is
+  given, for `Options.CancelAfter`, in place of an `Option`.
+- **Breaking:** `event.NewRecorder` takes a trailing `event.Options` in place of variadic
+  `event.Option` values. A call with no option passes `event.Options{}`.
+
+### Removed
+
+- **Breaking:** `reactor.Option` and the `reactor.CancelAfter` option function. Set
+  `reactor.Options.CancelAfter`.
+- **Breaking:** `event.Option` and the `event.Clock` and `event.IDs` option functions. Set
+  `event.Options.Clock` and `event.Options.IDs`.
+
+### Migrating from v0.11.0
+
+- **A reactor's options become one `reactor.Options` value.**
+
+  ```go
+  // v0.11.0
+  r := reactor.New(src, fn)
+  r := reactor.New(src, fn, reactor.CancelAfter(5*time.Second))
+  r := reactor.New(src, fn, reactor.CancelWithin(drain))
+
+  // v0.12.0
+  r := reactor.New(src, fn, reactor.Options{})
+  r := reactor.New(src, fn, reactor.Options{CancelAfter: 5 * time.Second})
+  r := reactor.New(src, fn, reactor.Options{CancelAfter: reactor.CancelWithin(drain)})
+  ```
+
+- **A recorder's options become one `event.Options` value.** Leave a field nil for its default.
+
+  ```go
+  // v0.11.0
+  rec := event.NewRecorder(sink, source)
+  rec := event.NewRecorder(sink, source, event.Clock(clock), event.IDs(ids))
+
+  // v0.12.0
+  rec := event.NewRecorder(sink, source, event.Options{})
+  rec := event.NewRecorder(sink, source, event.Options{Clock: clock, IDs: ids})
+  ```
+
 ## [v0.11.0] - 2026-11-11
 
 A node's place in the graph is declared where it is defined, not in its constructor, and the
@@ -381,7 +440,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.12.0...HEAD
+[v0.12.0]: https://github.com/standards-lab/go-core/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-core/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-core/compare/v0.9.0...v0.10.0
 [v0.9.0]: https://github.com/standards-lab/go-core/compare/v0.8.0...v0.9.0
