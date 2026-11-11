@@ -1,6 +1,6 @@
 # goal · graph-ergonomics
 
-- **State:** building
+- **State:** brief ready
 - **Task:** migrate-service
 - **Branch:** migrate-service
 
