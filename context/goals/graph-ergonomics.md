@@ -141,7 +141,7 @@ Release       go-database v0.11.0, postgres/v0.6.0; go-web-sdk v0.16.0,
 
 ## Progress
 
-slices 0/14 committed · standards — · spec — · editor —
+slices 14/14 committed · standards done · spec done (2 rounds) · editor done
 
 ## Decisions
 
@@ -200,6 +200,16 @@ slices 0/14 committed · standards — · spec — · editor —
 - migrate-libraries: an upgrade slice moves each provider to its base's latest existing tag; release preparation moves it to the base's new tag once that tag exists, since each check builds with GOWORK=off.
 - migrate-libraries: postgres's untagged go-database v0.9.0 entry folds into its v0.6.0 section.
 - migrate-libraries: the goal record changes on a migrate-libraries branch in go-core, the root, which the task otherwise leaves untouched, so it merges by pull request with the task.
+- migrate-libraries: web.Service.Run's panics read "web: Service.Run requires <field>"; the panic for a Logger the Build didn't reach fires after a successful Build, so a Build failure goes to stderr first.
+- migrate-libraries: empty Roots panics as the brief says, even when Server alone is the service; that Run doesn't write into the caller's Roots slice stays undocumented.
+- migrate-libraries: cli.Program's panics read "cli: Program.Root is nil", and, when only one of Graph and LifecycleConfig is set, name the missing field then the set one; Use without a Graph panics "cli: <path>: Use declared but Program.Graph is nil".
+- migrate-libraries: cli runs each leaf under a context detached from the run context; context.AfterFunc ends it with an unexported runFailure cause ("run: <node>: <error>"), which unwraps to the failure and matches context.Canceled. Err waits for that end and returns the caller's DeadlineExceeded. cli and scenario replace an error that is only the context's end with its cause only when errors.Is(cause, err), so a caller's own cause still reports "context canceled" or "context deadline exceeded".
+- migrate-libraries: a leaf error that wraps ctx.Err() is reported beside the run failure; a caller cancel racing a Monitored failure may still print two lines; a caller cause that wraps context.Canceled is reported in place of the context's end.
+- migrate-libraries: Leaves yields paths and node sets from the tree's root even when called on a subtree, a nil set for a leaf whose path declares no nodes, and nothing for a command with neither Run nor subcommands.
+- migrate-libraries: each CHANGELOG lists every break go-core marks **Breaking:** between the module's previous requirement and v0.11.0; postgres's range starts at v0.7.0, which postgres/v0.5.0 pulled.
+- migrate-libraries: go-storage's new CHANGELOG link lines are releases/tag links, following that repository's convention, not compare links.
+- migrate-libraries: go-storage's store test asserts lifecycle.ReadyStarter and that the Coordinator lists the Store's check under its node name; s3's docs drop AWS_NEW_RETRIES_2026, which aws-sdk-go-v2 v1.48.0 no longer reads.
+- migrate-libraries: tests whose constructors only returned a fixed or new zero value moved to g.Value and graph.Fresh.
 
 ## Pending edits
 
