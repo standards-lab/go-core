@@ -1,8 +1,8 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** blobfs
-- **Branch:** blobfs
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
@@ -10,7 +10,7 @@
 2. [x] libraries
 3. [x] storage-cli
 4. [x] messaging
-5. [ ] blobfs
+5. [x] blobfs
 6. [ ] template
 7. [ ] service
 
@@ -174,10 +174,6 @@ Door          One-way for the two tags, which reach go-web-service's and
               stays untagged.
 Release       blobfs v0.8.0, postgres/v0.6.0
 ```
-
-## Progress
-
-slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec done · editor done
 
 ## Decisions
 
