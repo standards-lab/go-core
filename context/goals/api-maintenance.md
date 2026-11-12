@@ -177,7 +177,7 @@ Release       blobfs v0.8.0, postgres/v0.6.0
 
 ## Progress
 
-slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards — · spec — · editor —
+slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec — · editor —
 
 ## Decisions
 
@@ -259,6 +259,8 @@ slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6d
 - blobfs: release preparation is two follow-up pull requests, postgres after blobfs v0.8.0 tags and example after postgres/v0.6.0 tags, as blobfs v0.7.0's #14 and #15 and go-storage's f894743 were.
 - blobfs: postgres v0.6.0 carries one Breaking line for each breaking direct requirement; the base's v0.8.0 "Migrating from v0.7.0" section covers the zero calls that are now valid, AtVersion(0), and http.NoBody, and points to sqlate's changelog.
 - blobfs: no item is held; currency exits 0 at the end of the task.
+- blobfs: standards review kept Sweep's refusal messages ("the batch %d is below 1", "the stale age %s is not positive") unchanged, as the brief requires today's message for a negative value.
+- blobfs: SweepOptions.Batch's zero-means-100 default stays, carried over from the old option; STANDARDS.md's no-default rule names only the stale age.
 
 ## Pending edits
 
