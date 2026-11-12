@@ -177,7 +177,7 @@ Release       blobfs v0.8.0, postgres/v0.6.0
 
 ## Progress
 
-slices 0/7 committed · standards — · spec — · editor —
+slices 1/7 committed (14ed467) · standards — · spec — · editor —
 
 ## Decisions
 
