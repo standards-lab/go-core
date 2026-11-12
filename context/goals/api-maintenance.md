@@ -108,7 +108,7 @@ Door          Two-way. No tag; each repository merges by pull request,
 
 ## Progress
 
-slices 0/3 committed · standards — · spec — · editor —
+slices 1/3 committed · standards — · spec — · editor —
 
 ## Decisions
 
