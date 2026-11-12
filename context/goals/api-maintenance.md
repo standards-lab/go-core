@@ -1,8 +1,8 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** service
-- **Branch:** service
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
@@ -12,7 +12,7 @@
 4. [x] messaging
 5. [x] blobfs
 6. [x] template
-7. [ ] service
+7. [x] service
 
 ## Task brief · service
 
@@ -105,10 +105,6 @@ Door          Two-way. No tag; each repository merges by pull request,
               go-messaging first. No module requires go-web-service, and
               go-messaging's image pin reaches no consumer.
 ```
-
-## Progress
-
-slices 3/3 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
