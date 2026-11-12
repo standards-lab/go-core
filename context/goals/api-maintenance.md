@@ -177,7 +177,7 @@ Release       blobfs v0.8.0, postgres/v0.6.0
 
 ## Progress
 
-slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec — · editor —
+slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec done · editor —
 
 ## Decisions
 
@@ -261,6 +261,9 @@ slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6d
 - blobfs: no item is held; currency exits 0 at the end of the task.
 - blobfs: standards review kept Sweep's refusal messages ("the batch %d is below 1", "the stale age %s is not positive") unchanged, as the brief requires today's message for a negative value.
 - blobfs: SweepOptions.Batch's zero-means-100 default stays, carried over from the old option; STANDARDS.md's no-default rule names only the stale age.
+- blobfs: spec review found postgres's package docs still naming data.WithEngine (behavior 12); fixed on the task branch before the tag, since doc comments aren't the code the "no change" decision covers.
+- blobfs: the conformance subtests Deletes/AtVersion and Branches/MarkAtVersion are renamed Guarded and MarkGuarded with AtVersion's removal; the base changelog records the rename for -run filters.
+- blobfs: spec review ran postgres's integration suite (1409 pass) and the example against the dev stack on the new forms in a scratch copy, before any tag.
 
 ## Pending edits
 
