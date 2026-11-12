@@ -97,7 +97,7 @@ Release       go-web-sdk-template template/v0.15.0,
 
 ## Progress
 
-slices 4/4 committed · standards — · spec — · editor —
+slices 4/4 committed · standards done · spec — · editor —
 
 ## Decisions
 
@@ -187,6 +187,7 @@ slices 4/4 committed · standards — · spec — · editor —
 - blobfs: WriteFile and EnsureFile check DB, Objects, Body, and Begin in that order and panic naming the first nil one; EnsureFile panics before it checks its ID, so an invalid ID stays a returned IDError only on a fully wired request.
 - template: both templates' STANDARDS.md point to construction-and-execution, though neither converts an API; every service and CLI starts from them.
 - template: both release minor and Breaking (go-web-sdk-template template/v0.15.0, go-cli-sdk-template template/v0.3.0); a generated CLI calling the removed forms stops compiling on the new pins, as web template v0.13.0 went minor with its composition root unchanged.
+- template: standards review aligned both changelogs' Breaking pin lines to the prior-entry form ("the <lib> pin moves to vX (from vY)"), not an arrow.
 
 ## Pending edits
 
