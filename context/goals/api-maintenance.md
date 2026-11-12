@@ -1,8 +1,8 @@
 # goal · api-maintenance
 
-- **State:** brief ready
-- **Task:** template
-- **Branch:** template
+- **State:** idle
+- **Task:** none
+- **Branch:** none
 
 ## Tasks
 
@@ -11,7 +11,7 @@
 3. [x] storage-cli
 4. [x] messaging
 5. [x] blobfs
-6. [ ] template
+6. [x] template
 7. [ ] service
 
 ## Task brief · template
@@ -94,10 +94,6 @@ Door          One-way for the two tags, which gonew @latest serves to
 Release       go-web-sdk-template template/v0.15.0,
               go-cli-sdk-template template/v0.3.0
 ```
-
-## Progress
-
-slices 4/4 committed · standards done · spec done · editor done
 
 ## Decisions
 
