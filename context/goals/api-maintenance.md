@@ -108,7 +108,7 @@ Door          Two-way. No tag; each repository merges by pull request,
 
 ## Progress
 
-slices 3/3 committed · standards ✓ · spec — · editor —
+slices 3/3 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
@@ -204,6 +204,15 @@ slices 3/3 committed · standards ✓ · spec — · editor —
 - service: go-web-service's STANDARDS.md points to construction-and-execution, covering the library calls, the harness's Options, and new exported APIs; outboxtest.Want, slab's Client.UploadFile, and output.Request stand unconverted per the goal rule.
 - service: the nats image hold lifts at 2.15.3-alpine, whose index now lists the same platforms as 2.15.2-alpine.
 - service: go-messaging joins the task to lift its own nats hold (compose/nats, the workspace's only other 2.15.2 pin); an image pin takes no changelog entry and no tag, as in go-messaging v0.3.0.
+- service: calls that had no version guard (the two Files.Hold calls, Files.Delete in release, and RemoveFileID in putLogo's cleanup) pass VersionOptions{} and stay unguarded; calls that passed AtVersion(v) set Version to v.
+- service: the document tests' serviceOn helper takes a bfdata.Options; serviceNudged passes bfdata.Options{}.
+- service: the sweep needs no change for blobfs v0.8.0's zero-means-default fields, since config validation refuses a Batch below 1 and a stale age that isn't positive, so a zero never reaches blobfs.
+- service: slab gained TestReadFlags_KeepsRepeatedFiltersInOrder, since the existing test passed only one filter.
+- service: the graph test's comment names sweep.Options.Unlocked (a go-database v0.12.0 field) in place of the removed sweep.Unlocked.
+- service: the CHANGELOG Pins line gives every library its from-version (86dd05c left them out for the base module) and leaves out indirect bumps and the NATS image.
+- service: standards review moved the STANDARDS.md pointer into the templates' order and replaced the goal-history explanation with "predate the rule and stand unconverted"; spec review's one gap, slab's StringsValue call missing from the pointer, is closed (933b338).
+- service: editor rewrote go-web-service's context/data-layer.md evaluation note to name blobfs's hooks as v0.8.0 fields; it states what is promoted now, so it is current guidance, not history.
+- service: editor found no citation outside the goal's repositories that this task makes stale: standards-lab's context cites neither NATS image version nor go-messaging's hold, and the pending edits already listed cover its citations of removed forms (messaging.md, blobfs-composition.md, html-artifacts.md).
 
 ## Pending edits
 
