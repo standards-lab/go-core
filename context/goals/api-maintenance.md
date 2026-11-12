@@ -97,7 +97,7 @@ Release       go-web-sdk-template template/v0.15.0,
 
 ## Progress
 
-slices 4/4 committed · standards done · spec — · editor —
+slices 4/4 committed · standards done · spec done · editor —
 
 ## Decisions
 
@@ -188,6 +188,7 @@ slices 4/4 committed · standards done · spec — · editor —
 - template: both templates' STANDARDS.md point to construction-and-execution, though neither converts an API; every service and CLI starts from them.
 - template: both release minor and Breaking (go-web-sdk-template template/v0.15.0, go-cli-sdk-template template/v0.3.0); a generated CLI calling the removed forms stops compiling on the new pins, as web template v0.13.0 went minor with its composition root unchanged.
 - template: standards review aligned both changelogs' Breaking pin lines to the prior-entry form ("the <lib> pin moves to vX (from vY)"), not an arrow.
+- template: spec review found no gaps; the CLI STANDARDS.md pointer names the harness's argument list (Run(t, args...) over processtest.Cmd) where behavior 7 says "Options", since the CLI harness has no Options type (the brief's Out of scope names that argument list).
 
 ## Pending edits
 
