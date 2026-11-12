@@ -1,6 +1,6 @@
 # goal · api-maintenance
 
-- **State:** building
+- **State:** brief ready
 - **Task:** template
 - **Branch:** template
 
