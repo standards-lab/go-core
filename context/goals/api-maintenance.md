@@ -177,7 +177,7 @@ Release       blobfs v0.8.0, postgres/v0.6.0
 
 ## Progress
 
-slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec done · editor —
+slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6dbb7) · standards 4abb4e2 · spec done · editor done
 
 ## Decisions
 
@@ -264,9 +264,11 @@ slices 7/7 committed (14ed467, 9106cb4, e5d8ef5, ae296ed, 2e5647f, e6f13bd, 8c6d
 - blobfs: spec review found postgres's package docs still naming data.WithEngine (behavior 12); fixed on the task branch before the tag, since doc comments aren't the code the "no change" decision covers.
 - blobfs: the conformance subtests Deletes/AtVersion and Branches/MarkAtVersion are renamed Guarded and MarkGuarded with AtVersion's removal; the base changelog records the rename for -run filters.
 - blobfs: spec review ran postgres's integration suite (1409 pass) and the example against the dev stack on the new forms in a scratch copy, before any tag.
+- blobfs: WriteFile and EnsureFile check DB, Objects, Body, and Begin in that order and panic naming the first nil one; EnsureFile panics before it checks its ID, so an invalid ID stays a returned IDError only on a fully wired request.
 
 ## Pending edits
 
 - architecture · construction-and-execution principle: a context.Context parameter does not count toward the four required inputs.
 - standards-lab · context/html-artifacts.md:409: replace go-web-sdk's `WriteProblem` with `Problem.WriteFor` (go-web-sdk v0.17.0); the `problem.go` citation stays, since `WriteFor` is defined there.
 - standards-lab · context/messaging.md:71,74,110: replace the `messaging.Gated` option with `Setup`'s `Gate` field, `messaging.OnFailure` with `Setup`'s `OnFailure` field, and `outbox.Drain` with `outbox.RelayOptions.Drain` (go-messaging v0.3.0).
+- standards-lab · context/blobfs-composition.md:23-24: replace "passing `OnComplete` and `OnDelete`" with "setting `WriteFileRequest.OnComplete`, `EnsureFileRequest.OnComplete`, and `RemoveOptions.OnDelete`" (blobfs v0.8.0).
