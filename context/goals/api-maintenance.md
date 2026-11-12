@@ -10,127 +10,169 @@
 2. [x] libraries
 3. [x] storage-cli
 4. [x] messaging
-5. [ ] blobfs
+5. [x] blobfs
 6. [ ] template
 7. [ ] service
 
-## Task brief · messaging
+## Task brief · blobfs
 
 ```
-Problem       go-messaging's New takes six required inputs and functional
-              options, and Outbox.Relay takes functional options. Both
-              break the construction-and-execution rule. go-messaging
-              trails go-core v0.12.0 and sqlate v0.7.0, whose reactor,
-              event, and transaction calls it must adapt. Its postgres and
-              nats sub-modules can't take those releases until the base
-              tags, and then re-tag on it.
-Behaviors     1. messaging.Setup{Config, Broker, Outbox, Inbox, Shutdown,
-                 Logger, OnFailure, Gate}.Build() (*Runtime, error), with
-                 a value receiver, builds the Runtime New builds today.
-                 Before any I/O, it returns an error for an invalid
-                 Config, a Shutdown of zero or less, or an outbox or inbox
-                 engine missing a statement, with New's messages.
-              2. Build panics when Broker or Logger is nil, before
-                 anything else, with "messaging: Setup.Broker is nil" or
-                 "messaging: Setup.Logger is nil".
-              3. A nil OnFailure keeps the default hook: one warn line,
-                 "messaging failure", for each Failure. A non-nil
-                 OnFailure gets each Failure in its place. A nil Gate
-                 means the reactors hold no gate. A set Gate is held as
-                 Gated's is today: the relay holds it for each outbox
-                 row, and a Consume reactor for each delivery. A non-nil
+Problem       blobfs's data package takes optional inputs through six
+              variadic option families. Files.Create, Files.Ensure,
+              Files.Move, Directories.Move, and both Continue methods
+              take five required inputs, and Store.WriteFile and
+              Store.EnsureFile take five and six. All of these break the
+              construction-and-execution rule. blobfs trails sqlate
+              v0.7.0, so it must pass the new trailing transaction
+              options to its Begin and Transact calls. Its postgres
+              sub-module and example module can't take sqlate v0.7.0
+              until the base tags. After that, postgres re-tags on the
+              new base and the example moves onto both releases.
+Behaviors     1. data.New(catalog, dialect, Options{Engine}). The zero
+                 Options binds the baseline. A set Engine is run as
+                 WithEngine's was, and New's errors are unchanged.
+              2. Directories.Create and Directories.Ensure take (ctx,
+                 sess, parentID, name, CreateOptions{ID}). Files.Create
+                 and Files.Ensure take (ctx, sess, keys, FileSpec
+                 {DirectoryID, Name, ContentType}, CreateOptions{ID}).
+                 An empty ID mints one. A set ID is checked with
+                 blobfs.ParseID before any SQL, as WithID's was, and a
+                 row an Ensure finds keeps its own id. Outcomes and
+                 refusals are unchanged.
+              3. Files.Move(ctx, sess, id, FileMove{DirectoryID, Name,
+                 Version}) and Directories.Move(ctx, tx, id,
+                 DirectoryMove{ParentID, Name, Version}) behave as the
+                 positional forms do. Version is required: a zero
+                 Version is still a guard that matches no row, so the
+                 call returns query.ErrVersionMismatch.
+              4. Files.Hold, Files.Delete, Directories.Delete,
+                 Directories.MarkDeleting, and Store.RemoveFileID take
+                 a trailing VersionOptions{Version}. A zero Version
+                 leaves the call unguarded. A non-zero Version guards it
+                 as AtVersion did.
+              5. Both listings' List takes (ctx, sess, id, req,
+                 query.Page, ListOptions{IncludeDeleting}), and their
+                 Continue takes (ctx, sess, id, req, CursorPage{After,
+                 Size}, ListOptions). Listing[T] has both shapes. An
+                 empty After, a Size below 1, and a cursor from another
+                 listing are refused as today.
+              6. Store.RemoveFile(ctx, db, objects, pick,
+                 RemoveOptions{Version, OnDelete}). A zero Version is
+                 unguarded and a nil OnDelete runs no hook. A set
+                 OnDelete runs in the delete's transaction, as the
+                 OnDelete option's function did.
+              7. Store.Sweep(ctx, db, objects, SweepOptions{Batch,
+                 OnRemoveDirectory, StaleOlderThan}). A zero Batch
+                 means 100. A zero StaleOlderThan means no stale
+                 reclaim. A nil OnRemoveDirectory runs no hook. A
+                 negative Batch or StaleOlderThan is a returned error
+                 before any SQL, with today's message.
+              8. Store.WriteFile(ctx, WriteFileRequest{DB, Objects,
+                 Body, Size, Begin, OnComplete}) and Store.EnsureFile(
+                 ctx, EnsureFileRequest{DB, Objects, ID, Body, Size,
+                 Begin, OnComplete}) give the outcomes the positional
+                 forms give. A nil OnComplete runs no hook. A set one
+                 runs as the OnComplete option's function did, only
+                 when the call completes the file itself. An invalid
+                 EnsureFileRequest.ID is a returned error, as today.
+              9. WriteFile and EnsureFile panic before any I/O when DB,
+                 Objects, Body, or Begin is nil, with a message such as
+                 "data: WriteFileRequest.Body is nil" or
+                 "data: EnsureFileRequest.DB is nil". A non-nil
                  interface that wraps a nil pointer counts as set.
-              4. messaging no longer exports New, Option, OnFailure, or
-                 Gated.
-              5. Outbox.Relay(db, poll, RelayOptions{Report, Timeout,
-                 Drain, Gate}). The zero RelayOptions keeps today's
-                 defaults: reports are discarded, each row's handler is
-                 bounded at 10s, there is no last pass, and no gate is
-                 held. A non-nil Report gets every error the relay
-                 survives, as the report parameter does today. A
-                 positive Timeout bounds each row's handler, and the
-                 row's transaction at twice that. A positive Drain makes
-                 the last pass after cancellation. A set Gate is held
-                 shared for each row, as outbox.Gated's is today.
-              6. Relay panics when poll is zero or less, or Timeout or
-                 Drain is negative. A zero Timeout means 10s and no
-                 longer panics.
-              7. outbox no longer exports RelayOption, Timeout, Drain, or
-                 Gated.
-              8. Runtime.Relay keeps its behavior on the new form: the
-                 configuration's RelayTimeout bounds each publish, the
-                 last pass gets a quarter of the drain timeout, it holds
-                 Setup.Gate, and the reactor cancels its handlers at half
-                 the drain timeout. Runtime.Consume also keeps its
-                 behavior.
-              9. go-messaging requires go-core v0.12.0 and sqlate v0.7.0.
-                 postgres requires go-messaging v0.3.0, go-core v0.12.0,
-                 sqlate v0.7.0, sqlate/postgres v0.7.0, sqlint v0.4.0, and
-                 pgx v5.13.0. nats requires go-messaging v0.3.0, go-core
-                 v0.12.0, and nats.go v1.55.0. Every module passes its
-                 check with the workspace off, and both integration
-                 suites pass.
-              10. The README and every package doc show only the new
-                 forms. The base changelog's v0.3.0 has Added entries
-                 for Setup and RelayOptions and marks each removal
-                 Breaking under Changed or Removed. It marks the go-core
-                 v0.12.0 and sqlate v0.7.0 requirements Breaking. Its
-                 "Migrating from v0.2.0" section covers New to
-                 Setup.Build and the options to RelayOptions fields,
-                 notes that a zero Timeout now means the default, and
-                 points to go-core's and sqlate's changelogs for their
-                 call changes. postgres v0.3.0 and nats v0.3.0 each carry
-                 one Breaking line for each breaking direct requirement.
-                 nats's untagged Unreleased line folds into its v0.3.0.
-              11. STANDARDS.md points to the construction-and-execution
-                 principle and names messaging.Setup, whose Build panics
-                 naming a nil Broker or Logger; outbox.RelayOptions, the
-                 one options value Outbox.Relay takes; and every new
-                 exported function and constructor.
-              12. Currency exits 0 and every check passes.
-Test seams    The exported constructors, from external test packages:
-              messaging.Setup.Build, exercised through Runtime.Relay and
-              Runtime.Consume over the memory broker and a scripted
-              database; and Outbox.Relay with RelayOptions values, driven
-              through Relay.Receive. The postgres and nats integration
-              suites and messagingtest.Run cover the sub-modules.
-Slices        1. Upgrade. The base moves onto go-core v0.12.0 and sqlate
-                 v0.7.0 and adapts: reactor.Options and event.Options at
-                 the runtime's and the conformance suite's calls, and a
-                 nil *sql.TxOptions at the relay's Begin and the tests'
-                 Begin and Transact. postgres moves onto pgx v5.13.0 and
-                 nats onto nats.go v1.55.0. Go 1.27.4, golangci-lint
-                 2.15.0, the two action pins, and the nats image move to
-                 their latest. Done when the check and both integration
-                 suites pass, and currency reports only the sub-modules'
-                 go-core, sqlate, sqlate/postgres, and sqlint items held
-                 for release preparation.
-              2. outbox.RelayOptions, with the relay's tests and
-                 Runtime.Relay on the new form (5-8).
-              3. messaging.Setup, with the runtime's and gate's tests on
-                 the new form (1-4).
-              4. The base's docs and README, changelog v0.3.0 with its
-                 migration section, and the standards pointer (10-11,
+              10. data no longer exports Option, WithEngine,
+                 CreateOption, WithID, VersionOption, AtVersion,
+                 ListOption, IncludeDeleting, WriteOption, the
+                 OnComplete function, RemoveOption, the OnDelete
+                 function, SweepOption, Batch, the OnRemoveDirectory
+                 function, or StaleOlderThan. Every error and wrap
+                 message is unchanged.
+              11. The base requires sqlate v0.7.0. postgres requires
+                 blobfs v0.8.0, sqlate v0.7.0, sqlate/postgres v0.7.0,
+                 the sqlint tool v0.4.0, and pgx v5.13.0. example
+                 requires blobfs v0.8.0, postgres v0.6.0, go-storage
+                 v0.8.0, azureblob v0.7.0, sqlate v0.7.0,
+                 sqlate/postgres v0.7.0, and pgx v5.13.0. Every module
+                 passes its check with the workspace off, the postgres
+                 integration suite passes, and the example runs against
+                 the development stack.
+              12. The README, the guide, and every package doc show only
+                 the new forms. The base changelog's v0.8.0 has an
+                 Added entry for each new type. It marks each removal
+                 and signature change Breaking under Changed or
+                 Removed, and marks the sqlate v0.7.0 requirement
+                 Breaking. Its "Migrating from v0.7.0" section maps
+                 each option to its field and gives the new forms. It
+                 notes the zero calls that are now valid: Batch 0 means
+                 100, StaleOlderThan 0 means no reclaim, and an empty ID
+                 mints one, where each was refused. It notes that
+                 AtVersion(0) becomes an unguarded call, and that a nil
+                 Body panics, so an empty file passes http.NoBody. It
+                 points to sqlate's changelog for the transaction
+                 change. postgres v0.6.0 carries one Breaking line for
+                 each breaking direct requirement.
+              13. STANDARDS.md points to the construction-and-execution
+                 principle. It names WriteFileRequest and
+                 EnsureFileRequest, whose methods panic naming a nil DB,
+                 Objects, Body, or Begin. It names FileSpec, FileMove,
+                 DirectoryMove, and CursorPage, the request values, and
+                 Options, CreateOptions, VersionOptions, ListOptions,
+                 RemoveOptions, and SweepOptions, the options values.
+              14. Currency exits 0 and every check passes.
+Test seams    The data package's exported Store and its Files and
+              Directories handles, from external test packages over the
+              scripted-database unit tier. The conformance suite,
+              datatest.Run, run by the postgres integration tier. The
+              example module's run.
+Slices        1. Upgrade. The base moves onto sqlate v0.7.0 and x/text
+                 v0.44.0 and passes a nil *sql.TxOptions at its
+                 Transact calls. The conformance suite's and tests'
+                 Begin calls take *sql.TxOptions values. postgres and
+                 example move onto pgx v5.13.0, and example also moves
+                 onto go-storage v0.8.0 and azureblob v0.7.0. Go 1.27.4,
+                 golangci-lint 2.15.0, and the two action pins move to
+                 their latest. Done when the check passes and currency
+                 reports only the sqlate, sqlate/postgres, and sqlint
+                 items of postgres and example, which wait for release
+                 preparation.
+              2. Options, CreateOptions, VersionOptions, and
+                 RemoveOptions on New, the create and version calls, and
+                 RemoveFile, with their tests (1, 2 for directories, 4,
+                 6).
+              3. ListOptions and CursorPage on both listings and
+                 Listing[T] (5).
+              4. SweepOptions (7).
+              5. FileSpec, FileMove, and DirectoryMove (2 for files, 3).
+              6. WriteFileRequest and EnsureFileRequest, with their
+                 panics, and the removals (8-10).
+              7. The base's docs and README, changelog v0.8.0 with its
+                 migration section, and the standards pointer (12-13,
                  base).
-              5. Release preparation, at SHIP after go-messaging v0.3.0
-                 tags, as a follow-up pull request as go-storage's was
-                 (f894743). It moves postgres and nats onto the base's
-                 new requirement and the held releases, puts their
-                 integration tests on the new forms, and writes their
-                 v0.3.0 changelogs (9-10, sub-modules; 12).
-Out of scope  go-web-service's messaging.New call, which moves in the
-              service task. The coordinator's messaging design page,
-              which is a pending edit. The variadic data lists:
-              the outbox sink's Write and the internal engine check.
-              Conforming APIs: Runtime.Relay and Consume, Config's
-              methods, the Subscription helpers, inbox.New and Claim,
-              outbox.New and Sink, memory.New, nats.New and its Broker,
-              messagingtest.Run, pgtest, natstest, and the postgres
-              engine, migration, and retention functions.
-Door          One-way for the three tags, which reach go-web-service's
-              module requirements. Two-way for the code and docs, which
-              merge by pull request before tagging.
-Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
+              8. Release preparation for postgres, at SHIP after blobfs
+                 v0.8.0 tags, as a follow-up pull request as go-storage's
+                 was (f894743). postgres moves onto blobfs v0.8.0 and the
+                 sqlate, sqlate/postgres, and sqlint releases that were
+                 waiting. Its integration tests move to the new forms,
+                 and it gets its v0.6.0 changelog (11-12, postgres).
+              9. Release preparation for example, after postgres/v0.6.0
+                 tags, as a second follow-up pull request. example moves
+                 onto both releases and the new forms. It stays untagged
+                 (11, example; 14).
+Out of scope  go-web-service's and slab's blobfs calls, which move in
+              the service task. Spikes that import blobfs, which are
+              outside the goal. A cursor-and-size type in sqlate. The
+              data lists datatest.FileRows and DirectoryRows. Conforming
+              APIs: Files.Complete, Find, FindByName, FindByPath, Path,
+              IsWithin, LockTree, BranchRoots, Purge, Store.PurgeFile,
+              Statements, Verify, SweepUntilDone, Patterns, the Variant
+              and Engine types, postgres.Engine and Migrations,
+              datatest.Run, and the root package's functions. Behavior
+              changes beyond those listed.
+Door          One-way for the two tags, which reach go-web-service's and
+              slab's module requirements. Two-way for the code and docs,
+              which merge by pull request before tagging. The example
+              stays untagged.
+Release       blobfs v0.8.0, postgres/v0.6.0
 ```
 
 ## Decisions
@@ -191,9 +233,38 @@ Release       go-messaging v0.3.0, postgres/v0.3.0, nats/v0.3.0
 - messaging: changelog v0.3.0 gives the Relay signature change its own Breaking entry under Changed.
 - messaging: standards review kept Relay's one panic message for poll, Timeout, and Drain; the changelog quotes it.
 - messaging: editor dropped go-messaging's context/README.md line naming the deleted v1.messaging record (stale since ca8621e).
+- blobfs: Store.WriteFile and Store.EnsureFile take WriteFileRequest and EnsureFileRequest (named for the method, as outbox.RelayOptions was); OnComplete is a nil-default field on each, and WriteOption and the OnComplete function are removed.
+- blobfs: Files.Create, Files.Ensure, Files.Move, and Directories.Move each take one request value as their last required input; a shared Place value and struct-with-Run forms were rejected.
+- blobfs: Files.Continue and Directories.Continue replace (after, size) with one cursor-and-size value beside query.Page, so Listing[T] keeps two methods of the same shape.
+- blobfs: VersionOptions.Version and RemoveOptions.Version are int64, and zero leaves the call unguarded, since row versions start at 1 (*int64 and sql.Null[int64] rejected).
+- blobfs: tags blobfs v0.8.0 and postgres/v0.6.0; example stays untagged.
+- blobfs: Files.Create and Files.Ensure share data.FileSpec{DirectoryID, Name, ContentType}, since their inputs are identical and an Ensure request type would clash with EnsureFileRequest; FileSpec kept over FileInfo, which reads as io/fs.FileInfo's existing-file metadata.
+- blobfs: a supplied file id stays in the trailing CreateOptions{ID}, as on Directories.Create and Ensure; FileSpec has no ID field.
+- blobfs: the move requests are data.FileMove{DirectoryID, Name, Version} and data.DirectoryMove{ParentID, Name, Version} (MoveFileRequest and MoveDirectoryRequest rejected; the "Request" suffix is kept for the Store protocols' structs).
+- blobfs: the id of the row being moved stays positional, as on Find, Delete, Hold, MarkDeleting, and Complete.
+- blobfs: Continue's value is data.CursorPage{After query.Cursor, Size int}, beside query.Page and named after sqlate's Continue parameter.
+- blobfs: a nil WriteFileRequest.Body or EnsureFileRequest.Body panics by name, as DB, Objects, and Begin do; an empty file passes http.NoBody.
+- blobfs: New takes data.Options{Engine}, as reactor.New and event.NewRecorder take theirs; the families become CreateOptions, VersionOptions, ListOptions, RemoveOptions, and SweepOptions, with field names kept from the option functions.
+- blobfs: options structs are required trailing parameters, not variadic, as sqlate's Transact took *sql.TxOptions.
+- blobfs: a zero option field means the default: Batch 0 is 100, StaleOlderThan 0 is no stale reclaim, and an empty ID is minted, where each was refused; a negative Batch or StaleOlderThan stays a returned error with today's message.
+- blobfs: a zero FileMove or DirectoryMove Version stays a guard (query.ErrVersionMismatch); zero means unguarded only on the optional VersionOptions.
+- blobfs: keys stays a positional input before FileSpec; Directories.Create and Ensure stay positional (three inputs) with a trailing CreateOptions.
+- blobfs: the only new panics are a nil DB, Objects, Body, or Begin on the Store requests, in the "data: <Type>.<Field> is nil" form; every other refusal and every error and wrap message is unchanged.
+- blobfs: postgres's code needs no change; it re-tags on the new base (goal decision).
+- blobfs: postgres's sqlate, sqlate/postgres, and sqlint moves and example's sqlate moves wait for the blobfs v0.8.0 tag, since the tagged v0.7.0 doesn't build against sqlate v0.7.0; pgx, go-storage, azureblob, x/text, Go, golangci-lint, and the action pins move in the upgrade slice.
+- blobfs: release preparation is two follow-up pull requests, postgres after blobfs v0.8.0 tags and example after postgres/v0.6.0 tags, as blobfs v0.7.0's #14 and #15 and go-storage's f894743 were.
+- blobfs: postgres v0.6.0 carries one Breaking line for each breaking direct requirement; the base's v0.8.0 "Migrating from v0.7.0" section covers the zero calls that are now valid, AtVersion(0), and http.NoBody, and points to sqlate's changelog.
+- blobfs: no item is held; currency exits 0 at the end of the task.
+- blobfs: standards review kept Sweep's refusal messages ("the batch %d is below 1", "the stale age %s is not positive") unchanged, as the brief requires today's message for a negative value.
+- blobfs: SweepOptions.Batch's zero-means-100 default stays, carried over from the old option; STANDARDS.md's no-default rule names only the stale age.
+- blobfs: spec review found postgres's package docs still naming data.WithEngine (behavior 12); fixed on the task branch before the tag, since doc comments aren't the code the "no change" decision covers.
+- blobfs: the conformance subtests Deletes/AtVersion and Branches/MarkAtVersion are renamed Guarded and MarkGuarded with AtVersion's removal; the base changelog records the rename for -run filters.
+- blobfs: spec review ran postgres's integration suite (1409 pass) and the example against the dev stack on the new forms in a scratch copy, before any tag.
+- blobfs: WriteFile and EnsureFile check DB, Objects, Body, and Begin in that order and panic naming the first nil one; EnsureFile panics before it checks its ID, so an invalid ID stays a returned IDError only on a fully wired request.
 
 ## Pending edits
 
 - architecture · construction-and-execution principle: a context.Context parameter does not count toward the four required inputs.
 - standards-lab · context/html-artifacts.md:409: replace go-web-sdk's `WriteProblem` with `Problem.WriteFor` (go-web-sdk v0.17.0); the `problem.go` citation stays, since `WriteFor` is defined there.
 - standards-lab · context/messaging.md:71,74,110: replace the `messaging.Gated` option with `Setup`'s `Gate` field, `messaging.OnFailure` with `Setup`'s `OnFailure` field, and `outbox.Drain` with `outbox.RelayOptions.Drain` (go-messaging v0.3.0).
+- standards-lab · context/blobfs-composition.md:23-24: replace "passing `OnComplete` and `OnDelete`" with "setting `WriteFileRequest.OnComplete`, `EnsureFileRequest.OnComplete`, and `RemoveOptions.OnDelete`" (blobfs v0.8.0).
