@@ -12,87 +12,98 @@
 4. [x] messaging
 5. [x] blobfs
 6. [x] template
-7. [ ] service
+7. [x] service
 
-## Task brief · template
+## Task brief · service
 
 ```
-Problem       go-web-sdk-template trails go-core v0.12.0 and go-web-sdk
-              v0.17.0, and go-cli-sdk-template trails go-cli-sdk v0.4.0
-              and go-core v0.12.0. The web template builds RequestID and
-              a test reactor in forms those releases removed, and its
-              reactor docs teach CancelWithin as an option. A service or
-              CLI generated today starts on the old, non-conforming
-              library forms. Neither template exports a library API, so
-              both migrate and nothing converts. Each releases so that
-              gonew @latest yields the converted forms.
-Behaviors     1. The web template requires go-core v0.12.0 and go-web-sdk
-                 v0.17.0. Its check passes with the workspace off, and
-                 its integration suite passes.
-              2. The web middleware stack builds RequestID with the zero
-                 middleware.RequestIDOptions. Every response still
-                 carries the request-id header, and the stack order is
+Problem       go-web-service and slab trail every release the goal
+              converted: go-core v0.12.0, sqlate v0.7.0, go-database
+              v0.12.0, go-web-sdk v0.17.0, go-observability v0.4.0,
+              go-storage v0.8.0, go-messaging v0.3.0, blobfs v0.8.0,
+              go-cli-sdk v0.4.0, and their sub-modules. The service calls
+              the forms those releases removed: variadic transaction,
+              recorder, sweeper, request-id, fake, runtime, and blobfs
+              options; blobfs's positional write, move, and continue
+              inputs; and slab's StringsVar. The reference service
+              teaches the old shapes and can't build on the new pins. It
+              is application code: it migrates, nothing of its own
+              converts, and it is untagged.
+Behaviors     1. Both modules require every converted release at its
+                 latest tag, and the check passes with the workspace off.
+                 The integration suite passes against the compose stack.
+              2. Every transaction the service opens is a default
+                 transaction, passed as nil *sql.TxOptions. Every seed,
+                 command, admin, and event test passes unchanged.
+              3. The middleware stack builds RequestID from
+                 RequestIDOptions whose Source is observability's
+                 RequestIDSource. Every response carries the request id,
+                 the trace-derived id still wins, and the stack order is
                  unchanged.
-              3. The web graph tests' fixture reactor is built with
-                 reactor.Options. The server-above-reactor test and its
-                 guard-failure case pass as before.
-              4. The web template's reactor docs (defineReactors' comment
-                 and the starter README) describe reactor.CancelWithin as
-                 the duration that sets reactor.Options.CancelAfter. The
-                 README's expiry snippet passes
-                 reactor.Options{CancelAfter: reactor.CancelWithin(...)}.
-                 No doc in either template shows a removed form.
-              5. The CLI template requires go-cli-sdk v0.4.0 and go-core
-                 v0.12.0. Its check and integration suite pass, and its
-                 code is unchanged.
-              6. The web CHANGELOG has a v0.15.0 entry and the CLI
-                 CHANGELOG a v0.3.0 entry, each in the v0.14.0/v0.2.0
-                 shape: a summary and a porting list linking the
-                 libraries' "Migrating from" sections (go-core v0.11.0
-                 for both, go-web-sdk v0.16.0 for web, go-cli-sdk v0.3.0
-                 for the CLI). The web list names RequestID's options,
-                 reactor.New and event.NewRecorder's Options,
-                 CancelWithin as a duration, and WriteProblem's
-                 replacement by Problem.WriteFor. The CLI list names
-                 StringsVar's replacement by fs.Var with
-                 cli.StringsValue, and go-core's options. Each entry has
-                 a Changed line, "**Breaking:** the pins move" with their
-                 from-versions, and compare links. The CLI
-                 context/README's version line reads template/v0.3.0.
-                 Released entries that name removed forms stay as
-                 history.
-              7. Each template's STANDARDS.md points to the
-                 construction-and-execution principle and names what it
-                 covers: the integration harness's Options, and the
-                 library calls the template demonstrates.
-              8. Currency exits 0 in both templates.
-Test seams    internal/app's exported App, from its external test
-              packages. Each template's integration suite over the built
-              binary.
-Slices        1. Upgrade go-web-sdk-template: the pins move, and the
-                 RequestID and fixture-reactor calls take their new forms
-                 so the build stays green. Done when currency exits 0 and
-                 the check passes (1-3).
-              2. Upgrade go-cli-sdk-template: the pins move. Done when
-                 currency exits 0 and the check passes (5).
-              3. The web template's reactor docs, changelog v0.15.0, and
-                 standards pointer (4, 6 web, 7 web).
-              4. The CLI template's changelog v0.3.0, context version
-                 line, and standards pointer (6 CLI, 7 CLI, 8).
-Out of scope  go-web-service's and slab's migration (the service task).
-              Adopting cli.StringsValue or a reactor in the templates,
-              which ship no repeatable flag and no reactor. graph.After
-              and graph.In, the rule's named exception. The harnesses'
-              conforming shapes (integration.Start/Launch with Options,
-              integration.Run's argument list), app.New, apptest.
-              Rewriting released changelog entries.
-Door          One-way for the two tags, which gonew @latest serves to
-              every new service and CLI. Two-way for the code and docs,
-              which merge by pull request before tagging.
-              go-web-service requires neither template, so no other
-              module's requirement moves.
-Release       go-web-sdk-template template/v0.15.0,
-              go-cli-sdk-template template/v0.3.0
+              4. The sweeper is built with sweep.Options carrying the
+                 quiesce gate and the sweep-metrics hook. The runtime is
+                 built with messaging.Setup carrying the gate. The
+                 sweeper's claim, gate, metrics, nudge, and cancel-within
+                 graph tests pass, as do the relay's drain and gate tests.
+              5. blobfs is built with data.Options{Engine} in the
+                 composition root and in tests. Uploads, seeds, moves,
+                 deletes, purges, and sweeps run through blobfs's request
+                 and options values. A fixed id is set through
+                 CreateOptions.ID, a version guard through VersionOptions
+                 or RemoveOptions, and the hooks through the request's
+                 OnComplete and RemoveOptions.OnDelete. Every event still
+                 commits in the transaction that makes its change true.
+                 The files reclaimer passes its budget and stale age as
+                 SweepOptions. A directory or file listing continues past
+                 a cursor through data.CursorPage, refusing a bad cursor
+                 as before.
+              6. Test recorders are built with event.Options{IDs, Clock}
+                 and stamp the same fixed id and time. Fakes are built
+                 with the zero storagetest.Options.
+              7. slab's repeatable --filter flag is registered through
+                 fs.Var with cli.StringsValue. Repeated filters still
+                 reach the request in the order given, and slab's suite
+                 passes.
+              8. No doc, doc comment, or README section in the repository
+                 names a removed form. Prose that names blobfs's hooks or
+                 sweep inputs names them as fields
+                 (WriteFileRequest.OnComplete, EnsureFileRequest.OnComplete,
+                 RemoveOptions.OnDelete, SweepOptions.Batch,
+                 SweepOptions.StaleOlderThan). Historical notes stay.
+              9. The CHANGELOG's Unreleased Changed section opens with a
+                 Pins line in the established form: each module's
+                 libraries with their from-versions, and "Their own
+                 changes are in their CHANGELOGs."
+              10. STANDARDS.md points to construction-and-execution and
+                  names what it covers: the library calls the service and
+                  slab demonstrate, the integration harness's Options, and
+                  every new exported function and constructor, with the
+                  existing unconverted helpers standing per the goal.
+              11. The compose nats image is 2.15.3-alpine in both
+                  go-messaging and go-web-service, each repository's
+                  integration suite passes on it, and currency exits 0
+                  in both.
+Test seams    internal/app's exported App and the domain services, from
+              their external test packages. The integration suite over
+              the built service. slab's App from its tests.
+Slices        0. Lift go-messaging's nats hold: its compose image moves
+                 to 2.15.3-alpine. Done when currency exits 0 and the
+                 check and integration suite pass (11, go-messaging).
+              1. Upgrade go-web-service: both modules' pins and the nats
+                 image move, and every call site takes its new form so
+                 the build stays green. Done when currency exits 0 and
+                 the check and integration suite pass (1-7, 11).
+              2. Docs, changelog Pins line, and the standards pointer
+                 (8-10).
+Out of scope  Converting the service's or slab's own APIs (outboxtest.Want,
+              Client.UploadFile, output.Request, data.Read's variadic
+              base args). Tagging go-messaging or go-web-service. The record's pending edits to
+              architecture and standards-lab (sync applies them).
+              graph.After and graph.In, the rule's exception. Rewriting
+              history in context notes.
+Door          Two-way. No tag; each repository merges by pull request,
+              go-messaging first. No module requires go-web-service, and
+              go-messaging's image pin reaches no consumer.
 ```
 
 ## Decisions
@@ -186,6 +197,18 @@ Release       go-web-sdk-template template/v0.15.0,
 - template: standards review aligned both changelogs' Breaking pin lines to the prior-entry form ("the <lib> pin moves to vX (from vY)"), not an arrow.
 - template: spec review found no gaps; the CLI STANDARDS.md pointer names the harness's argument list (Run(t, args...) over processtest.Cmd) where behavior 7 says "Options", since the CLI harness has no Options type (the brief's Out of scope names that argument list).
 - template: editor found no citation outside the templates that this task makes stale; standards-lab's graph-ergonomics.md (template/v0.14.0, template/v0.2.0) and html-artifacts.md (the emulator's template/v0.13.0) name the releases those goals used, and stay.
+- service: go-web-service's STANDARDS.md points to construction-and-execution, covering the library calls, the harness's Options, and new exported APIs; outboxtest.Want, slab's Client.UploadFile, and output.Request stand unconverted per the goal rule.
+- service: the nats image hold lifts at 2.15.3-alpine, whose index now lists the same platforms as 2.15.2-alpine.
+- service: go-messaging joins the task to lift its own nats hold (compose/nats, the workspace's only other 2.15.2 pin); an image pin takes no changelog entry and no tag, as in go-messaging v0.3.0.
+- service: calls that had no version guard (the two Files.Hold calls, Files.Delete in release, and RemoveFileID in putLogo's cleanup) pass VersionOptions{} and stay unguarded; calls that passed AtVersion(v) set Version to v.
+- service: the document tests' serviceOn helper takes a bfdata.Options; serviceNudged passes bfdata.Options{}.
+- service: the sweep needs no change for blobfs v0.8.0's zero-means-default fields, since config validation refuses a Batch below 1 and a stale age that isn't positive, so a zero never reaches blobfs.
+- service: slab gained TestReadFlags_KeepsRepeatedFiltersInOrder, since the existing test passed only one filter.
+- service: the graph test's comment names sweep.Options.Unlocked (a go-database v0.12.0 field) in place of the removed sweep.Unlocked.
+- service: the CHANGELOG Pins line gives every library its from-version (86dd05c left them out for the base module) and leaves out indirect bumps and the NATS image.
+- service: standards review moved the STANDARDS.md pointer into the templates' order and replaced the goal-history explanation with "predate the rule and stand unconverted"; spec review's one gap, slab's StringsValue call missing from the pointer, is closed (933b338).
+- service: editor rewrote go-web-service's context/data-layer.md evaluation note to name blobfs's hooks as v0.8.0 fields; it states what is promoted now, so it is current guidance, not history.
+- service: editor found no citation outside the goal's repositories that this task makes stale: standards-lab's context cites neither NATS image version nor go-messaging's hold, and the pending edits already listed cover its citations of removed forms (messaging.md, blobfs-composition.md, html-artifacts.md).
 
 ## Pending edits
 
