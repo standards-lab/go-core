@@ -1,4 +1,8 @@
+[settings]
+task.run_auto_install = false
+
 [tools]
+"github:standards-lab/claude-plugins" = { version = "0.22.0", version_prefix = "marathon/v" }
 go = "1.27.4"
 golangci-lint = "2.15.0"
 jq = "1.8.2"
@@ -7,10 +11,19 @@ jq = "1.8.2"
 GO_MODULES = "."
 
 [tasks.check]
-description = "Build, vet, format, fix, tidy, test, and lint every module; writes nothing"
+description = "Build, vet, format, fix, tidy, test, and lint every module, then run lint-context and lint-references; writes nothing"
 run = '''
 set -eu
 export GOWORK=off
+fail=0
+run_lint() {
+  if ! command -v "$1" >/dev/null; then
+    echo "FAIL: $1 is not on PATH; run mise install" >&2
+    fail=1
+    return
+  fi
+  "$1" || fail=1
+}
 for mod in $GO_MODULES; do
   echo "check: $mod"
   cd "$MISE_PROJECT_ROOT/$mod"
@@ -23,6 +36,10 @@ for mod in $GO_MODULES; do
   go test -race ./...
   golangci-lint run ./...
 done
+cd "$MISE_PROJECT_ROOT"
+run_lint lint-context
+run_lint lint-references
+exit "$fail"
 '''
 
 [tasks.currency]
