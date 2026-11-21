@@ -9,12 +9,8 @@ import (
 	"github.com/standards-lab/go-core/graph/graphtest"
 )
 
-// zero is a constructor that returns 0 and does nothing else.
 func zero(*graph.Scope) (int, error) { return 0, nil }
 
-// nodes is a struct of handles in the shape a program's Nodes has, plus
-// fields the check skips: an unexported handle, which the passing cases
-// leave undefined, and a field of another type.
 type nodes struct {
 	MeterProvider *graph.Node[int]
 	NATSStream    *graph.Node[int]
@@ -25,7 +21,6 @@ type nodes struct {
 	Label  string
 }
 
-// errorStrings returns each error's message.
 func errorStrings(errs []error) []string {
 	var got []string
 	for _, err := range errs {
@@ -107,8 +102,6 @@ func TestNameErrors_RejectsANonStruct(t *testing.T) {
 	}
 }
 
-// recorder is a testing.TB that records the errors reported on it instead
-// of failing the test.
 type recorder struct {
 	testing.TB
 	errors []string

@@ -10,10 +10,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// TestConcurrentBuilds builds one Graph from many goroutines at once, with
-// a group, an After, and a shared observer, so the race detector sees every
-// read a Build makes of the Graph. Each Build constructs its own values,
-// and the observer, called concurrently, sees every node of every Build.
 func TestConcurrentBuilds(t *testing.T) {
 	const builds = 16
 	g := graph.New()
@@ -61,9 +57,6 @@ func TestConcurrentBuilds(t *testing.T) {
 	}
 }
 
-// describe runs fn, a describing call made beside a Build, and reports
-// whether it completed. It recovers the panic of a call the Build's freeze
-// came first for, and fails the test on any other panic.
 func describe(t *testing.T, fn func()) (completed bool) {
 	t.Helper()
 	defer func() {
@@ -79,11 +72,6 @@ func describe(t *testing.T, fn func()) (completed bool) {
 	return true
 }
 
-// TestDescribeBesideBuild races every describing call, and Observe, against
-// Builds of the same Graph. Each describing call either completes before
-// the freeze or panics after it, and the lock it holds is released either
-// way, so the Graph stays usable; once the Builds are done, describing
-// panics as it always has.
 func TestDescribeBesideBuild(t *testing.T) {
 	for range 8 {
 		g := graph.New()
@@ -144,9 +132,6 @@ func TestDescribeBesideBuild(t *testing.T) {
 	}
 }
 
-// TestObserveDuringBuild adds an observer while a Build runs, from another
-// goroutine as a constructor waits: the running Build does not call it, and
-// the next Build does.
 func TestObserveDuringBuild(t *testing.T) {
 	g := graph.New()
 	running := make(chan struct{})
@@ -185,9 +170,6 @@ func TestObserveDuringBuild(t *testing.T) {
 	}
 }
 
-// TestObserveFromObserver adds an observer from inside an observer: Build
-// holds no lock as it calls one, so the call returns, and the new observer
-// applies from the next Build on.
 func TestObserveFromObserver(t *testing.T) {
 	g := graph.New()
 	n := g.Value("n", 1)

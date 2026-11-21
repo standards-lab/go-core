@@ -8,8 +8,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// dropNames returns each drop as "node after target", for comparison and a
-// failure message.
 func dropNames(drops []graph.Drop) []string {
 	out := make([]string, len(drops))
 	for i, d := range drops {
@@ -18,11 +16,6 @@ func dropNames(drops []graph.Drop) []string {
 	return out
 }
 
-// ordered defines a graph whose server orders After the cache node, the
-// workers group, and the db node, in that order, and whose api orders
-// After the db node and the workers group; cron and mail are the workers.
-// No node Uses another, so a Build holds exactly its roots. It returns the
-// graph and its handles.
 func ordered() (g *graph.Graph, h struct {
 	db, cache, cron, mail, api, server *graph.Node[int]
 	workers                            *graph.Group
@@ -48,13 +41,11 @@ func TestDropped_FullBuildReportsNone(t *testing.T) {
 
 func TestDropped_SubsetReportsTheAbsentNodeTarget(t *testing.T) {
 	g, h := ordered()
-	// db and every worker are present; only the server's cache is not.
 	sys := mustBuild(t, g, h.server, h.db, h.cron, h.mail)
 	want := []string{"server after cache"}
 	if got := dropNames(sys.Dropped()); !slices.Equal(got, want) {
 		t.Fatalf("Dropped() = %v, want %v", got, want)
 	}
-	// The drop is silent at Build: the System still orders what is present.
 	if sys.LayerOf(h.server) != 1 {
 		t.Fatalf("server is not above its present targets; layers:\n%s", sys)
 	}
@@ -74,7 +65,6 @@ func TestDropped_GroupWithNoMemberPresent(t *testing.T) {
 		}
 	})
 	t.Run("a member present is not a drop", func(t *testing.T) {
-		// mail is absent, but cron orders the api, so the group is no drop.
 		sys := mustBuild(t, g, h.api, h.db, h.cron)
 		if got := sys.Dropped(); len(got) != 0 {
 			t.Fatalf("Dropped() = %v, want none with cron present", dropNames(got))
@@ -84,9 +74,6 @@ func TestDropped_GroupWithNoMemberPresent(t *testing.T) {
 
 func TestDropped_IsInDefinitionThenAfterOrder(t *testing.T) {
 	g, h := ordered()
-	// The roots list the server before the api, and the server's Afters
-	// span two options; the drops follow the api's definition first, then
-	// each node's After refs as declared.
 	sys := mustBuild(t, g, h.server, h.api)
 	want := []string{
 		"api after db", "api after workers",
@@ -95,8 +82,6 @@ func TestDropped_IsInDefinitionThenAfterOrder(t *testing.T) {
 	if got := dropNames(sys.Dropped()); !slices.Equal(got, want) {
 		t.Fatalf("Dropped() = %v, want %v", got, want)
 	}
-	// Each Build of the same roots reports the same order, whatever order
-	// the Build's map of entries iterates in.
 	for range 20 {
 		if got := dropNames(mustBuild(t, g, h.server, h.api).Dropped()); !slices.Equal(got, want) {
 			t.Fatalf("Dropped() = %v, want %v", got, want)
@@ -115,11 +100,9 @@ func TestDropped_CarriesTheHandles(t *testing.T) {
 		{Node: h.server, After: h.db},
 	}
 	got := sys.Dropped()
-	// Interface equality: the very handles Define and Group returned.
 	if !slices.Equal(got, want) {
 		t.Fatalf("Dropped() = %v, want %v", dropNames(got), dropNames(want))
 	}
-	// The Node asserts back to the typed handle, as a Dependency's Ref does.
 	if n, ok := got[2].Node.(*graph.Node[int]); !ok || n != h.server {
 		t.Fatalf("server's drop Node is %T, want the *graph.Node[int] handle", got[2].Node)
 	}

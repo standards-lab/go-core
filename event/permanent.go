@@ -2,7 +2,6 @@ package event
 
 import "errors"
 
-// permanentError marks a handler failure that redelivery cannot fix.
 type permanentError struct{ err error }
 
 func (p *permanentError) Error() string { return "permanent: " + p.err.Error() }

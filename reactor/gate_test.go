@@ -9,8 +9,6 @@ import (
 	"github.com/standards-lab/go-core/reactor"
 )
 
-// acquire runs one acquisition in the background and reports its result,
-// so a test can see whether it is still waiting.
 func acquire(ctx context.Context, take func(context.Context) (func(), error)) <-chan func() {
 	got := make(chan func(), 1)
 	go func() {
@@ -23,7 +21,6 @@ func acquire(ctx context.Context, take func(context.Context) (func(), error)) <-
 	return got
 }
 
-// waiting asserts that an acquisition has not completed yet.
 func waiting(t *testing.T, got <-chan func(), what string) {
 	t.Helper()
 	settle()
@@ -34,7 +31,6 @@ func waiting(t *testing.T, got <-chan func(), what string) {
 	}
 }
 
-// hold takes the gate at once or fails the test.
 func hold(t *testing.T, take func(context.Context) (func(), error)) func() {
 	t.Helper()
 	release, err := take(context.Background())
@@ -44,7 +40,6 @@ func hold(t *testing.T, take func(context.Context) (func(), error)) func() {
 	return release
 }
 
-// Shared holders hold the gate together.
 func TestGate_SharedHoldersCoexist(t *testing.T) {
 	var g reactor.Gate
 	a := hold(t, g.Shared)
@@ -53,7 +48,6 @@ func TestGate_SharedHoldersCoexist(t *testing.T) {
 	b()
 }
 
-// An exclusive holder waits for every shared holder to release.
 func TestGate_ExclusiveWaitsForShared(t *testing.T) {
 	var g reactor.Gate
 	a := hold(t, g.Shared)
@@ -66,8 +60,6 @@ func TestGate_ExclusiveWaitsForShared(t *testing.T) {
 	recvOrFail(t, ex, "exclusive once the shared holders released")()
 }
 
-// A shared holder waits out an exclusive holder, and so does another
-// exclusive one.
 func TestGate_SharedWaitsForExclusive(t *testing.T) {
 	var g reactor.Gate
 	release := hold(t, g.Exclusive)
@@ -83,8 +75,6 @@ func TestGate_SharedWaitsForExclusive(t *testing.T) {
 	recvOrFail(t, ex, "the second exclusive once the first released")()
 }
 
-// A waiting exclusive holder bars new shared holders, so shared holders
-// taking the gate in turns cannot starve it.
 func TestGate_WaitingExclusiveBarsShared(t *testing.T) {
 	var g reactor.Gate
 	a := hold(t, g.Shared)
@@ -99,8 +89,6 @@ func TestGate_WaitingExclusiveBarsShared(t *testing.T) {
 	recvOrFail(t, sh, "shared once the exclusive holder released")()
 }
 
-// An exclusive wait that gives up holds nothing and admits the shared
-// holders it barred.
 func TestGate_CancelledExclusiveAdmitsShared(t *testing.T) {
 	var g reactor.Gate
 	a := hold(t, g.Shared)
@@ -121,8 +109,6 @@ func TestGate_CancelledExclusiveAdmitsShared(t *testing.T) {
 	recvOrFail(t, sh, "shared once the exclusive withdrew")()
 }
 
-// A shared wait that gives up holds nothing: the exclusive holder's release
-// leaves the gate open.
 func TestGate_CancelledSharedHoldsNothing(t *testing.T) {
 	var g reactor.Gate
 	release := hold(t, g.Exclusive)
@@ -135,7 +121,6 @@ func TestGate_CancelledSharedHoldsNothing(t *testing.T) {
 	hold(t, g.Exclusive)()
 }
 
-// An ended context acquires nothing, even from an open gate.
 func TestGate_EndedContextAcquiresNothing(t *testing.T) {
 	var g reactor.Gate
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,8 +134,6 @@ func TestGate_EndedContextAcquiresNothing(t *testing.T) {
 	hold(t, g.Exclusive)()
 }
 
-// A release called twice releases once: a second shared holder still
-// holds the gate.
 func TestGate_ReleaseIsIdempotent(t *testing.T) {
 	var g reactor.Gate
 	a := hold(t, g.Shared)
@@ -163,8 +146,6 @@ func TestGate_ReleaseIsIdempotent(t *testing.T) {
 	recvOrFail(t, ex, "exclusive once the last shared holder released")()
 }
 
-// Shared admits any number of holders at once, and an exclusive holder
-// waits for the last of them.
 func TestGate_ManySharedHolders(t *testing.T) {
 	var g reactor.Gate
 	releases := make([]func(), 100)
@@ -180,8 +161,6 @@ func TestGate_ManySharedHolders(t *testing.T) {
 	recvOrFail(t, ex, "exclusive once every shared holder released")()
 }
 
-// An exclusive release called twice releases once: a stale second call
-// does not open the gate under the exclusive holder that followed.
 func TestGate_ExclusiveReleaseIsIdempotent(t *testing.T) {
 	var g reactor.Gate
 	first := hold(t, g.Exclusive)

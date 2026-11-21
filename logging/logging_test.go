@@ -62,7 +62,6 @@ func TestNew_LevelGatesRecords(t *testing.T) {
 	}
 }
 
-// The offset syntax is slog's, and it reaches the handler untouched.
 func TestNew_LevelCarriesSlogOffsets(t *testing.T) {
 	logger := logging.New(&bytes.Buffer{}, logging.Config{Level: "warn+2"})
 
@@ -74,7 +73,6 @@ func TestNew_LevelCarriesSlogOffsets(t *testing.T) {
 	}
 }
 
-// Finalize is the validation point; a literal that skipped it still logs.
 func TestNew_UnvalidatedLevelFallsBackToInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.New(&buf, logging.Config{Level: "trace"})
@@ -88,8 +86,6 @@ func TestNew_UnvalidatedLevelFallsBackToInfo(t *testing.T) {
 	}
 }
 
-// A zero Config has never been finalized, so it names no format either; text is
-// what New writes when the format is not json.
 func TestNew_ZeroConfigWritesText(t *testing.T) {
 	var buf bytes.Buffer
 	logging.New(&buf, logging.Config{}).Info("hello")
@@ -99,8 +95,6 @@ func TestNew_ZeroConfigWritesText(t *testing.T) {
 	}
 }
 
-// recordTime returns the top-level time a record carries, as the handler wrote
-// it: the JSON "time" field or the text time= value.
 func recordTime(t *testing.T, format logging.Format, out string) string {
 	t.Helper()
 	if format == logging.FormatJSON {
@@ -123,11 +117,6 @@ func recordTime(t *testing.T, format logging.Format, out string) string {
 	return ""
 }
 
-// slog stamps a record with time.Now in time.Local, so each handler converts
-// the record's time. The output shows only the offset, and Europe/London is
-// GMT in winter, where an unconverted time already prints as Z; the record
-// times here are in summer (BST, +01:00) and in zones never at a zero offset,
-// so only the conversion makes them Z.
 func TestNew_RecordTimeIsUTC(t *testing.T) {
 	instant := time.Date(2026, time.July, 1, 12, 30, 45, 123_000_000, time.UTC)
 	newYork, err := time.LoadLocation("America/New_York")
@@ -166,10 +155,8 @@ func TestNew_RecordTimeIsUTC(t *testing.T) {
 	}
 }
 
-// Only the record's own time is converted: a time the caller logs, at the top
-// level or as a "time" key inside a group, is written as the caller built it.
 func TestNew_CallerTimeAttrsAreUntouched(t *testing.T) {
-	at := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.Local) // BST, +01:00
+	at := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.Local)
 
 	var buf bytes.Buffer
 	logging.New(&buf, logging.Config{Format: logging.FormatJSON}).

@@ -45,20 +45,16 @@ type Result struct {
 func Run(t testing.TB, cmd Cmd) Result {
 	t.Helper()
 	c := command(t, cmd.Args, cmd.Env)
-	// The tee keeps what the program read, so the logged line replays it.
 	var stdin bytes.Buffer
 	if cmd.Stdin != nil {
 		c.Stdin = io.TeeReader(cmd.Stdin, &stdin)
 	}
 	var stdout, stderr bytes.Buffer
 	c.Stdout, c.Stderr = &stdout, &stderr
-	// A child the program leaves holding its output open would keep Wait
-	// copying forever; WaitDelay bounds that too.
 	c.WaitDelay = Failsafe
 	if err := c.Start(); err != nil {
 		t.Fatalf("start %s: %v", filepath.Base(binary), err)
 	}
-	// done closes once Wait returns; waitErr is read only after that.
 	var waitErr error
 	done := make(chan struct{})
 	go func() {
@@ -67,8 +63,6 @@ func Run(t testing.TB, cmd Cmd) Result {
 	}()
 
 	if !within(done, Failsafe) {
-		// Interrupt first, as Launch's cleanup does, so a program that
-		// drains on the signal shows what it was doing.
 		_ = c.Process.Signal(syscall.SIGINT)
 		if !within(done, Failsafe) {
 			_ = c.Process.Kill()
@@ -91,8 +85,6 @@ func Run(t testing.TB, cmd Cmd) Result {
 	return res
 }
 
-// within waits up to d for the run's Wait to return, reporting whether it
-// returned.
 func within(done <-chan struct{}, d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -104,15 +96,9 @@ func within(done <-chan struct{}, d time.Duration) bool {
 	}
 }
 
-// shellLine renders cmd as the command a reader would type: the
-// environment overrides, the program's name, and its arguments, each
-// quoted for a POSIX shell, with the standard input the program read piped
-// in by printf. The program is named, not pathed, since Main removes its
-// build when the run ends.
 func shellLine(cmd Cmd, stdin string) string {
 	var words []string
 	for _, kv := range cmd.Env {
-		// Only the value is quoted: a quoted name is no assignment.
 		if name, value, ok := strings.Cut(kv, "="); ok {
 			words = append(words, name+"="+quote(value))
 		} else {
@@ -130,12 +116,8 @@ func shellLine(cmd Cmd, stdin string) string {
 	return line
 }
 
-// plain matches a word a POSIX shell reads as itself.
 var plain = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
 
-// quote returns s as one POSIX shell word: as it is when the shell reads
-// it literally, otherwise single-quoted, with each single quote closed,
-// escaped, and reopened.
 func quote(s string) string {
 	if plain.MatchString(s) {
 		return s
@@ -143,8 +125,6 @@ func quote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// transcript is the run as a terminal would show it: the shell line, its
-// stdout, its stderr when it wrote any, and its exit code when nonzero.
 func transcript(line string, res Result) string {
 	var b strings.Builder
 	b.WriteString(line)

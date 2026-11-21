@@ -19,7 +19,6 @@ func Every(d time.Duration) Source[time.Time] {
 	return &every{d: d}
 }
 
-// every is the [Every] source.
 type every struct {
 	d     time.Duration
 	ready atomic.Bool
@@ -29,9 +28,6 @@ func (s *every) Receive(ctx context.Context, fn Func[time.Time]) error {
 	return receiveTicks(ctx, s.d, nil, &s.ready, fn)
 }
 
-// receiveTicks delivers the time to fn on each tick of d and on each value
-// from nudge, which may be nil, until ctx ends or fn fails. It holds ready
-// true while it receives, and drops a tick that came due while fn ran.
 func receiveTicks(ctx context.Context, d time.Duration, nudge <-chan struct{}, ready *atomic.Bool, fn Func[time.Time]) error {
 	t := time.NewTicker(d)
 	defer t.Stop()
@@ -53,7 +49,7 @@ func receiveTicks(ctx context.Context, d time.Duration, nudge <-chan struct{}, r
 			return err
 		}
 		select {
-		case <-t.C: // drop the tick that came due during fn
+		case <-t.C:
 		default:
 		}
 	}

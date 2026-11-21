@@ -10,7 +10,6 @@ import (
 	"github.com/standards-lab/go-core/reactor"
 )
 
-// counter is a Func that counts its runs and reports each on runs.
 type counter struct {
 	calls atomic.Int32
 	runs  chan struct{}
@@ -24,10 +23,8 @@ func (c *counter) fn(context.Context, time.Time) error {
 	return nil
 }
 
-// settle waits long enough for a delivery that should not happen to show.
 func settle() { time.Sleep(50 * time.Millisecond) }
 
-// Wake without a nudge is an interval: it delivers on every tick.
 func TestWake_Interval(t *testing.T) {
 	c := newCounter()
 	r := reactor.New(reactor.Wake(5*time.Millisecond), c.fn, reactor.Options{})
@@ -40,10 +37,6 @@ func TestWake_Interval(t *testing.T) {
 	}
 }
 
-// Nudges before the next delivery coalesce into one prompt run, long
-// before the hour-long interval; a nudge after it is a run of its own.
-// The nudges here come before Start, so the first run also shows that a
-// nudge before the source starts is delivered when it does.
 func TestWake_NudgesCoalesce(t *testing.T) {
 	c := newCounter()
 	w := reactor.Wake(time.Hour)
@@ -71,9 +64,6 @@ func TestWake_NudgesCoalesce(t *testing.T) {
 	}
 }
 
-// A nudge while the handler runs, however many, produces exactly one run
-// after it: work that arrived during the run is not lost, and is not run
-// twice.
 func TestWake_NudgeDuringRun(t *testing.T) {
 	var calls atomic.Int32
 	running := make(chan struct{}, 1)
@@ -105,7 +95,6 @@ func TestWake_NudgeDuringRun(t *testing.T) {
 	}
 }
 
-// A nudge after Shutdown runs nothing and does not block.
 func TestWake_NoRunAfterShutdown(t *testing.T) {
 	c := newCounter()
 	w := reactor.Wake(time.Hour)
@@ -128,7 +117,6 @@ func TestWake_NoRunAfterShutdown(t *testing.T) {
 	}
 }
 
-// A handler's error ends Wake as it ends Every, reported on Err.
 func TestWake_HandlerErrorOnErr(t *testing.T) {
 	boom := errors.New("boom")
 	w := reactor.Wake(time.Hour)

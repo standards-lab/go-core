@@ -27,7 +27,6 @@ type Event struct {
 	Extensions      map[string]string
 }
 
-// reserved names the context attributes an extension may not shadow.
 var reserved = map[string]bool{
 	"id": true, "source": true, "specversion": true, "type": true,
 	"datacontenttype": true, "dataschema": true, "subject": true,

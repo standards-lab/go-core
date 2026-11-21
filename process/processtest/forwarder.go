@@ -12,8 +12,6 @@ import (
 type Forwarder struct {
 	target string
 
-	// restoring serializes Restore's check and listen, so two concurrent
-	// Restores cannot both find the forwarder severed.
 	restoring sync.Mutex
 
 	mu        sync.Mutex
@@ -60,8 +58,6 @@ func (f *Forwarder) listen(addr string) error {
 	return nil
 }
 
-// accept tracks each connection and hands it to a relay, which dials the
-// target, so an unresponsive target never stalls the loop or Sever.
 func (f *Forwarder) accept(l net.Listener) {
 	defer f.wg.Done()
 	for {
@@ -91,9 +87,6 @@ func (f *Forwarder) untrack(conns ...net.Conn) {
 	}
 }
 
-// relay dials the target and copies both directions until either side
-// closes. A connection Sever drops while the dial is in flight fails the
-// copy at once, which closes the upstream too.
 func (f *Forwarder) relay(down net.Conn) {
 	up, err := net.DialTimeout("tcp", f.target, Failsafe)
 	if err != nil {
@@ -121,8 +114,6 @@ func (f *Forwarder) Sever() {
 	f.listening = false
 	f.mu.Unlock()
 	_ = l.Close()
-	// Wait for the accept loop, so a connection accepted as the listener
-	// closed is tracked and dropped with the rest.
 	f.wg.Wait()
 
 	f.mu.Lock()

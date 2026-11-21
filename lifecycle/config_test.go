@@ -9,11 +9,8 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
-// Instantiating Load proves *lifecycle.Config satisfies the config.Config
-// contract at compile time.
 var _ = config.Load[lifecycle.Config]
 
-// envShutdownTimeout is what Finalize composes from the prefix "app".
 const envShutdownTimeout = "APP_SHUTDOWN_TIMEOUT"
 
 func TestConfig_MergeSourceWinsWithoutClearing(t *testing.T) {

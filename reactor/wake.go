@@ -25,7 +25,7 @@ func Wake(d time.Duration) *Waker {
 // producers call.
 type Waker struct {
 	d     time.Duration
-	nudge chan struct{} // one pending nudge; a second coalesces into it
+	nudge chan struct{}
 	ready atomic.Bool
 }
 

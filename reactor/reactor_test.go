@@ -12,8 +12,6 @@ import (
 	"github.com/standards-lab/go-core/reactor"
 )
 
-// failsafe bounds every wait for something that should happen, so a broken
-// reactor fails the test instead of hanging it.
 const failsafe = 2 * time.Second
 
 func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
@@ -67,7 +65,7 @@ func TestReactor_ShutdownDrainsInFlight(t *testing.T) {
 		t.Fatal(err)
 	}
 	recvOrFail(t, started, "the first tick")
-	cancelRun() // the coordinator cancels the run context before draining
+	cancelRun()
 
 	if err := shutdown(t, r, failsafe); err != nil {
 		t.Fatalf("Shutdown: %v", err)
@@ -130,7 +128,7 @@ func TestReactor_CancelAfterCancelsThenWaits(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
 		started <- struct{}{}
 		<-ctx.Done()
-		time.Sleep(20 * time.Millisecond) // the handler takes time to unwind
+		time.Sleep(20 * time.Millisecond)
 		close(unwound)
 		return ctx.Err()
 	}, reactor.Options{CancelAfter: 20 * time.Millisecond})
@@ -158,7 +156,7 @@ func TestReactor_CancelAfterStillBoundedByContext(t *testing.T) {
 	defer close(release)
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
 		started <- struct{}{}
-		<-release // ignores cancellation
+		<-release
 		return nil
 	}, reactor.Options{CancelAfter: 10 * time.Millisecond})
 	if err := r.Start(context.Background()); err != nil {
@@ -183,16 +181,12 @@ func TestReactor_CancelAfterUnusedIsClean(t *testing.T) {
 	}
 }
 
-// CancelWithin returns half the drain timeout it is given, the period a
-// reactor's Options.CancelAfter takes under that coordinator.
 func TestCancelWithin_ReturnsHalfTheDrain(t *testing.T) {
 	if got := reactor.CancelWithin(40 * time.Millisecond); got != 20*time.Millisecond {
 		t.Errorf("CancelWithin(40ms) = %v, want 20ms", got)
 	}
 }
 
-// A handler that ignores the drain is cancelled once the CancelAfter period
-// passes, and not before.
 func TestReactor_CancelAfterWaitsThePeriod(t *testing.T) {
 	started := make(chan struct{}, 1)
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
@@ -214,9 +208,6 @@ func TestReactor_CancelAfterWaitsThePeriod(t *testing.T) {
 	}
 }
 
-// A handler's error ends an interval source, and so the reactor, which
-// reports it on Err, closes Err, and reads not ready; the failure is not
-// reported a second time by Shutdown.
 func TestReactor_HandlerErrorOnErr(t *testing.T) {
 	boom := errors.New("boom")
 	r := reactor.New(reactor.Every(time.Millisecond), func(context.Context, time.Time) error {
@@ -246,10 +237,6 @@ func TestReactor_UnreadErrReachesShutdown(t *testing.T) {
 	if err := r.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// Nothing reads Err, as when the coordinator stopped monitoring at the
-	// signal just before the source failed. The reactor turns not ready
-	// as it puts the failure on Err, so Shutdown begins only once the
-	// failure has landed there.
 	eventually(t, r.Ready, "readiness")
 	close(src.fail)
 	eventually(t, func() bool { return !r.Ready() }, "the failure to land on Err")
@@ -291,8 +278,6 @@ func TestReactor_Ready(t *testing.T) {
 	}
 }
 
-// Readiness turns false when Shutdown begins, not when it returns: a handler
-// held in flight keeps the drain open while Ready is read.
 func TestReactor_NotReadyWhileDraining(t *testing.T) {
 	inFlight := make(chan struct{})
 	drainSeen := make(chan struct{}, 1)
@@ -352,8 +337,6 @@ func TestReactor_ShutdownBeforeStart(t *testing.T) {
 	}
 }
 
-// A second Shutdown of a reactor retired before Start returns nil: it has
-// no source to stop.
 func TestReactor_ShutdownTwiceBeforeStart(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	for i := range 2 {
@@ -363,8 +346,6 @@ func TestReactor_ShutdownTwiceBeforeStart(t *testing.T) {
 	}
 }
 
-// A second Shutdown of a drained reactor returns at once, with the first's
-// outcome.
 func TestReactor_ShutdownTwiceAfterStart(t *testing.T) {
 	r := reactor.New(reactor.Every(time.Hour), func(context.Context, time.Time) error { return nil }, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
@@ -377,9 +358,6 @@ func TestReactor_ShutdownTwiceAfterStart(t *testing.T) {
 	}
 }
 
-// The drain signal closes when Shutdown begins, while the handler in
-// flight still runs on a live context, so a handler that works in steps
-// stops between them and the drain ends clean, without being cancelled.
 func TestReactor_DrainingClosesWhenShutdownBegins(t *testing.T) {
 	inFlight := make(chan struct{})
 	var first sync.Once
@@ -415,19 +393,14 @@ func TestReactor_DrainingClosesWhenShutdownBegins(t *testing.T) {
 	}
 }
 
-// A context no reactor gave has no drain signal: Draining is nil, which
-// never closes.
 func TestDraining_OutsideAReactor(t *testing.T) {
 	if ch := reactor.Draining(context.Background()); ch != nil {
 		t.Errorf("Draining(Background) = %v, want nil", ch)
 	}
 }
 
-// ctxKey is a context key the tests put values under.
 type ctxKey string
 
-// A handler's context carries the start context's values, though not its
-// cancellation.
 func TestReactor_HandlerKeepsStartValues(t *testing.T) {
 	got := make(chan any, 1)
 	r := reactor.New(reactor.Every(time.Millisecond), func(ctx context.Context, _ time.Time) error {
@@ -450,8 +423,6 @@ func TestReactor_HandlerKeepsStartValues(t *testing.T) {
 	}
 }
 
-// A handler's context keeps the deadline and values the source set for the
-// occurrence, and ends at that deadline rather than at the source's stop.
 func TestReactor_HandlerKeepsSourceDeadline(t *testing.T) {
 	src := &deadlineSource{d: 50 * time.Millisecond, stopped: make(chan struct{})}
 	type result struct {
@@ -486,7 +457,6 @@ func TestReactor_HandlerKeepsSourceDeadline(t *testing.T) {
 	}
 }
 
-// stub is a source that is ready until its context ends, then returns err.
 type stub struct {
 	err   error
 	ready atomic.Bool
@@ -501,8 +471,6 @@ func (s *stub) Receive(ctx context.Context, _ reactor.Func[int]) error {
 
 func (s *stub) Ready() bool { return s.ready.Load() }
 
-// failing is a source that is ready from the start and fails once fail
-// closes.
 type failing struct {
 	err  error
 	fail chan struct{}
@@ -515,8 +483,6 @@ func (f failing) Receive(context.Context, reactor.Func[int]) error {
 
 func (failing) Ready() bool { return true }
 
-// deadlineSource delivers one occurrence under a per-occurrence deadline
-// and value, then stops its own context while the handler still runs.
 type deadlineSource struct {
 	d       time.Duration
 	stopped chan struct{}
@@ -526,7 +492,6 @@ func (s *deadlineSource) Receive(ctx context.Context, fn reactor.Func[int]) erro
 	occ, cancel := context.WithTimeout(context.WithValue(ctx, ctxKey("occurrence"), "one"), s.d)
 	defer cancel()
 	stop, stopNow := context.WithCancel(occ)
-	// done closes when the handler returns; its error is not under test.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

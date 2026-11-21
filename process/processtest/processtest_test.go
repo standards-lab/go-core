@@ -9,13 +9,10 @@ import (
 	"github.com/standards-lab/go-core/process/processtest"
 )
 
-// The suite's TestMain builds the test program once for the run, the way a
-// service suite builds its cmd/server.
 func TestMain(m *testing.M) {
 	processtest.Main(m, "./process/processtest/internal/testprog")
 }
 
-// dial reports whether addr accepts a connection.
 func dial(addr string) bool {
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -25,9 +22,6 @@ func dial(addr string) bool {
 	return true
 }
 
-// Launch runs the built program on a reserved port; Await observes it
-// through the network, not the output; Stop interrupts it and returns the
-// exit code its drain chose, with everything it wrote captured.
 func TestProcess_LaunchAwaitStop(t *testing.T) {
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(processtest.FreePort(t)))
 	p := processtest.Launch(t, "TESTPROG_ADDR="+addr, "TESTPROG_EXIT=3")
@@ -54,8 +48,6 @@ func TestProcess_LaunchAwaitStop(t *testing.T) {
 	}
 }
 
-// A process that exits on its own reports its code through Wait, and its
-// stderr is captured alongside stdout.
 func TestProcess_WaitReportsOwnExit(t *testing.T) {
 	p := processtest.Launch(t, "TESTPROG_EXIT_AT_ONCE=1", "TESTPROG_EXIT=2")
 
@@ -67,8 +59,6 @@ func TestProcess_WaitReportsOwnExit(t *testing.T) {
 	}
 }
 
-// Launch adds its race option to the parent's GORACE rather than replacing
-// it, so a suite's own race settings reach the program.
 func TestLaunch_KeepsTheParentsGORACE(t *testing.T) {
 	t.Setenv("GORACE", "halt_on_error=1")
 	p := processtest.Launch(t, "TESTPROG_EXIT_AT_ONCE=1")
@@ -79,7 +69,6 @@ func TestLaunch_KeepsTheParentsGORACE(t *testing.T) {
 	}
 }
 
-// Stop on a process that already exited on its own returns its code.
 func TestProcess_StopAfterOwnExit(t *testing.T) {
 	p := processtest.Launch(t, "TESTPROG_EXIT_AT_ONCE=1", "TESTPROG_EXIT=2")
 	processtest.WaitFor(t, "exit", p.Exited)
@@ -89,7 +78,6 @@ func TestProcess_StopAfterOwnExit(t *testing.T) {
 	}
 }
 
-// Two launches are two processes, each with its own output.
 func TestProcess_LaunchSeveral(t *testing.T) {
 	a := processtest.Launch(t, "TESTPROG_EXIT=1")
 	b := processtest.Launch(t, "TESTPROG_EXIT=2")
@@ -104,7 +92,6 @@ func TestProcess_LaunchSeveral(t *testing.T) {
 	}
 }
 
-// FreePort hands out a port that is free to bind.
 func TestFreePort_IsBindable(t *testing.T) {
 	port := processtest.FreePort(t)
 	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
@@ -114,7 +101,6 @@ func TestFreePort_IsBindable(t *testing.T) {
 	_ = l.Close()
 }
 
-// WaitFor returns as soon as the condition holds.
 func TestWaitFor_ReturnsOnCondition(t *testing.T) {
 	n := 0
 	processtest.WaitFor(t, "three polls", func() bool { n++; return n == 3 })

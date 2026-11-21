@@ -9,38 +9,22 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// webService is a web service's composition, the graph graph's
-// stages_test.go builds, over this package's recorder fakes: the same nodes
-// and edges, so the stage table falls out of the layers, each value a fake
-// that records its start and stop. The shape is restated here because
-// graph's tests cannot run it on a Coordinator, and this package cannot
-// import theirs.
 func webService(r *recorder, serving chan struct{}) (*graph.Graph, []graph.Ref) {
 	g := graph.New()
 	config := node(g, &fake{name: "config", r: r})
-	// Infrastructure: the pool and the object store, over the config.
 	database := node(g, &fake{name: "database", r: r}, config)
 	store := node(g, &fake{name: "store", r: r}, config)
-	// The domain over the database and the object store; the schema, the
-	// admin service over the pool; the storage admin domain over the store.
 	domain := node(g, &fake{name: "domain", r: r}, database, store)
 	schema := node(g, &fake{name: "schema", r: r}, database)
 	storage := node(g, &fake{name: "storage", r: r}, store)
-	// The reactors: the sweeper over the pool, once the schema is verified.
 	reactors := node(g, &fake{name: "reactors", r: r}, schema, database)
-	// The request edge: the server over the domain and admin pieces, started
-	// after the reactors and drained before them. Its start marks it serving.
 	server := node(g, &fake{name: "server", r: r, start: func(context.Context) error {
 		close(serving)
 		return nil
 	}}, reactors, domain, schema, storage)
-	// The reactors are a root: nothing uses their value.
 	return g, []graph.Ref{server, reactors}
 }
 
-// TestRun_ServesAGraphShapedLikeTheWebService runs the web service's graph
-// on Run: its layers start in stage order, it serves until its context
-// ends, and it shuts down in reverse.
 func TestRun_ServesAGraphShapedLikeTheWebService(t *testing.T) {
 	var r recorder
 	serving := make(chan struct{})

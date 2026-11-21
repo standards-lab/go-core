@@ -17,7 +17,7 @@ func TestEvery_DropsStaleTicks(t *testing.T) {
 		case lags <- time.Since(at):
 		default:
 		}
-		time.Sleep(3 * interval) // outlast several ticks
+		time.Sleep(3 * interval)
 		return nil
 	}, reactor.Options{})
 	if err := r.Start(context.Background()); err != nil {
@@ -42,7 +42,6 @@ func TestEvery_RejectsNonPositive(t *testing.T) {
 	reactor.Every(0)
 }
 
-// A handler's error ends Every, and so the reactor, which reports it on Err.
 func TestEvery_HandlerErrorEndsIt(t *testing.T) {
 	boom := errors.New("boom")
 	var calls int

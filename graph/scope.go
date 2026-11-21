@@ -10,16 +10,12 @@ import (
 // declared at Define, with [After]. It is valid only while the constructor
 // runs; Use panics once the constructor has returned.
 type Scope struct {
-	build *build
-	entry *entry
-	done  bool
-	// aborted names the node whose Use did not return, set as the abort
-	// unwinds through Use, whether the failure was that node's or one
-	// further down; construct panics when the constructor returns anyway.
+	build   *build
+	entry   *entry
+	done    bool
 	aborted string
 }
 
-// check panics when the constructor that received s has returned.
 func (s *Scope) check(op string) {
 	if s.done {
 		panic(fmt.Sprintf("graph: %s called after the constructor of %q returned", op, s.entry.node.name))
@@ -42,9 +38,6 @@ func (s *Scope) Use[T any](n *Node[T]) T {
 		panic(s.recovered())
 	}
 	core := s.build.graph.resolve(n, "Use", false)[0]
-	// Any panic leaving construct, the abort above all, marks the scope,
-	// so construct can tell a constructor that returned after recovering
-	// it.
 	returned := false
 	defer func() {
 		if !returned {
@@ -58,14 +51,10 @@ func (s *Scope) Use[T any](n *Node[T]) T {
 	if !slices.Contains(s.entry.uses, core) {
 		s.entry.uses = append(s.entry.uses, core)
 	}
-	// The comma-ok form returns the zero T for a nil value of an interface
-	// type, which a plain assertion would panic on.
 	v, _ := s.build.entries[core].value.(T)
 	return v
 }
 
-// recovered is the panic message for a constructor that carried on after a
-// Use it made aborted, which only a recover in the constructor allows.
 func (s *Scope) recovered() string {
 	return fmt.Sprintf(
 		"graph: the constructor of %q carried on after its Use of %q aborted; a constructor must not recover",

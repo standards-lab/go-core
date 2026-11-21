@@ -28,8 +28,6 @@ func TestLevel_SlogParsesTheStandardVocabulary(t *testing.T) {
 	}
 }
 
-// The level vocabulary is slog's, so casing and offsets come for free and this
-// package never matches on the string itself.
 func TestLevel_SlogAcceptsWhatSlogAccepts(t *testing.T) {
 	for _, tc := range []struct {
 		level logging.Level

@@ -7,8 +7,6 @@ type Option interface {
 	apply(*settings)
 }
 
-// settings collects a node's options, which Define, Value, and Fresh
-// check before they change the Graph.
 type settings struct {
 	after []Ref
 	in    []*Group

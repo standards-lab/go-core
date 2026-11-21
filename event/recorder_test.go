@@ -12,10 +12,8 @@ import (
 	"github.com/standards-lab/go-core/event"
 )
 
-// tx stands in for a transaction; the recorder only passes it through.
 type tx struct{ name string }
 
-// sink records what the recorder writes, and on which transaction.
 type sink struct {
 	tx     *tx
 	events []event.Event
@@ -87,8 +85,6 @@ func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
 	}
 }
 
-// One Emit stamps every event it writes with the same time, read from the
-// clock once: this clock moves on each call, so a per-event read would show.
 func TestEmitStampsOneTimeForTheWholeQueue(t *testing.T) {
 	s := &sink{}
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
@@ -112,8 +108,6 @@ func TestEmitStampsOneTimeForTheWholeQueue(t *testing.T) {
 	}
 }
 
-// A body that fails writes nothing, and Emit returns its error with the
-// zero result, whatever the body returned beside it.
 func TestEmitWritesNothingWhenTheBodyFails(t *testing.T) {
 	s := &sink{}
 	boom := errors.New("refused")
@@ -198,8 +192,6 @@ func TestEmitMintsVersion7IDs(t *testing.T) {
 	}
 }
 
-// The default clock reads time.Local, which TestMain sets to a zone other
-// than UTC, and the recorder stamps the time in UTC.
 func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 	s := &sink{}
 	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
@@ -214,8 +206,6 @@ func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 	}
 }
 
-// Setting one Options field replaces that default alone: a set Clock keeps
-// the version 7 ids, and a set IDs keeps time.Now in UTC.
 func TestNewRecorderKeepsTheDefaultsLeftUnset(t *testing.T) {
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	raise := func(_ *tx, q *event.Queue) (int, error) {

@@ -7,8 +7,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// panicExactly fails the test unless fn panics with exactly want, so a
-// message that gains or loses a hint fails it.
 func panicExactly(t *testing.T, want string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -24,9 +22,6 @@ func panicExactly(t *testing.T, want string, fn func()) {
 	fn()
 }
 
-// A zero-value literal is not a handle any Define or Group made: every
-// placement and Build that takes one panics as it does on a nil handle,
-// with a "graph: " message rather than a nil dereference.
 func TestZeroLiteral_PanicsAsANilHandle(t *testing.T) {
 	t.Run("after of a zero node", func(t *testing.T) {
 		panicExactly(t, `graph: Define "top" with After of a nil node (is its Define later?)`, func() {
@@ -87,15 +82,12 @@ func TestZeroLiteral_PanicsAsANilHandle(t *testing.T) {
 	})
 }
 
-// built returns a System of one real node, for the calls that take a
-// handle on a System.
 func built(t *testing.T) *graph.System {
 	t.Helper()
 	g := graph.New()
 	return mustBuild(t, g, g.Define("real", zero))
 }
 
-// A nil handle panics with the same message a zero-value literal does.
 func TestNilHandle_Panics(t *testing.T) {
 	var n *graph.Node[int]
 	t.Run("get", func(t *testing.T) {
@@ -107,8 +99,6 @@ func TestNilHandle_Panics(t *testing.T) {
 	})
 }
 
-// Name of a handle no Define or Group made is the empty string, not a nil
-// dereference.
 func TestName_OfANilOrZeroHandleIsEmpty(t *testing.T) {
 	var n *graph.Node[int]
 	var grp *graph.Group

@@ -10,13 +10,8 @@ import (
 	"github.com/standards-lab/go-core/logging"
 )
 
-// Instantiating Load proves *logging.Config satisfies the config.Config
-// contract at compile time; the constraint cannot be written as an ordinary
-// interface assertion because it carries a type element.
 var _ = config.Load[logging.Config]
 
-// testPrefix is the env prefix override tests finalize with; the names below
-// are what Finalize composes from it.
 const (
 	testPrefix = "test"
 	envLevel   = "TEST_LOG_LEVEL"
@@ -35,9 +30,6 @@ func TestConfig_MergeSourceWinsWithoutClearing(t *testing.T) {
 	}
 }
 
-// An empty Level is what makes the merge contract work: slog.LevelInfo is the
-// zero value of slog.Level, so a layer setting the level to info would be
-// indistinguishable from a layer that says nothing.
 func TestConfig_MergeInfoIsDistinguishableFromUnset(t *testing.T) {
 	base := logging.Config{Level: logging.LevelDebug}
 	base.Merge(&logging.Config{Level: logging.LevelInfo})
@@ -104,8 +96,6 @@ func TestConfig_FinalizeEnvOverridesFiles(t *testing.T) {
 	}
 }
 
-// Normalization runs after the environment read, so a shell value in any casing
-// lands on the canonical form the constants use.
 func TestConfig_FinalizeNormalizesCasingAndSpace(t *testing.T) {
 	t.Setenv(envLevel, "  WARN  ")
 	t.Setenv(envFormat, "JSON")
@@ -124,7 +114,6 @@ func TestConfig_FinalizeNormalizesCasingAndSpace(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
-	// An empty variable reads as unset, not as a request to clear the value.
 	t.Setenv(envLevel, "")
 
 	cfg := logging.Config{Level: logging.LevelError}
@@ -137,8 +126,6 @@ func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyPrefixSkipsOverrides(t *testing.T) {
-	// An empty prefix composes no variable names, so nothing in the
-	// environment applies — the hermetic form.
 	t.Setenv(envLevel, "error")
 	t.Setenv(envFormat, "json")
 
@@ -173,7 +160,6 @@ func TestConfig_FinalizeRejectsUnknownFormat(t *testing.T) {
 	}
 }
 
-// A malformed override stops startup rather than being silently discarded.
 func TestConfig_FinalizeRejectsMalformedEnvValue(t *testing.T) {
 	t.Setenv(envLevel, "nonsense")
 

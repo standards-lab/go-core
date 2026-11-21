@@ -55,7 +55,6 @@ func sanitize(s string) string {
 	return strings.Join(strings.FieldsFunc(strings.ToUpper(s), isSeparator), "_")
 }
 
-// isSeparator reports whether r falls outside A-Z and 0-9.
 func isSeparator(r rune) bool {
 	return (r < 'A' || r > 'Z') && (r < '0' || r > '9')
 }

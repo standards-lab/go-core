@@ -12,15 +12,12 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
-// source is a Monitored value that reports the failures sent on it.
 type source chan error
 
 func (s source) Err() <-chan error { return s }
 
 var _ lifecycle.Monitored = source(nil)
 
-// lazy is a Monitored Starter that creates its channel in Start, as a value
-// whose failures begin only once it runs does.
 type lazy struct {
 	errs chan error
 }
@@ -32,10 +29,6 @@ func (l *lazy) Start(context.Context) error {
 
 func (l *lazy) Err() <-chan error { return l.errs }
 
-// A monitored failure, from a Monitored value or a channel registered with
-// Monitor, cancels Exec's function and joins Exec's return wrapped "run:",
-// a Monitored value's labelled with its node's name and a registered
-// channel's, which has no node, with nothing more.
 func TestExec_MonitorFailureEndsFn(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -83,7 +76,6 @@ func TestExec_MonitorFailureEndsFn(t *testing.T) {
 	}
 }
 
-// Without a monitored failure, Exec returns fn's error alone.
 func TestExec_NoMonitorFailureReturnsFnError(t *testing.T) {
 	g := graph.New()
 	src := value(g, "source", make(source))
@@ -121,8 +113,6 @@ func TestRun_MonitoredValueFailureEndsRun(t *testing.T) {
 	}
 }
 
-// A Monitored value's nil error and closed channel are the quiet end of a
-// source, and a nil channel never yields: none of them ends the run.
 func TestRun_MonitoredValueIgnoresNilCloseAndNilChannel(t *testing.T) {
 	errs := make(source)
 	g := graph.New()
@@ -150,8 +140,6 @@ func TestRun_MonitoredValueIgnoresNilCloseAndNilChannel(t *testing.T) {
 	}
 }
 
-// Err is read once startup has completed, so a value may create its
-// channel in Start.
 func TestRun_MonitoredValueIsReadAfterStartup(t *testing.T) {
 	l := &lazy{}
 	g := graph.New()
@@ -171,8 +159,6 @@ func TestRun_MonitoredValueIsReadAfterStartup(t *testing.T) {
 	}
 }
 
-// A monitored failure that wraps context.Canceled is still a failure: Run
-// tells it from the clean stop by its source, not by its error.
 func TestRun_MonitoredCancellationIsAFailure(t *testing.T) {
 	errs := make(source, 1)
 	g := graph.New()
@@ -191,14 +177,10 @@ func TestRun_MonitoredCancellationIsAFailure(t *testing.T) {
 	}
 }
 
-// codeError is a typed failure a monitored value reports, so a test can
-// reach it with errors.As through the node label.
 type codeError struct{ code int }
 
 func (e *codeError) Error() string { return fmt.Sprintf("code %d", e.code) }
 
-// The node label wraps a Monitored value's failure, so errors.As still
-// reaches its type.
 func TestRun_MonitoredValueLabelKeepsErrorType(t *testing.T) {
 	errs := make(source, 1)
 	g := graph.New()

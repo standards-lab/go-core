@@ -15,12 +15,9 @@ import (
 // runs a function or serves, and shuts the layers down in reverse. Declare
 // hooks and monitors, then call Exec or Run once.
 type Coordinator struct {
-	sys     *graph.System
-	timeout time.Duration
-	checks  []Check
-	// monitored are the System's [Monitored] values with their nodes'
-	// names, in layer then definition order; their channels are read once
-	// startup completes.
+	sys       *graph.System
+	timeout   time.Duration
+	checks    []Check
 	monitored []monitoredNode
 
 	mu       sync.Mutex
@@ -60,8 +57,6 @@ func New(sys *graph.System, cfg Config) *Coordinator {
 			}
 		}
 	}
-	// Bind once the arguments are checked, so a New that panics on them
-	// binds nothing.
 	for _, d := range bind {
 		d.Value.(*Readiness).bind(d.Name, c)
 	}
@@ -154,15 +149,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	})
 }
 
-// execute is the runtime path Exec and Run share: it claims the
-// Coordinator for op, derives the run context from ctx, starts the layers
-// under it, and once every layer has started, flips ready, runs the
-// OnReady hooks in registration order, starts watching the monitored
-// channels, and runs body. It shuts down on every path, cancelling the run
-// context first. body receives the run context and a function reporting
-// the first monitored failure, nil when none has occurred. A startup that
-// ctx's end cut short returns only the shutdown's error when
-// cutShortIsClean; otherwise it is a startup failure like any other.
+// See docs/graph-design.md, "Implementation".
 func (c *Coordinator) execute(
 	ctx context.Context,
 	op string,
@@ -177,8 +164,6 @@ func (c *Coordinator) execute(
 	var e engine
 	failed := c.startup(runCtx, fail, &e)
 	if failed.any() {
-		// A context end before or during startup ends the run like one
-		// after it: a startup cut short only by that end is not a failure.
 		if cutShortIsClean && ctx.Err() != nil && failed.only(ctx.Err()) {
 			return c.shutdown(fail, &e)
 		}
@@ -194,8 +179,6 @@ func (c *Coordinator) execute(
 	return errors.Join(err, c.shutdown(fail, &e))
 }
 
-// claim moves the Coordinator out of waiting for op, panicking when it
-// already ran.
 func (c *Coordinator) claim(op string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -205,11 +188,6 @@ func (c *Coordinator) claim(op string) {
 	c.state = stateStarting
 }
 
-// startup starts the System's layers, lowest first, each as one engine
-// phase, and returns what failed. The first failure cancels ctx, so the rest
-// of its layer can stop early, and no higher layer starts. A layer starts
-// only while ctx is live: once ctx has ended, startup records its error and
-// starts nothing further.
 func (c *Coordinator) startup(
 	ctx context.Context,
 	fail context.CancelCauseFunc,
@@ -233,9 +211,6 @@ func (c *Coordinator) startup(
 	return failed
 }
 
-// shutdown cancels the run context, so work started under it stops, then
-// unwinds every phase startup pushed within the configured timeout, and
-// returns the errors joined under "shutdown: ", or nil.
 func (c *Coordinator) shutdown(fail context.CancelCauseFunc, e *engine) error {
 	c.setState(stateDraining)
 	fail(nil)
@@ -253,28 +228,16 @@ func (c *Coordinator) setState(s state) {
 	c.mu.Unlock()
 }
 
-// monitoredNode is a [Monitored] value and the name of the node whose
-// value it is, which labels its runtime failures.
 type monitoredNode struct {
 	name  string
 	value Monitored
 }
 
-// monitoredChannel is one channel watch reads, with the label its failures
-// take: a [Monitored] value's node name, or empty for a channel registered
-// with [Coordinator.Monitor], which has no node.
 type monitoredChannel struct {
 	label string
 	errs  <-chan error
 }
 
-// watch watches every channel registered with [Coordinator.Monitor] and
-// every [Monitored] value's Err channel, read now that startup has
-// completed, until ctx ends. The first non-nil error any of them yields
-// fails the run; a Monitored value's is labelled with its node's name, as
-// a startup or shutdown error is. A nil channel never yields, so it is not
-// watched. watch returns a function reporting the first monitored failure,
-// nil until one occurs.
 func (c *Coordinator) watch(
 	ctx context.Context,
 	fail context.CancelCauseFunc,
@@ -306,8 +269,6 @@ func (c *Coordinator) watch(
 						if ch.label != "" {
 							err = fmt.Errorf("%s: %w", ch.label, err)
 						}
-						// Recording and failing under one lock keeps the
-						// failure reported the run's cause.
 						mu.Lock()
 						if first == nil {
 							first = err
