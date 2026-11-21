@@ -19,8 +19,6 @@ import (
 // composition fails a test instead of hanging the run.
 const Failsafe = 15 * time.Second
 
-// The build Main produced for the run: the binary's path and the module
-// root, the working directory the program runs in.
 var (
 	binary string
 	root   string
@@ -61,10 +59,6 @@ func run(m *testing.M, pkg string) (int, error) {
 	return m.Run(), nil
 }
 
-// moduleRoot resolves the directory of the module the suite's package
-// belongs to, the working directory the program loads its files from. It
-// asks for the current package's module rather than listing modules,
-// since under a multi-module workspace the list is every module.
 func moduleRoot() (string, error) {
 	out, err := exec.Command("go", "list", "-f", "{{.Module.Dir}}", ".").Output()
 	if err != nil {
@@ -73,10 +67,6 @@ func moduleRoot() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// command prepares the binary Main built to run in the module root with
-// args, and with the parent's environment plus env's KEY=VALUE overrides.
-// Launch and Run both start the program through it, so a long-running
-// process and a one-shot run see the same environment.
 func command(t testing.TB, args, env []string) *exec.Cmd {
 	t.Helper()
 	if binary == "" {
@@ -84,8 +74,6 @@ func command(t testing.TB, args, env []string) *exec.Cmd {
 	}
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = root
-	// Races report as they happen, so the race runtime's one-second sleep
-	// at exit only slows every run; the parent's GORACE options stay.
 	gorace := strings.TrimSpace(os.Getenv("GORACE") + " atexit_sleep_ms=0")
 	cmd.Env = append(os.Environ(), "GORACE="+gorace)
 	cmd.Env = append(cmd.Env, env...)
@@ -123,8 +111,6 @@ func Launch(t testing.TB, env ...string) *Process {
 		if p.Exited() {
 			return
 		}
-		// Interrupt first, so the process drains its connections the way
-		// it would in service; kill only a process that does not.
 		_ = cmd.Process.Signal(syscall.SIGINT)
 		select {
 		case <-p.exited:
@@ -167,7 +153,6 @@ func (p *Process) Stop(t testing.TB) int {
 	if p.Exited() {
 		return p.code
 	}
-	// A process that exited on its own may be reaped before Exited reports it.
 	err := p.cmd.Process.Signal(syscall.SIGINT)
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Fatalf("interrupt process: %v", err)
@@ -200,7 +185,6 @@ func (p *Process) Exited() bool {
 	}
 }
 
-// output is the process's captured writes, read whole on a failure.
 type output struct {
 	mu  sync.Mutex
 	buf strings.Builder
@@ -245,7 +229,6 @@ func WaitFor(t testing.TB, what string, fn func() bool) {
 	}
 }
 
-// poll calls cond until it holds or Failsafe elapses, reporting which.
 func poll(cond func() bool) bool {
 	deadline := time.Now().Add(Failsafe)
 	for {

@@ -17,9 +17,9 @@ import (
 // first use.
 type Gate struct {
 	mu       sync.Mutex
-	shared   int  // shared holders
-	held     bool // an exclusive holder
-	queued   int  // exclusive waiters, which bar new shared holders
+	shared   int
+	held     bool
+	queued   int
 	released chan struct{}
 }
 
@@ -71,9 +71,6 @@ func (g *Gate) Exclusive(ctx context.Context) (release func(), err error) {
 	return g.release(func() { g.held = false }), nil
 }
 
-// wait releases g.mu until the gate's state next changes or ctx ends. It
-// returns holding g.mu when the state changed, and without it when ctx
-// ended, with ctx's error.
 func (g *Gate) wait(ctx context.Context) error {
 	if g.released == nil {
 		g.released = make(chan struct{})
@@ -89,8 +86,6 @@ func (g *Gate) wait(ctx context.Context) error {
 	}
 }
 
-// broadcast wakes every waiter to look at the gate again. The caller holds
-// g.mu.
 func (g *Gate) broadcast() {
 	if g.released != nil {
 		close(g.released)
@@ -98,8 +93,6 @@ func (g *Gate) broadcast() {
 	}
 }
 
-// release returns a release that applies undo once, under g.mu, and wakes
-// the waiters.
 func (g *Gate) release(undo func()) func() {
 	var once sync.Once
 	return func() {

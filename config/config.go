@@ -73,9 +73,6 @@ func (o Options) overlay(name, env string) string {
 	return fmt.Sprintf(o.OverlayPattern, stem, env)
 }
 
-// validate probes the overlay pattern with distinct markers: a pattern
-// that misuses its verbs, or drops the stem or the environment, would name
-// one file for both overlays or for every environment.
 func (o Options) validate() error {
 	const stem, env = "stemprobe", "envprobe"
 	probe := o.overlay(stem+".json", env)
@@ -86,8 +83,6 @@ func (o Options) validate() error {
 	return nil
 }
 
-// validEnv rejects an environment value that would reach outside Dir
-// through the overlay name.
 func validEnv(env string) error {
 	if strings.ContainsAny(env, `/\`) || strings.Contains(env, "..") {
 		return fmt.Errorf("invalid environment %q: it must not contain a path separator or \"..\"", env)
@@ -145,8 +140,6 @@ func Load[T any, PT Config[T]](opts Options) (PT, error) {
 	return cfg, nil
 }
 
-// decode unmarshals one JSON value into v, rejecting an empty file, keys v
-// does not declare, and anything after the value.
 func decode(data []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()

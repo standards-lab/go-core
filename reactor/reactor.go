@@ -14,8 +14,6 @@ import (
 // drain cancels the handlers.
 type Func[T any] func(ctx context.Context, occ T) error
 
-// drainingKey is the context key under which a reactor puts its drain
-// signal on each handler's context.
 type drainingKey struct{}
 
 // Draining returns the drain signal of the reactor running the handler
@@ -47,7 +45,6 @@ type Source[T any] interface {
 	Ready() bool
 }
 
-// reactorState is a reactor's place in its single-use life.
 type reactorState int
 
 const (
@@ -87,10 +84,10 @@ type Reactor[T any] struct {
 
 	mu       sync.Mutex
 	state    reactorState
-	stop     context.CancelFunc // ends Receive's context
-	abort    context.CancelFunc // cancels handler contexts
-	err      error              // Receive's result once stopping
-	draining chan struct{}      // closed once Shutdown begins
+	stop     context.CancelFunc
+	abort    context.CancelFunc
+	err      error
+	draining chan struct{}
 	done     chan struct{}
 	errs     chan error
 }
@@ -123,8 +120,6 @@ func (r *Reactor[T]) Start(ctx context.Context) error {
 	r.state = reactorRunning
 
 	handle := func(ctx context.Context, occ T) error {
-		// Stopping the source must not interrupt the handler, but a
-		// deadline the source set for this occurrence still applies.
 		var hctx context.Context
 		var cancel context.CancelFunc
 		if d, ok := ctx.Deadline(); ok {
@@ -177,7 +172,6 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 		close(r.draining)
 	case reactorStopped:
 		if r.stop == nil {
-			// Retired before Start: there is no source to stop.
 			r.mu.Unlock()
 			return nil
 		}
@@ -200,7 +194,7 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 			cancelAt = nil
 			select {
 			case <-r.done:
-				continue // the drain finished as the CancelAfter period passed
+				continue
 			default:
 			}
 			r.abort()
@@ -208,8 +202,6 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 		case <-ctx.Done():
 			return fmt.Errorf("reactor: drain: %w", ctx.Err())
 		case <-r.done:
-			// An error sent on Err after the coordinator stopped monitoring
-			// has no other reader; report it here rather than lose it.
 			if err, ok := <-r.errs; ok {
 				return err
 			}
@@ -217,8 +209,6 @@ func (r *Reactor[T]) Shutdown(ctx context.Context) error {
 			err := r.err
 			r.mu.Unlock()
 			if cancelled {
-				// A handler that unwinds returns its cancellation; that is
-				// the expected outcome, not a second failure.
 				if errors.Is(err, context.Canceled) {
 					err = nil
 				}

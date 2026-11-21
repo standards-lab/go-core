@@ -11,9 +11,6 @@ import (
 	"github.com/standards-lab/go-core/process"
 )
 
-// The exit codes are the convention an orchestrator reads, so the tests
-// assert the numbers a reporter returns, not the constants' names.
-
 func TestFail_ReportsAndReturnsFailure(t *testing.T) {
 	var buf strings.Builder
 
@@ -40,9 +37,6 @@ func TestUsage_ReportsAndReturnsUsage(t *testing.T) {
 	}
 }
 
-// The context ends on each signal a terminal or an orchestrator sends, and
-// not before; the registration catches the signal, so the test process
-// survives it.
 func TestSignalContext_CancelsOnSignal(t *testing.T) {
 	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
 		t.Run(sig.String(), func(t *testing.T) {

@@ -71,7 +71,6 @@ func TestEncodeHeaders(t *testing.T) {
 	}
 }
 
-// A time in another zone is written as the same instant in UTC.
 func TestEncodeWritesTimeInUTC(t *testing.T) {
 	e := sample()
 	e.Time = time.Date(2026, 7, 1, 14, 0, 0, 5, time.Local)
@@ -84,7 +83,6 @@ func TestEncodeWritesTimeInUTC(t *testing.T) {
 	}
 }
 
-// A time written with another offset is decoded as the same instant in UTC.
 func TestDecodeReturnsTimeInUTC(t *testing.T) {
 	h := event.Header{
 		"ce-specversion": {"1.0"}, "ce-id": {"1"}, "ce-source": {"/s"}, "ce-type": {"t"},
@@ -215,7 +213,7 @@ func TestDecodePrefersLowercase(t *testing.T) {
 		"ce-specversion": {"1.0"}, "ce-source": {"/s"}, "ce-type": {"t"},
 		"ce-id": {"lower"}, "Ce-Id": {"canonical"},
 	}
-	for range 20 { // map order varies between iterations
+	for range 20 {
 		e, err := event.Decode(h, nil)
 		if err != nil {
 			t.Fatal(err)

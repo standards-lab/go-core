@@ -8,7 +8,6 @@ import (
 	"github.com/standards-lab/go-core/process/processtest"
 )
 
-// Run passes its arguments to the program, which echoes them one per line.
 func TestRun_PassesArgs(t *testing.T) {
 	res := processtest.Run(t, processtest.Cmd{Args: []string{"echo", "one", "two words"}})
 
@@ -17,7 +16,6 @@ func TestRun_PassesArgs(t *testing.T) {
 	}
 }
 
-// Run feeds Stdin to the program's standard input.
 func TestRun_FeedsStdin(t *testing.T) {
 	res := processtest.Run(t, processtest.Cmd{
 		Args:  []string{"echo"},
@@ -29,8 +27,6 @@ func TestRun_FeedsStdin(t *testing.T) {
 	}
 }
 
-// Run adds Env to the environment Launch gives the program: the parent's,
-// with its GORACE options kept.
 func TestRun_AddsEnv(t *testing.T) {
 	t.Setenv("GORACE", "halt_on_error=1")
 	res := processtest.Run(t, processtest.Cmd{Args: []string{"echo"}, Env: []string{"TESTPROG_EXIT=4"}})
@@ -43,7 +39,6 @@ func TestRun_AddsEnv(t *testing.T) {
 	}
 }
 
-// Run captures stdout and stderr apart.
 func TestRun_SeparatesStdoutAndStderr(t *testing.T) {
 	res := processtest.Run(t, processtest.Cmd{Args: []string{"echo", "out"}})
 
@@ -58,7 +53,6 @@ func TestRun_SeparatesStdoutAndStderr(t *testing.T) {
 	}
 }
 
-// A nonzero exit is returned as the result's code; the test goes on.
 func TestRun_ReturnsNonzeroCode(t *testing.T) {
 	res := processtest.Run(t, processtest.Cmd{Args: []string{"echo"}, Env: []string{"TESTPROG_EXIT=2"}})
 
@@ -70,8 +64,6 @@ func TestRun_ReturnsNonzeroCode(t *testing.T) {
 	}
 }
 
-// The zero Cmd runs the program with no arguments, empty stdin, and the
-// parent's environment, which here tells it to exit at once.
 func TestRun_ZeroCmd(t *testing.T) {
 	t.Setenv("TESTPROG_EXIT_AT_ONCE", "1")
 	res := processtest.Run(t, processtest.Cmd{})
@@ -87,7 +79,6 @@ func TestRun_ZeroCmd(t *testing.T) {
 	}
 }
 
-// logs records what a test logs, so the transcript Run writes can be read.
 type logs struct {
 	testing.TB
 	lines []string
@@ -95,8 +86,6 @@ type logs struct {
 
 func (l *logs) Log(args ...any) { l.lines = append(l.lines, fmt.Sprint(args...)) }
 
-// Run logs a shell line a reader can paste, its words quoted, the stdin the
-// program read piped in, then the output and a nonzero exit code.
 func TestRun_LogsTheShellLine(t *testing.T) {
 	rec := &logs{TB: t}
 	processtest.Run(rec, processtest.Cmd{

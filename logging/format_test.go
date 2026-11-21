@@ -14,8 +14,6 @@ func TestFormat_ValidAcceptsTheSupportedSet(t *testing.T) {
 	}
 }
 
-// Valid compares exactly; Config.Finalize is what lower-cases a value before it
-// gets here.
 func TestFormat_ValidRejectsUnknownAndUnnormalized(t *testing.T) {
 	for _, format := range []logging.Format{"", "yaml", "logfmt", "JSON", "Text"} {
 		if format.Valid() {

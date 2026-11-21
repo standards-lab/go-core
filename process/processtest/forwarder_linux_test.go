@@ -14,9 +14,6 @@ import (
 	"github.com/standards-lab/go-core/process/processtest"
 )
 
-// stalling is a loopback target whose connects stall until it frees its
-// one queue slot: a listener with a zero backlog that never accepts on its
-// own drops every SYN once the filler connection holds that slot.
 type stalling struct {
 	fd   int
 	port int
@@ -29,8 +26,6 @@ func stall(t *testing.T) *stalling {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// Shutdown wakes an Accept still blocked on the socket; Close alone
-		// does not.
 		_ = syscall.Shutdown(fd, syscall.SHUT_RDWR)
 		_ = syscall.Close(fd)
 	})
@@ -57,7 +52,6 @@ func (s *stalling) addr() string {
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(s.port))
 }
 
-// accept takes the next connection off the queue, freeing its slot.
 func (s *stalling) accept() (net.Conn, error) {
 	nfd, _, err := syscall.Accept4(s.fd, syscall.SOCK_CLOEXEC)
 	if err != nil {
@@ -68,8 +62,6 @@ func (s *stalling) accept() (net.Conn, error) {
 	return net.FileConn(f)
 }
 
-// dialing reports whether a connect to the target is stalled: a socket in
-// SYN_SENT whose remote port is the target's.
 func (s *stalling) dialing() bool {
 	data, err := os.ReadFile("/proc/net/tcp")
 	if err != nil {
@@ -85,11 +77,6 @@ func (s *stalling) dialing() bool {
 	return false
 }
 
-// A target that never answers a connect holds only its own connection:
-// while the first relay's dial is stalled, the forwarder accepts a second
-// connection and relays it, and Sever returns at once. A forwarder that
-// dialed in its accept loop would leave the second connection unaccepted
-// until the first dial's SYN retransmit, which the one accept below takes.
 func TestForwarder_StalledTargetBlocksNothing(t *testing.T) {
 	target := stall(t)
 	f := processtest.Forward(t, target.addr())
@@ -101,8 +88,6 @@ func TestForwarder_StalledTargetBlocksNothing(t *testing.T) {
 	defer func() { _ = first.Close() }()
 	processtest.WaitFor(t, "the first relay's stalled dial", target.dialing)
 
-	// Free the slot: the first dial stays stalled until its SYN
-	// retransmit, while a fresh connect completes at once.
 	filler, err := target.accept()
 	if err != nil {
 		t.Fatal(err)

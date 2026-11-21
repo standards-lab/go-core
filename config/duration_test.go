@@ -9,8 +9,6 @@ import (
 	"github.com/standards-lab/go-core/config"
 )
 
-// holder exercises Duration as a struct field, which is how a configuration
-// type carries one.
 type holder struct {
 	Timeout config.Duration `json:"timeout"`
 }
@@ -36,8 +34,6 @@ func TestDuration_UnmarshalNumberIsNanoseconds(t *testing.T) {
 }
 
 func TestDuration_UnmarshalEmptyStringLeavesUnset(t *testing.T) {
-	// An empty string reads as unset rather than as an error, so the zero value
-	// survives for Finalize to fill with a default.
 	var h holder
 	if err := json.Unmarshal([]byte(`{"timeout":""}`), &h); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -84,8 +80,6 @@ func TestDuration_MarshalRoundTrip(t *testing.T) {
 }
 
 func TestDuration_SetEmptyLeavesValue(t *testing.T) {
-	// Set treats an empty string as "nothing to apply", which is what lets an
-	// unset environment variable and a disabled override share one path.
 	d := config.Duration(30 * time.Second)
 	if err := d.Set(""); err != nil {
 		t.Fatalf("Set(\"\"): %v", err)
@@ -121,8 +115,6 @@ func TestDuration_UnmarshalNullLeavesValue(t *testing.T) {
 }
 
 func TestDuration_UnmarshalLargeIntegerExact(t *testing.T) {
-	// 9007199254740993 = 2^53 + 1: representable as int64 but not as float64,
-	// so an exact result proves the decode does not round-trip through float64.
 	var h holder
 	if err := json.Unmarshal([]byte(`{"timeout":9007199254740993}`), &h); err != nil {
 		t.Fatalf("Unmarshal: %v", err)

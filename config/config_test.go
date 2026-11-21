@@ -26,10 +26,6 @@ func (s *secrets) merge(src *secrets) {
 	}
 }
 
-// testConfig is a synthetic configuration exercising the Config contract: a
-// scalar, a scalar with a default, and a nested sub-config. Finalize follows
-// the canonical order — defaults, then environment overrides composed from
-// the prefix, then validation.
 type testConfig struct {
 	Host    string  `json:"host"`
 	Port    int     `json:"port"`
@@ -94,7 +90,7 @@ func TestLoad_LayerPrecedence(t *testing.T) {
 
 func TestLoad_NoFilesUsesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envSelector, "prod") // selector set, but the directory is empty
+	t.Setenv(envSelector, "prod")
 	cfg, err := config.Load[testConfig](config.Options{Dir: dir, EnvVar: envSelector})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -108,7 +104,7 @@ func TestLoad_EmptyEnvSkipsOverlays(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "config.json", `{"host":"base"}`)
 	writeFile(t, dir, "config.prod.json", `{"host":"prod"}`)
-	t.Setenv(envSelector, "") // empty selector value: overlays are skipped
+	t.Setenv(envSelector, "")
 
 	cfg, err := config.Load[testConfig](config.Options{Dir: dir, EnvVar: envSelector})
 	if err != nil {
@@ -139,8 +135,6 @@ func TestLoad_EnvOverrideWinsLast(t *testing.T) {
 	}
 }
 
-// EnvVar left empty derives from EnvPrefix, so one field wires both the
-// overlay selector and the override names.
 func TestLoad_EnvPrefixDerivesSelector(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "config.json", `{"host":"base"}`)
@@ -198,9 +192,9 @@ func TestLoad_InvalidOverlayPattern(t *testing.T) {
 	for _, pattern := range []string{
 		"%s.json",
 		"config.%s.%s.%s.json",
-		"%[1]s.json",     // drops the environment: the overlay is the base
-		"%[2]s.json",     // drops the stem: both overlays are one file
-		"env.%[2]s.json", // a literal "env" does not stand in for the value
+		"%[1]s.json",
+		"%[2]s.json",
+		"env.%[2]s.json",
 	} {
 		t.Run(pattern, func(t *testing.T) {
 			_, err := config.Load[testConfig](config.Options{
@@ -267,8 +261,6 @@ func TestLoad_CustomSecretsName(t *testing.T) {
 
 func TestLoad_ReadErrorPropagates(t *testing.T) {
 	dir := t.TempDir()
-	// A directory where a file is expected fails the read with something other
-	// than ErrNotExist, which must surface rather than being skipped.
 	if err := os.Mkdir(filepath.Join(dir, "config.json"), 0o755); err != nil {
 		t.Fatalf("mkdir config.json: %v", err)
 	}
@@ -284,7 +276,7 @@ func TestLoad_ReadErrorPropagates(t *testing.T) {
 
 func TestLoad_MalformedJSON(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.json", `{"host": "base"`) // truncated
+	writeFile(t, dir, "config.json", `{"host": "base"`)
 
 	_, err := config.Load[testConfig](config.Options{Dir: dir})
 	if err == nil {
@@ -308,8 +300,6 @@ func TestLoad_FinalizeError(t *testing.T) {
 	}
 }
 
-// Every layer decodes into the same T, so a key T does not declare is a typo
-// or a stale setting, in whichever file it appears.
 func TestLoad_UnknownKeyFails(t *testing.T) {
 	for _, file := range []string{"config.json", "secrets.json"} {
 		t.Run(file, func(t *testing.T) {
@@ -347,7 +337,6 @@ func TestLoad_TrailingDataFails(t *testing.T) {
 	}
 }
 
-// An empty file is named as one, not reported as a bare EOF.
 func TestLoad_EmptyFileFails(t *testing.T) {
 	for _, body := range []string{"", " \n"} {
 		dir := t.TempDir()
@@ -360,8 +349,6 @@ func TestLoad_EmptyFileFails(t *testing.T) {
 	}
 }
 
-// The environment value becomes part of a file name, so one that could
-// reach outside Dir fails instead of reading there.
 func TestLoad_EnvValueWithPathFails(t *testing.T) {
 	for _, env := range []string{"../prod", "a/b", `a\b`, ".."} {
 		t.Run(env, func(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"github.com/standards-lab/go-core/process/processtest"
 )
 
-// echo serves one line back per connection for the forwarder to relay.
 func echo(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -50,8 +49,6 @@ func roundTrip(t *testing.T, addr, line string) (string, error) {
 	return got, err
 }
 
-// The forwarder relays while up, refuses while severed, and relays again on
-// the same address after Restore.
 func TestForwarder_SeverAndRestore(t *testing.T) {
 	f := processtest.Forward(t, echo(t))
 	addr := f.Addr()
@@ -75,8 +72,6 @@ func TestForwarder_SeverAndRestore(t *testing.T) {
 	}
 }
 
-// Sever drops an open relayed connection, not only new ones: a pooled
-// database connection fails on its next use.
 func TestForwarder_SeverDropsOpenConnections(t *testing.T) {
 	f := processtest.Forward(t, echo(t))
 	c, err := net.Dial("tcp", f.Addr())
@@ -91,7 +86,6 @@ func TestForwarder_SeverDropsOpenConnections(t *testing.T) {
 	}
 }
 
-// Restore is the end of an outage; with none in progress it changes nothing.
 func TestForwarder_RestoreWhileListeningIsANoOp(t *testing.T) {
 	f := processtest.Forward(t, echo(t))
 	addr := f.Addr()
@@ -102,8 +96,6 @@ func TestForwarder_RestoreWhileListeningIsANoOp(t *testing.T) {
 	}
 }
 
-// Concurrent Restores after a Sever end one outage: one listens, the rest
-// find it listening, and none fails on the address in use.
 func TestForwarder_ConcurrentRestores(t *testing.T) {
 	f := processtest.Forward(t, echo(t))
 	addr := f.Addr()

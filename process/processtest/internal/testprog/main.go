@@ -54,8 +54,6 @@ func run() int {
 	return code
 }
 
-// echo is the one-shot mode: args and stdin to stdout, a line to stderr,
-// and code as the exit.
 func echo(args []string, code int) int {
 	for _, arg := range args {
 		fmt.Println(arg)
