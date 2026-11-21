@@ -8,8 +8,6 @@ import (
 	"github.com/standards-lab/go-core/config"
 )
 
-// defaultShutdownTimeout is the shutdown budget a zero [Config] finalizes
-// to.
 const defaultShutdownTimeout = 10 * time.Second
 
 // Config is a [Coordinator]'s configuration. Env records the

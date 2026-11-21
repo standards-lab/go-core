@@ -18,12 +18,8 @@ import (
 
 var _ lifecycle.ReadinessChecker = (*lifecycle.Coordinator)(nil)
 
-// failsafe bounds every wait for an event that should occur, so a broken
-// coordinator fails the test instead of hanging it.
 const failsafe = 2 * time.Second
 
-// recvOrFail receives from ch, or fails the test if nothing arrives within the
-// failsafe window.
 func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
 	t.Helper()
 	select {
@@ -36,7 +32,6 @@ func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
 	}
 }
 
-// recorder collects events, in the order they happen, across goroutines.
 type recorder struct {
 	mu     sync.Mutex
 	events []string
@@ -54,15 +49,11 @@ func (r *recorder) list() []string {
 	return slices.Clone(r.events)
 }
 
-// sameSet reports whether got holds exactly want, in any order.
 func sameSet(got []string, want ...string) bool {
 	return len(got) == len(want) &&
 		slices.Equal(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want)))
 }
 
-// phased reports whether got is exactly phases, in order, each phase's
-// events in any order among themselves: a layer starts and stops
-// concurrently, and the layers one after another.
 func phased(got []string, phases ...[]string) bool {
 	for _, phase := range phases {
 		if len(got) < len(phase) || !sameSet(got[:len(phase)], phase...) {
@@ -73,9 +64,6 @@ func phased(got []string, phases ...[]string) bool {
 	return len(got) == 0
 }
 
-// fake is a Subsystem that records "start name" and "stop name" on r, when
-// r is set, then runs its optional start and stop behaviour; nil behaviour
-// succeeds.
 type fake struct {
 	name        string
 	r           *recorder
@@ -102,24 +90,18 @@ func (f *fake) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// starter is a start-only participant: a Starter and not a Stopper.
 type starter func(context.Context) error
 
 func (s starter) Start(ctx context.Context) error { return s(ctx) }
 
-// stopper is a stop-only participant: a Stopper and not a Starter.
 type stopper func(context.Context) error
 
 func (s stopper) Shutdown(ctx context.Context) error { return s(ctx) }
 
-// node defines f on g under f's name, using deps, so f sits one layer
-// above the highest of them.
 func node(g *graph.Graph, f *fake, deps ...graph.Ref) *graph.Node[*fake] {
 	return value(g, f.name, f, deps...)
 }
 
-// value defines v on g under name, using deps, so v sits one layer above
-// the highest of them.
 func value[T any](g *graph.Graph, name string, v T, deps ...graph.Ref) *graph.Node[T] {
 	return g.Define(name, func(s *graph.Scope) (T, error) {
 		for _, d := range deps {
@@ -129,8 +111,6 @@ func value[T any](g *graph.Graph, name string, v T, deps ...graph.Ref) *graph.No
 	})
 }
 
-// use uses d through s, for each node type these tests define: a Use, unlike
-// an After, brings d into the System.
 func use(s *graph.Scope, d graph.Ref) {
 	switch n := d.(type) {
 	case *graph.Node[*fake]:
@@ -144,8 +124,6 @@ func use(s *graph.Scope, d graph.Ref) {
 	}
 }
 
-// coordinator builds g from roots and returns a Coordinator for the System
-// that shuts down within timeout, failing the test on a build error.
 func coordinator(
 	t *testing.T,
 	timeout time.Duration,
@@ -160,16 +138,12 @@ func coordinator(
 	return lifecycle.New(sys, lifecycle.Config{ShutdownTimeout: config.Duration(timeout)})
 }
 
-// run starts Run on its own goroutine and returns the channel its result
-// lands on.
 func run(ctx context.Context, lc *lifecycle.Coordinator) <-chan error {
 	done := make(chan error, 1)
 	go func() { done <- lc.Run(ctx) }()
 	return done
 }
 
-// runThrough runs lc until it becomes ready, then stops it: an OnReady hook
-// cancels Run's context, so Run shuts down immediately after startup.
 func runThrough(lc *lifecycle.Coordinator) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -177,17 +151,14 @@ func runThrough(lc *lifecycle.Coordinator) error {
 	return lc.Run(ctx)
 }
 
-// cancelled returns a context that is already cancelled.
 func cancelled() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	return ctx
 }
 
-// noop is an Exec function that succeeds.
 func noop(context.Context) error { return nil }
 
-// mustPanic fails the test unless fn panics with exactly want.
 func mustPanic(t *testing.T, want string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -241,8 +212,6 @@ func TestRun_LayerStartsConcurrently(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := run(ctx, lc)
 
-	// Every participant must reach its arrival send before any is released,
-	// which only holds if the layer starts them simultaneously.
 	for range n {
 		recvOrFail(t, arrived, "layer member arrival")
 	}
@@ -268,8 +237,6 @@ func TestRun_ReadyLifecycle(t *testing.T) {
 	}))
 	lc := coordinator(t, failsafe, g, svc)
 
-	// OnReady observes readiness from inside the hook: the flip must precede
-	// the ready hooks.
 	readyInHook := make(chan bool, 1)
 	lc.OnReady(func() { readyInHook <- lc.Ready() })
 
@@ -358,9 +325,6 @@ func TestRun_JoinsAllStartupFailures(t *testing.T) {
 }
 
 func TestRun_CancelReturnsNilAndShutsDown(t *testing.T) {
-	// Start captures the run context; Shutdown observes both contexts at
-	// shutdown. The chain is race-free: the Start goroutine completes before
-	// the shutdown goroutine launches.
 	var runCtx context.Context
 	type observation struct{ runErr, shutdownErr error }
 	obs := make(chan observation, 1)
@@ -451,8 +415,6 @@ func TestRun_MonitorIgnoresNilAndClose(t *testing.T) {
 
 	recvOrFail(t, ready, "coordinator to become ready")
 
-	// A nil error and a closing channel are both the quiet end of a monitored
-	// source, not failures.
 	errs <- nil
 	close(errs)
 
@@ -467,8 +429,6 @@ func TestRun_MonitorIgnoresNilAndClose(t *testing.T) {
 	}
 }
 
-// A context ended before Run is the clean stop before any layer begins:
-// nothing starts, so nothing shuts down.
 func TestRun_PreCancelledContextStartsNothing(t *testing.T) {
 	var r recorder
 	g := graph.New()
@@ -490,8 +450,6 @@ func TestRun_PreCancelledContextStartsNothing(t *testing.T) {
 }
 
 func TestRun_ShutdownTimeout(t *testing.T) {
-	// Shutdown outlives the timeout; releasing it only at cleanup keeps the
-	// layer-done path closed, so shutdown must end via the deadline.
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	g := graph.New()
@@ -639,7 +597,6 @@ func TestRun_ShutdownReversesLayers(t *testing.T) {
 	var r recorder
 	g := graph.New()
 	pool := node(g, &fake{name: "pool", r: &r})
-	// A stop-only participant shuts down with its layer.
 	flusher := value(g, "flusher", stopper(func(context.Context) error {
 		r.record("stop flusher")
 		return nil
@@ -675,8 +632,6 @@ func TestRun_StartupFailureSkipsHigherLayersAndShutsDownBegunLayers(t *testing.T
 		t.Errorf("error = %v, want the startup wrap naming the failed participant", err)
 	}
 
-	// The failing layer finishes its concurrent starts, and the whole layer
-	// shuts down, bus whose Start failed included; server never starts.
 	got := r.list()
 	if !phased(got,
 		[]string{"start pool"},
@@ -688,9 +643,6 @@ func TestRun_StartupFailureSkipsHigherLayersAndShutsDownBegunLayers(t *testing.T
 	}
 }
 
-// A startup failure cancels the run context before shutdown, so work a
-// started participant left running on it stops rather than outliving the
-// shutdown.
 func TestRun_StartupFailureCancelsRunContextBeforeShutdown(t *testing.T) {
 	var runCtx context.Context
 	runErr := make(chan error, 1)
@@ -718,8 +670,6 @@ func TestRun_StartupFailureCancelsRunContextBeforeShutdown(t *testing.T) {
 	}
 }
 
-// The first failure in a layer cancels its siblings, and the cancellation
-// they return is the failure's consequence, not a failure of its own.
 func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
 	sentinel := errors.New("bus connect failed")
 	g := graph.New()
@@ -739,9 +689,6 @@ func TestRun_StartupFailureCancelsSiblings(t *testing.T) {
 	}
 }
 
-// A cancellation a participant returns from a context of its own is its
-// failure, not a consequence: with the run context live and nothing on
-// record, it is kept.
 func TestRun_StartupKeepsAnUnrelatedCancellation(t *testing.T) {
 	g := graph.New()
 	dial := value(g, "dial", starter(func(context.Context) error {
@@ -756,9 +703,6 @@ func TestRun_StartupKeepsAnUnrelatedCancellation(t *testing.T) {
 	}
 }
 
-// A signal during startup is the signal-driven exit: the Starts that honor
-// the run context return its cancellation, the begun layers shut down, and
-// Run returns nil.
 func TestRun_SignalDuringStartupShutsDownCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -769,7 +713,7 @@ func TestRun_SignalDuringStartupShutsDownCleanly(t *testing.T) {
 	var layer1 []graph.Ref
 	for _, name := range []string{"bus", "cache"} {
 		layer1 = append(layer1, node(g, &fake{name: name, r: &r, start: func(ctx context.Context) error {
-			cancel() // the signal arrives mid-startup
+			cancel()
 			<-ctx.Done()
 			return fmt.Errorf("connect: %w", ctx.Err())
 		}}, pool))
@@ -786,8 +730,6 @@ func TestRun_SignalDuringStartupShutsDownCleanly(t *testing.T) {
 	if readied {
 		t.Error("OnReady hooks ran for a startup the signal cut short")
 	}
-	// bus and cache returned the cancellation and still shut down; server
-	// never starts.
 	got := r.list()
 	if !phased(got,
 		[]string{"start pool"},
@@ -799,8 +741,6 @@ func TestRun_SignalDuringStartupShutsDownCleanly(t *testing.T) {
 	}
 }
 
-// A signal during startup does not mask a real failure: a Start whose error
-// is not a cancellation still fails the run.
 func TestRun_SignalDuringStartupKeepsARealFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -826,8 +766,6 @@ func TestRun_SignalDuringStartupKeepsARealFailure(t *testing.T) {
 func TestExec_StartsLayersThenRunsThenShutsDownInReverse(t *testing.T) {
 	var r recorder
 	g := graph.New()
-	// a's Start yields before it returns, so a missing barrier lets layer
-	// 1 start before it finishes.
 	a := node(g, &fake{name: "a", r: &r, start: func(context.Context) error {
 		time.Sleep(20 * time.Millisecond)
 		r.record("started a")
@@ -856,9 +794,6 @@ func TestExec_StartsLayersThenRunsThenShutsDownInReverse(t *testing.T) {
 	}
 }
 
-// rendezvous returns two functions, each of which marks its side begun and
-// waits for the other's, failing with an error when the other never begins:
-// the pair completes only when both run at once.
 func rendezvous() (a, b func(context.Context) error) {
 	aBegun, bBegun := make(chan struct{}), make(chan struct{})
 	meet := func(mine chan struct{}, theirs <-chan struct{}) func(context.Context) error {
@@ -905,8 +840,6 @@ func TestExec_ContextEndedBeforeStartupReturnsTheCancellation(t *testing.T) {
 	}
 }
 
-// A value takes part in each phase it implements, and a value that
-// implements neither takes no part.
 func TestExec_ParticipationFollowsTheValue(t *testing.T) {
 	var r recorder
 	g := graph.New()
@@ -1080,8 +1013,6 @@ func TestExec_ShutdownOverrunStillAttemptsLowerLayers(t *testing.T) {
 	top := node(g, &fake{name: "top", r: &r, stop: func(context.Context) error { return errTop }}, hang)
 
 	err := coordinator(t, 100*time.Millisecond, g, top).Exec(context.Background(), noop)
-	// Past the deadline shutdown no longer waits on a layer, so base's
-	// shutdown may begin after Exec returns; it must begin.
 	recvOrFail(t, baseStopped, "base's shutdown")
 
 	if !errors.Is(err, context.DeadlineExceeded) {

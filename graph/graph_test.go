@@ -11,8 +11,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// dependency returns ref's Dependency in sys, failing the test when there
-// is none.
 func dependency(t *testing.T, sys *graph.System, ref graph.Ref) graph.Dependency {
 	t.Helper()
 	for _, d := range sys.Dependencies() {
@@ -24,8 +22,6 @@ func dependency(t *testing.T, sys *graph.System, ref graph.Ref) graph.Dependency
 	return graph.Dependency{}
 }
 
-// mustPanic fails the test unless fn panics with a message starting
-// "graph: " and containing want.
 func mustPanic(t *testing.T, want string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -42,7 +38,6 @@ func mustPanic(t *testing.T, want string, fn func()) {
 	fn()
 }
 
-// mustBuild builds roots, failing the test on an error.
 func mustBuild(t *testing.T, g *graph.Graph, roots ...graph.Ref) *graph.System {
 	t.Helper()
 	sys, err := g.Build(roots...)
@@ -52,10 +47,8 @@ func mustBuild(t *testing.T, g *graph.Graph, roots ...graph.Ref) *graph.System {
 	return sys
 }
 
-// counter counts constructor runs by node name.
 type counter map[string]int
 
-// constant returns a constructor that counts its run and returns v.
 func constant[T any](c counter, name string, v T) func(*graph.Scope) (T, error) {
 	return func(*graph.Scope) (T, error) {
 		c[name]++
@@ -93,7 +86,6 @@ func TestBuild_MemoizesSharedNodes(t *testing.T) {
 	})
 	right := g.Define("right", func(s *graph.Scope) (*conn, error) {
 		c["right"]++
-		// A second Use of the same node returns the memoized value.
 		s.Use(shared)
 		return s.Use(shared), nil
 	})
@@ -111,7 +103,6 @@ func TestBuild_MemoizesSharedNodes(t *testing.T) {
 		t.Fatalf("dependents got different values: %p %p %p", pair[0], pair[1], sys.Get(shared))
 	}
 
-	// A second Build constructs fresh values.
 	again := mustBuild(t, g, top)
 	if c["shared"] != 2 {
 		t.Fatalf("shared ran %d times over two Builds, want 2", c["shared"])
@@ -164,11 +155,7 @@ func TestBuild_ConstructsOnlyWhatRootsReach(t *testing.T) {
 
 func TestLayers_AreLongestPath(t *testing.T) {
 	g := graph.New()
-	// Defined out of dependency order, so the within-layer order is
-	// definition order and not construction order.
 	var a, b, c, d, e *graph.Node[int]
-	// e uses d before a, so a layer taken from its last Use, not its
-	// highest, would put it too low.
 	e = g.Define("e", func(s *graph.Scope) (int, error) { return s.Use(d) + s.Use(a), nil })
 	b = g.Define("b", func(*graph.Scope) (int, error) { return 2, nil })
 	d = g.Define("d", func(s *graph.Scope) (int, error) { return s.Use(c), nil })
@@ -176,7 +163,6 @@ func TestLayers_AreLongestPath(t *testing.T) {
 	c = g.Define("c", func(s *graph.Scope) (int, error) { return s.Use(a) + s.Use(b), nil })
 
 	sys := mustBuild(t, g, e)
-	// e uses a (layer 0) and d (layer 2): its longest path puts it at 3.
 	want := "0: b, a\n1: c\n2: d\n3: e"
 	if got := sys.String(); got != want {
 		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
@@ -191,17 +177,14 @@ func TestAfter_OrdersOnlyWithinTheSystem(t *testing.T) {
 		c["gate"]++
 		return s.Use(base), nil
 	})
-	// worker has no Use, so its layer comes from After alone.
 	worker := g.Define("worker", constant(c, "worker", 0), graph.After(gate))
 
-	// gate is in the System through the root list, so worker sits above it.
 	sys := mustBuild(t, g, worker, gate)
 	want := "0: base\n1: gate\n2: worker"
 	if got := sys.String(); got != want {
 		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
-	// Without gate in the System, After neither builds it nor orders on it.
 	clear(c)
 	sys = mustBuild(t, g, worker)
 	if c["gate"] != 0 || sys.Has(gate) {
@@ -216,8 +199,6 @@ func TestAfter_OrdersOnlyWithinTheSystem(t *testing.T) {
 func TestAfter_TargetBuiltLaterStillOrders(t *testing.T) {
 	g := graph.New()
 	late := g.Define("late", func(*graph.Scope) (int, error) { return 0, nil })
-	// early is built first, as the first root, so late is not built yet
-	// when early's constructor runs.
 	early := g.Define("early", func(*graph.Scope) (int, error) { return 0, nil }, graph.After(late))
 	sys := mustBuild(t, g, early, late)
 	want := "0: late\n1: early"
@@ -242,7 +223,6 @@ func TestBuild_ConstructorErrorIsLabelled(t *testing.T) {
 	}
 }
 
-// codeError is an error type for errors.As.
 type codeError struct{ code int }
 
 func (e *codeError) Error() string { return fmt.Sprintf("code %d", e.code) }
@@ -320,8 +300,6 @@ func TestRef_NamesTheNode(t *testing.T) {
 	}
 }
 
-// swallow runs use and recovers whatever it panics with, as a constructor
-// must not.
 func swallow(use func()) {
 	defer func() { _ = recover() }()
 	use()
@@ -429,14 +407,10 @@ func TestObserve_SeesEachNodeABuildBeginsByItsHandle(t *testing.T) {
 		t.Fatal("Build succeeded, want the leaf's error")
 	}
 
-	// Depth-first from the root, each node once, the failing leaf included,
-	// and never a node the root does not reach. Interface equality: each is
-	// the handle Define returned, not a copy carrying the same node.
 	want := []graph.Ref{top, mid, leaf}
 	if !slices.Equal(seen, want) || !slices.Equal(again, want) {
 		t.Fatalf("observed %v and %v, want %v from each observer", refNames(seen), refNames(again), refNames(want))
 	}
-	// An observer sees a node before its constructor runs.
 	if wantOrder := []string{"observe top", "observe mid", "observe leaf", "construct leaf"}; !slices.Equal(order, wantOrder) {
 		t.Fatalf("order = %v, want %v", order, wantOrder)
 	}
@@ -599,7 +573,6 @@ func TestWiring_Panics(t *testing.T) {
 			mustPanic(t, fmt.Sprintf("Define of %q, a name with a comma or a newline", name), func() {
 				g.Define(name, func(*graph.Scope) (int, error) { return 0, nil })
 			})
-			// The Graph is still usable: the refused call released its lock.
 			if g.Define("ok", func(*graph.Scope) (int, error) { return 0, nil }).Name() != "ok" {
 				t.Fatal("Define after the refused name failed")
 			}

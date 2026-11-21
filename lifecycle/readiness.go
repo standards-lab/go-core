@@ -31,8 +31,6 @@ func (r *Readiness) Checks() []Check {
 	return c.Checks()
 }
 
-// bind binds r, the value of the node name, to c. A Readiness binds once:
-// binding it to a second Coordinator panics, as a wiring mistake.
 func (r *Readiness) bind(name string, c *Coordinator) {
 	if !r.c.CompareAndSwap(nil, c) && r.c.Load() != c {
 		panic(fmt.Sprintf("lifecycle: New: Readiness %q is bound to another Coordinator", name))

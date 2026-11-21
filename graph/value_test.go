@@ -8,7 +8,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// dsn is a value a test hands to Value, and gate a type Fresh allocates.
 type dsn struct{ url string }
 
 type gate struct{ open bool }
@@ -33,8 +32,6 @@ func TestValue_IsVInEveryBuild(t *testing.T) {
 func TestValue_TIsTheStaticTypeOfV(t *testing.T) {
 	g := graph.New()
 	var w io.Writer = &bytes.Buffer{}
-	// writers compiles only if Value's handle is *Node[io.Writer], w's
-	// static type, not *Node[*bytes.Buffer], its dynamic one.
 	writers := func(n *graph.Node[io.Writer]) *graph.Node[io.Writer] { return n }
 	n := writers(g.Value("out", w))
 	if got := mustBuild(t, g, n).Get(n); got != w {
@@ -53,7 +50,6 @@ func TestFresh_IsANewZeroPointerInEachBuild(t *testing.T) {
 	if a == nil || a.open {
 		t.Fatalf("first Build's value = %+v, want a non-nil zero gate", a)
 	}
-	// Mutating one Build's value does not reach the next.
 	a.open = true
 	b := mustBuild(t, g, n).Get(n)
 	if b == a {
@@ -78,7 +74,6 @@ func TestValueAndFresh_AreUseTargets(t *testing.T) {
 	if got := sys.Get(server); got != "serving postgres" {
 		t.Fatalf("server = %q, want serving postgres", got)
 	}
-	// The constructor received the System's own pointer, not another.
 	if seen == nil || seen != sys.Get(ready) {
 		t.Fatalf("Use gave %p, Get gives %p; want the same non-nil pointer", seen, sys.Get(ready))
 	}
@@ -95,14 +90,12 @@ func TestValueAndFresh_AreAfterTargets(t *testing.T) {
 	ready := g.Fresh[gate]("readiness")
 	server := g.Define("server", constant(c, "server", 0), graph.After(cfg, ready))
 
-	// Named as roots, both order the server above them.
 	sys := mustBuild(t, g, server, cfg, ready)
 	want := "0: config, readiness\n1: server"
 	if got := sys.String(); got != want {
 		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
-	// After builds neither.
 	sys = mustBuild(t, g, server)
 	if sys.Has(cfg) || sys.Has(ready) {
 		t.Fatalf("After pulled a value in: layers:\n%s", sys)
@@ -135,8 +128,6 @@ func TestValueAndFresh_TakeInAndAfter(t *testing.T) {
 	ready := g.Fresh[gate]("readiness", graph.In(workers), graph.After(base))
 	top := g.Define("top", constant(c, "top", 0), graph.After(workers))
 
-	// The group as a root builds both members, and After orders each above
-	// base and below the node ordered after the group.
 	sys := mustBuild(t, g, top, workers, base)
 	want := "0: base\n1: config, readiness\n2: top"
 	if got := sys.String(); got != want {
@@ -146,7 +137,6 @@ func TestValueAndFresh_TakeInAndAfter(t *testing.T) {
 		t.Fatalf("config = %v, readiness = %v; want 1 and a non-nil gate", sys.Get(cfg), sys.Get(ready))
 	}
 
-	// After builds nothing: the group alone brings up only its members.
 	sys = mustBuild(t, g, workers)
 	want = "0: config, readiness"
 	if got := sys.String(); got != want {
@@ -155,8 +145,6 @@ func TestValueAndFresh_TakeInAndAfter(t *testing.T) {
 }
 
 func TestValueAndFresh_Panics(t *testing.T) {
-	// Each case runs once through Value and once through Fresh, with the
-	// message Define gives, naming the call.
 	calls := []struct {
 		call   string
 		define func(g *graph.Graph, name string, opts ...graph.Option)
@@ -244,7 +232,6 @@ func TestValueAndFresh_Panics(t *testing.T) {
 				mustPanic(t, c.call+` "top" with After of a nil node (is its Define later?)`, func() {
 					c.define(g, "top", graph.In(workers), graph.After(nil))
 				})
-				// The name is still free, and the group gained no member.
 				top := g.Define("top", zero)
 				if sys := mustBuild(t, g, workers); len(sys.Layers()) != 0 {
 					t.Fatalf("the failed %s joined the group: layers:\n%s", c.call, sys)

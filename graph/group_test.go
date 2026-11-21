@@ -8,7 +8,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// zero is a constructor that returns 0 and does nothing else.
 func zero(*graph.Scope) (int, error) { return 0, nil }
 
 func TestGroup_RootBuildsEveryMemberInDefinitionOrder(t *testing.T) {
@@ -47,15 +46,12 @@ func TestAfter_GroupOrdersAfterEachMemberInTheSystem(t *testing.T) {
 	}, graph.In(workers))
 	server := g.Define("server", constant(c, "server", 0), graph.After(workers))
 
-	// Both members are in the System, so the server sits above the higher.
 	sys := mustBuild(t, g, server, low, high)
 	want := "0: base, low\n1: high\n2: server"
 	if got := sys.String(); got != want {
 		t.Fatalf("layers:\n%s\nwant:\n%s", got, want)
 	}
 
-	// After a group never builds its members, and orders only on the ones
-	// in the System.
 	clear(c)
 	sys = mustBuild(t, g, server, low)
 	if c["high"] != 0 || sys.Has(high) {
@@ -70,7 +66,6 @@ func TestAfter_GroupOrdersAfterEachMemberInTheSystem(t *testing.T) {
 func TestGroup_MembershipDefinedAfterItsUse(t *testing.T) {
 	g := graph.New()
 	workers := g.Group("workers")
-	// The server orders after the group before it has any members.
 	server := g.Define("server", zero, graph.After(workers))
 	base := g.Define("base", zero)
 	g.Define("sweeper", func(s *graph.Scope) (int, error) { return s.Use(base), nil }, graph.In(workers))
@@ -112,8 +107,6 @@ func TestReplace_KeepsAfterAndIn(t *testing.T) {
 		graph.In(workers), graph.After(gate))
 	g.Replace(worker, func(*graph.Scope) (string, error) { return "fake", nil })
 
-	// The worker is reached only through its group, and sits above gate
-	// only through its After.
 	sys := mustBuild(t, g, workers, gate)
 	if got := sys.Get(worker); got != "fake" {
 		t.Fatalf("worker = %q, want the substitute's fake", got)
@@ -201,7 +194,6 @@ func TestOptions_WiringPanics(t *testing.T) {
 		mustPanic(t, `Define "top" with After of a nil node (is its Define later?)`, func() {
 			g.Define("top", zero, graph.In(workers), graph.After(nil))
 		})
-		// The name is still free, and the group gained no member.
 		top := g.Define("top", zero)
 		sys := mustBuild(t, g, workers)
 		if len(sys.Layers()) != 0 {
@@ -251,7 +243,6 @@ func TestOptions_WiringPanics(t *testing.T) {
 	t.Run("group of a name with a newline", func(t *testing.T) {
 		g := graph.New()
 		mustPanic(t, `Group of "a\nb", a name with a comma or a newline`, func() { g.Group("a\nb") })
-		// The Graph is still usable: the refused call released its lock.
 		if g.Group("ok").Name() != "ok" {
 			t.Fatal("Group after the refused name failed")
 		}

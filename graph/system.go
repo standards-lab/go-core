@@ -82,7 +82,6 @@ func (s *System) Dependencies() []Dependency {
 	return out
 }
 
-// dependency returns e as the Dependency a caller sees.
 func (e *entry) dependency() Dependency {
 	return Dependency{Name: e.node.name, Value: e.value, Ref: e.node.handle}
 }
@@ -111,8 +110,6 @@ func (s *System) Has(ref Ref) bool {
 	return ok
 }
 
-// lookup returns the node ref names, for LayerOf and Has, which op names.
-// It panics when ref is nil, a zero-value literal, or a group.
 func (s *System) lookup(ref Ref, op string) *node {
 	if ref == nil {
 		panic(fmt.Sprintf("graph: %s of a nil node", op))
@@ -120,8 +117,6 @@ func (s *System) lookup(ref Ref, op string) *node {
 	if ref.owner() == nil {
 		panic(fmt.Sprintf("graph: %s of a nil %s", op, ref.kind()))
 	}
-	// A group's members may be changing on a Graph that has not built, so
-	// lookup rejects a group before it reads any nodes.
 	if _, ok := ref.(*Group); ok {
 		panic(fmt.Sprintf("graph: %s of %q, a group, which is not a node", op, ref.Name()))
 	}
@@ -172,15 +167,8 @@ func (s *System) Dropped() []Drop {
 	return slices.Clone(s.dropped)
 }
 
-// system computes the layers of b's entries by longest path and returns
-// them as a System. The Use edges are acyclic, since construct panics on a
-// cycle, but an After edge can close one; that panics with its path here,
-// which names a group the cycle passes through between its member and the
-// node ordered after it.
 func (b *build) system() *System {
 	level := make(map[*node]int, len(b.entries))
-	// path is the chain of names being visited, outermost first, groups
-	// included; onPath holds each visiting node's place in it.
 	var path []string
 	onPath := make(map[*node]int)
 	var layer func(n *node) int
@@ -236,9 +224,6 @@ func (b *build) system() *System {
 	return &System{entries: b.entries, layers: layers, dropped: b.dropped(ordered)}
 }
 
-// dropped returns the Afters of the ordered entries whose targets have no
-// node among b's entries, in the entries' order and then each node's After
-// order.
 func (b *build) dropped(ordered []*entry) []Drop {
 	var drops []Drop
 	for _, e := range ordered {

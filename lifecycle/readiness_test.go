@@ -14,14 +14,10 @@ import (
 
 var _ lifecycle.ReadinessChecker = (*lifecycle.Readiness)(nil)
 
-// checker is a value that implements ReadinessChecker and takes no part in
-// startup or shutdown, so no Check is inferred from it.
 type checker func() bool
 
 func (c checker) Ready() bool { return c() }
 
-// probed is a Starter that reports its own readiness, and does not shut
-// down: the least a value needs for a Check to be inferred from it.
 type probed func() bool
 
 func (p probed) Start(context.Context) error { return nil }
@@ -29,20 +25,16 @@ func (p probed) Ready() bool                 { return p() }
 
 var _ lifecycle.ReadyStarter = probed(nil)
 
-// probedSubsystem is a probed value that also shuts down.
 type probedSubsystem struct{ probed }
 
 func (probedSubsystem) Shutdown(context.Context) error { return nil }
 
-// readiness defines a *Readiness node on g under name, as an application
-// does for the nodes that report readiness.
 func readiness(g *graph.Graph, name string) *graph.Node[*lifecycle.Readiness] {
 	return g.Define(name, func(*graph.Scope) (*lifecycle.Readiness, error) {
 		return new(lifecycle.Readiness), nil
 	})
 }
 
-// checkNames returns the names of checks, in order.
 func checkNames(checks []lifecycle.Check) []string {
 	var names []string
 	for _, c := range checks {
@@ -51,8 +43,6 @@ func checkNames(checks []lifecycle.Check) []string {
 	return names
 }
 
-// Exec carries Run's runtime contract: the flip and the OnReady hooks, in
-// registration order, precede fn, and readiness ends once shutdown begins.
 func TestExec_ReadyDuringFn(t *testing.T) {
 	var r recorder
 	var lc *lifecycle.Coordinator
@@ -84,8 +74,6 @@ func TestExec_ReadyDuringFn(t *testing.T) {
 	}
 }
 
-// Readiness is false once shutdown begins; TestExec_ReadyDuringFn covers
-// Exec.
 func TestRun_NotReadyOnceDrainingBegins(t *testing.T) {
 	ready := make(chan bool, 1)
 	var lc *lifecycle.Coordinator
@@ -103,7 +91,6 @@ func TestRun_NotReadyOnceDrainingBegins(t *testing.T) {
 	}
 }
 
-// The OnReady hooks run in registration order, each after the flip.
 func TestRun_OnReadyRunsInRegistrationOrderAfterTheFlip(t *testing.T) {
 	var r recorder
 	g := graph.New()
@@ -151,8 +138,6 @@ func TestCoordinator_ChecksListsReadyStartersInLayerThenDefinitionOrder(t *testi
 	}
 }
 
-// A value with Ready and no Start reports on something it did not start, so
-// no Check is inferred from it, whether or not it shuts down.
 func TestCoordinator_ChecksOmitsReadinessCheckersThatDoNotStart(t *testing.T) {
 	type readyStopper struct {
 		checker
@@ -190,8 +175,6 @@ func TestReadiness_UnboundIsNotReady(t *testing.T) {
 	}
 }
 
-// A node that depends on the Readiness, as a health handler does, sees the
-// Coordinator's readiness through it.
 func TestReadiness_ReportsTheBoundCoordinator(t *testing.T) {
 	var r recorder
 	g := graph.New()
@@ -235,8 +218,6 @@ func TestReadiness_ReportsTheBoundCoordinator(t *testing.T) {
 	}
 }
 
-// A Readiness binds to one Coordinator: a second New over a System holding
-// the same Readiness is a wiring mistake.
 func TestNew_PanicsOnAReadinessBoundTwice(t *testing.T) {
 	shared := new(lifecycle.Readiness)
 	g := graph.New()

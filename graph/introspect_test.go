@@ -10,7 +10,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// refNames returns each ref's name, for a failure message.
 func refNames(refs []graph.Ref) []string {
 	out := make([]string, len(refs))
 	for i, r := range refs {
@@ -19,12 +18,6 @@ func refNames(refs []graph.Ref) []string {
 	return out
 }
 
-// layered defines a graph that, built from server, clock, and tier, has
-// the layers 0: cfg, clock, seed, gate; 1: cache, db; 2: server, each in
-// definition order. gate is a Fresh node the server Uses, seed a Value node
-// the db Uses, and clock a Value node built only as a root; the server
-// orders After tier, whose members are cache and db. lonely is never
-// reached. It returns the graph and its handles.
 func layered() (g *graph.Graph, h struct {
 	cfg, db, cache, server, lonely *graph.Node[int]
 	clock                          *graph.Node[string]
@@ -64,8 +57,6 @@ func TestDependency_RefIsTheHandle(t *testing.T) {
 			if !ok {
 				t.Fatalf("unexpected node %q in the System", d.Name)
 			}
-			// Interface equality: the same *Node[T] Define, Value, or Fresh
-			// returned, not a copy carrying the same node.
 			if d.Ref != ref {
 				t.Errorf("%s: Ref = %#v, want the handle %#v", d.Name, d.Ref, ref)
 			}
@@ -74,7 +65,6 @@ func TestDependency_RefIsTheHandle(t *testing.T) {
 	if seen != len(want) {
 		t.Fatalf("saw %d nodes, want %d", seen, len(want))
 	}
-	// The Ref asserts back to the typed handle, which Get takes.
 	d := dependency(t, sys, h.gate)
 	n, ok := d.Ref.(*graph.Node[*bool])
 	if !ok {
@@ -96,8 +86,6 @@ func TestObserve_PassesValueAndFreshHandles(t *testing.T) {
 	}
 }
 
-// An observer is never removed: it sees every later Build of its Graph,
-// each node once per Build.
 func TestObserve_PersistsAcrossBuilds(t *testing.T) {
 	g, h := layered()
 	var seen []graph.Ref
@@ -121,7 +109,6 @@ func TestLayerOf_MatchesLayers(t *testing.T) {
 			}
 		}
 	}
-	// Pinned, so a numbering that agreed with a wrong Layers still fails.
 	for ref, want := range map[graph.Ref]int{h.cfg: 0, h.clock: 0, h.seed: 0, h.gate: 0, h.cache: 1, h.db: 1, h.server: 2} {
 		if got := sys.LayerOf(ref); got != want {
 			t.Errorf("LayerOf(%s) = %d, want %d; layers:\n%s", ref.Name(), got, want, sys)
@@ -170,14 +157,11 @@ func TestHas_ReportsMembership(t *testing.T) {
 			t.Errorf("Has(%s) = false, want true; layers:\n%s", ref.Name(), sys)
 		}
 	}
-	// cache is a member of the tier the server orders After, which builds
-	// nothing; clock and lonely no root reaches.
 	for _, ref := range []graph.Ref{h.cache, h.clock, h.lonely} {
 		if sys.Has(ref) {
 			t.Errorf("Has(%s) = true, want false; layers:\n%s", ref.Name(), sys)
 		}
 	}
-	// A node of another Graph is not in s, even under a name s holds.
 	other := graph.New()
 	cfg := other.Define("cfg", zero)
 	mustBuild(t, other, cfg)
@@ -218,7 +202,6 @@ func TestDependencies_FlattensLayers(t *testing.T) {
 	if !slices.Equal(got, flat) {
 		t.Fatalf("Dependencies() = %v, want Layers() flattened, %v", got, flat)
 	}
-	// Pinned: layer order, then definition order within a layer.
 	refs := make([]graph.Ref, len(got))
 	for i, d := range got {
 		refs[i] = d.Ref
@@ -228,7 +211,6 @@ func TestDependencies_FlattensLayers(t *testing.T) {
 		t.Fatalf("Dependencies() refs = %v, want %v", refNames(refs), refNames(want))
 	}
 
-	// Each call returns a fresh copy.
 	got[0] = graph.Dependency{Name: "changed"}
 	if again := sys.Dependencies(); again[0].Ref != h.cfg {
 		t.Fatalf("a change to one result reached the next: %v", again[0])
@@ -241,8 +223,6 @@ func TestDependencies_FlattensLayers(t *testing.T) {
 
 func TestString_PrintsTheLayerTable(t *testing.T) {
 	g, h := layered()
-	// The roots list the server first, so a table in build order would put
-	// gate before cfg; the table is in definition order within a layer.
 	sys := mustBuild(t, g, h.server, h.clock, h.tier)
 	want := "0: cfg, clock, seed, gate\n1: cache, db\n2: server"
 	if got := sys.String(); got != want {
@@ -254,8 +234,6 @@ func TestString_PrintsTheLayerTable(t *testing.T) {
 	}
 }
 
-// observerPanic builds roots on g and returns what the Build panicked
-// with, failing the test when it did not panic.
 func observerPanic(t *testing.T, g *graph.Graph, roots ...graph.Ref) (r any) {
 	t.Helper()
 	defer func() { r = recover() }()
@@ -264,9 +242,6 @@ func observerPanic(t *testing.T, g *graph.Graph, roots ...graph.Ref) (r any) {
 	return nil
 }
 
-// An observer's panic leaves Build as a "graph: " panic naming the node,
-// with the original value wrapped when it is an error, whether the node is
-// a root or one a Use reached.
 func TestObserve_PanicNamesTheNode(t *testing.T) {
 	boom := errors.New("boom")
 	cases := []struct {
@@ -308,8 +283,6 @@ func TestObserve_PanicNamesTheNode(t *testing.T) {
 	}
 }
 
-// A runtime.Goexit in an observer, which t.FailNow calls, is not a panic:
-// it ends the Build's goroutine without a "graph: " panic in its way.
 func TestObserve_GoexitPassesThrough(t *testing.T) {
 	g, h := layered()
 	g.Observe(func(r graph.Ref) {

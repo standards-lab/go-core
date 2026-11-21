@@ -125,3 +125,40 @@ value, moved to Define rather than gaining a second edge in the Scope.
 None of them meets the sourcing rule either: the Go Elemental standard writes a capability
 in-house when it is generic to its layer and has no specification or security surface, and
 go-core depends on the standard library alone.
+
+## Implementation
+
+The invariants the unexported code of `graph` and `lifecycle` keeps, which no exported doc states.
+
+- **The freeze makes the description immutable.** A Build holds the Graph's mutex only to set the
+  built flag and copy the observers. Once the flag is set, every describing call panics before it
+  changes the Graph, so the nodes, their constructors and Afters, and the groups' members are read
+  without the lock, beside other Builds and beside an observer that calls Observe. An Observe that
+  runs during a Build applies from the next Build on. Every describing call defers its unlock, so a
+  check that panics leaves the Graph usable.
+- **A Build resolves every root before any constructor runs,** so a nil or foreign root anywhere
+  in the list panics first. A group expands to its members then, complete since the freeze.
+- **A constructor's error unwinds as a panic.** The labelled error travels as an internal abort
+  value out of every dependent whose Use reached it, up to Build, which recovers it and returns
+  the error. A Scope records the node whose Use did not return; a constructor that recovers the
+  abort and returns anyway would lose the failure, so the Build panics naming it.
+- **An observer's panic is relabelled at the call.** It is recovered where the observer runs and
+  raised again with a `graph: ` message naming the node, so it reads the same for a root and for
+  a node some Use reached. A `runtime.Goexit`, a test observer's `t.FailNow`, is not a panic and
+  unwinds the Build untouched.
+- **Layers are longest paths.** A node's layer is one above the highest of its Uses and in-System
+  Afters, not its last Use. Use edges are acyclic, since reaching a node under construction panics
+  with the cycle's path; an After edge can still close a cycle, which panics when the layers are
+  computed, naming any group the cycle passes through. An After whose target has no node in the
+  System is dropped, in definition order and then each node's After order.
+- **A lifecycle layer is one engine phase.** Its participants start concurrently, and the phase
+  is recorded for unwinding whether or not their starts succeed, so a participant whose start
+  failed is still stopped. The first failure cancels the run context so the rest of the layer can
+  stop early, and no higher layer starts; a cancellation consequent on a recorded failure is not
+  recorded as a second one, and the check and the record hold one lock.
+- **Shutdown has its whole budget.** The unwind runs every recorded phase, the last first, under
+  one context derived from `context.Background` and bounded by the shutdown timeout, whatever
+  became of the run context. A phase cut short contributes what it recorded by the deadline.
+- **The first runtime failure is the run's cause.** A Monitored value's channel is read once
+  startup completes; recording a failure and cancelling the run hold one lock, so the failure
+  reported is the one that ended the run.

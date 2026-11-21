@@ -9,8 +9,6 @@ import (
 	"github.com/standards-lab/go-core/graph"
 )
 
-// refType is the type every node and group handle implements, whatever its
-// value type: a field whose type implements it is a handle field.
 var refType = reflect.TypeFor[graph.Ref]()
 
 // CheckNames reports, as an error on t, each failure [NameErrors] finds in
@@ -52,8 +50,6 @@ func NameErrors(nodes any) []error {
 		}
 		name := fv.Interface().(graph.Ref).Name()
 		if name == "" {
-			// Only a zero-value literal has the empty name; Define,
-			// Value, Fresh, and Group reject it.
 			errs = append(errs, fmt.Errorf("%s.%s: no handle", v.Type().Name(), f.Name))
 			continue
 		}
@@ -64,8 +60,6 @@ func NameErrors(nodes any) []error {
 	return errs
 }
 
-// isNil reports whether v, a handle field, holds no value: a nil pointer
-// or a nil interface.
 func isNil(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Pointer, reflect.Interface:

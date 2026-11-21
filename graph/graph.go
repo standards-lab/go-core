@@ -21,21 +21,10 @@ import (
 // Builds call the same observers concurrently, so an observer shared by
 // them must be safe for concurrent use.
 type Graph struct {
-	// mu guards every field below, and the members of g's groups and the
-	// constructor of g's nodes, which Replace swaps. Build holds it only to
-	// set built and copy the observers; it builds without it, reading what
-	// the freeze has made immutable.
-	mu    sync.Mutex
-	nodes []*node
-	// groups are the groups [Graph.Group] defined, in definition order. They
-	// share the name space with nodes.
-	groups []*Group
-	// built is set by the first Build, which freezes the description:
-	// Define, Value, Fresh, Group, and Replace panic after it.
-	built bool
-	// observers are called, in the order added, as a Build begins each
-	// node. They are never removed: each applies to every later Build.
-	// Observe appends to it, and each Build copies it as it starts.
+	mu        sync.Mutex
+	nodes     []*node
+	groups    []*Group
+	built     bool
 	observers []func(Ref)
 }
 
@@ -44,7 +33,6 @@ func New() *Graph {
 	return &Graph{}
 }
 
-// erase wraps a typed constructor to return its value as any.
 func erase[T any](ctor func(*Scope) (T, error)) func(*Scope) (any, error) {
 	return func(s *Scope) (any, error) {
 		v, err := ctor(s)
@@ -89,11 +77,8 @@ func (g *Graph) Fresh[T any](name string, opts ...Option) *Node[*T] {
 	return define(g, "Fresh", name, func(*Scope) (*T, error) { return new(T), nil }, opts)
 }
 
-// define is Define, Value, and Fresh: it checks the name, the constructor,
-// and every option before it changes g, then adds the node. call names the
-// exported function for a panic's message.
+// See docs/graph-design.md, "Implementation".
 func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), opts []Option) *Node[T] {
-	// Deferred, so a check that panics releases the lock.
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.checkName(call, name)
@@ -107,9 +92,6 @@ func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), op
 		}
 		opt.apply(&set)
 	}
-	// After and In take a handle already defined, so a nil one most often
-	// names a node or group whose Define or Group comes later; the message
-	// asks.
 	op := fmt.Sprintf("%s %q with ", call, name)
 	for _, r := range set.after {
 		g.resolve(r, op+"After", true)
@@ -130,10 +112,6 @@ func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), op
 	return n
 }
 
-// checkName panics, with call naming the exported function, when g has run
-// a Build or name cannot name a new node or group: it is empty, contains a
-// comma or a newline, which would make a list of names ambiguous, or is
-// already taken on g by a node or a group. The caller holds g.mu.
 func (g *Graph) checkName(call, name string) {
 	if g.built {
 		panic(fmt.Sprintf("graph: %s of %q after Build", call, name))
@@ -150,14 +128,6 @@ func (g *Graph) checkName(call, name string) {
 	}
 }
 
-// resolve returns the nodes r stands for on g: a node itself, or a group's
-// members in definition order. It panics when r is nil, a zero-value
-// literal, or defined on another Graph; op names the call for the message.
-// When later is set, a nil ref's message asks whether the ref's Define, or
-// a group's Group, comes later, as it does for an option at Define. The
-// caller holds g.mu or g has built, so a group of g's has members that
-// cannot change under it; resolve reads them only once it has checked the
-// ref is g's, since another Graph's may be changing.
 func (g *Graph) resolve(r Ref, op string, later bool) []*node {
 	kind := "node"
 	var owner *Graph
@@ -192,7 +162,6 @@ func (g *Graph) Replace[T any](n *Node[T], ctor func(*Scope) (T, error)) {
 	if core == nil {
 		panic("graph: Replace of a nil node")
 	}
-	// Deferred, so a check that panics releases the lock.
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.built {
