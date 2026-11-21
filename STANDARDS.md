@@ -13,4 +13,4 @@ The judgement calls the standards-reviewer applies to go-core, beyond what `mise
 - `architecture/standards/go-elemental/principles/utc-times.md`: `logging.New`'s handlers, which write each record's time in UTC.
 - `architecture/principles/validation-first.md`: a new configuration field validates in its type's Finalize, and a new `config.Options` field validates before `Load` reads the first file.
 - `architecture/principles/comments.md`: every comment.
-- `architecture/principles/context-architecture.md`: the README, `docs/`, and each `doc.go` are the homes.
+- `architecture/principles/context-architecture.md`: the README, `docs/`, and each `doc.go`.
