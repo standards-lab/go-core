@@ -34,7 +34,7 @@ func participants(layer []graph.Dependency) []step {
 	return steps
 }
 
-// See docs/graph-design.md, "Implementation".
+// See docs/graph-design.md, "Implementation invariants".
 type engine struct {
 	phases [][]step
 }
