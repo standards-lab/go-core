@@ -1,8 +1,8 @@
 # Graph design
 
 This page explains why the `graph` and `lifecycle` API is shaped as it is since v0.11.0: the pain
-points it answers, the behavior it kept, the reasons behind its decisions, and the alternatives it
-rejected. The package documentation in `graph/doc.go`, `graph/graphtest/doc.go`, and
+points it answers, the behavior it kept, the reasons behind its decisions, the alternatives it
+rejected, and the invariants its unexported code keeps. The package documentation in `graph/doc.go`, `graph/graphtest/doc.go`, and
 `lifecycle/doc.go` states what the API does, and the CHANGELOG's v0.11.0 section lists every
 change.
 
@@ -126,16 +126,16 @@ None of them meets the sourcing rule either: the Go Elemental standard writes a 
 in-house when it is generic to its layer and has no specification or security surface, and
 go-core depends on the standard library alone.
 
-## Implementation
+## Implementation invariants
 
-The invariants the unexported code of `graph` and `lifecycle` keeps, which no exported doc states.
+The unexported code of `graph` and `lifecycle` keeps these invariants, which no exported doc
+states.
 
-- **The freeze makes the description immutable.** A Build holds the Graph's mutex only to set the
-  built flag and copy the observers. Once the flag is set, every describing call panics before it
-  changes the Graph, so the nodes, their constructors and Afters, and the groups' members are read
-  without the lock, beside other Builds and beside an observer that calls Observe. An Observe that
-  runs during a Build applies from the next Build on. Every describing call defers its unlock, so a
-  check that panics leaves the Graph usable.
+- **The freeze makes the description immutable.** Once a Build sets the built flag, every
+  describing call panics before it changes the Graph, so the nodes, their constructors and Afters,
+  and the groups' members are read without the lock, beside other Builds and beside an observer
+  that calls Observe. An Observe that runs during a Build applies from the next Build on. Every
+  describing call defers its unlock, so a check that panics leaves the Graph usable.
 - **A Build resolves every root before any constructor runs,** so a nil or foreign root anywhere
   in the list panics first. A group expands to its members then, complete since the freeze.
 - **A constructor's error unwinds as a panic.** The labelled error travels as an internal abort

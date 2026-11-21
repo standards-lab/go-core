@@ -71,18 +71,17 @@ Two-way. No release; every change is internal to the two repositories.
 
 ## Progress
 
-slices 0/9 committed · standards — · spec — · editor —
+slices 9/9 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
-- adopt: SQL file headers are package documentation and stay; in sqlate they are also template
-  metadata, like front matter. Comments inside a statement body follow the five kinds. (wave 1, W1)
-- adopt: CHANGELOG entries record only changes to a module's `go.mod` requirements. (wave 1, W2)
-
 ## Pending edits
 
-- coordinator · context/graph-ergonomics.md:11-13: name go-core's new docs page and what it holds
-  (reasoning and rejected alternatives; no sketches or migration).
+- coordinator · context/graph-ergonomics.md:11-13: replace the pointer to
+  `go-core/context/graph-ergonomics.md` with go-core's `docs/graph-design.md`, which holds the pain
+  points, the behavior that did not change, the reasons behind the decisions, the rejected
+  alternatives, and an "Implementation invariants" section on what the unexported code keeps; the
+  sketches and migration detail are gone.
 - coordinator · context/harness-adoption.md, "Settled for every adoption goal": add that SQL file
   headers are package documentation (in sqlate, template metadata) and stay, and that CHANGELOG
   entries record only `go.mod` requirement changes.

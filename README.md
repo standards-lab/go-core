@@ -28,14 +28,14 @@ stable as the standard library, this repository depends on the standard library 
   placed at definition after other nodes or in groups, and a Build that constructs what the
   roots reach into a System of computed layers. `Value` and `Fresh` define fixed and per-Build
   values, and a System names its nodes by their handles. A Graph is safe for concurrent use.
-  [`docs/graph-design.md`](docs/graph-design.md) gives the reasons behind its design.
+  [`docs/graph-design.md`](docs/graph-design.md) gives the reasons behind the design of `graph`
+  and `lifecycle`.
 - `graph/graphtest` — the test toolkit beside `graph`: `CheckNames` checks a struct of node and
   group handles against the names its nodes and groups were defined with.
 - `lifecycle` — runs a built `graph` System: starts its layers in order, tracks and reports
   readiness, watches for runtime failures, and shuts the layers down in reverse within a
   timeout. A value takes part through the interfaces it implements. `Exec` is the one-shot
-  form a CLI command uses; `Run` is the long-running form a service uses. Its design with
-  `graph` is explained in [`docs/graph-design.md`](docs/graph-design.md).
+  form a CLI command uses; `Run` is the long-running form a service uses.
 - `logging` — builds an `*slog.Logger` from a configuration that `config` loads.
 - `process` — the parts of a binary's main sequence that run before the program's own
   infrastructure exists: the signal-derived root context, pre-logger failure reporting, and the
