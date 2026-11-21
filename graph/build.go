@@ -14,7 +14,7 @@ type entry struct {
 	uses     []*node
 }
 
-// See docs/graph-design.md, "Implementation".
+// See docs/graph-design.md, "Implementation invariants".
 type build struct {
 	graph     *Graph
 	observers []func(Ref)

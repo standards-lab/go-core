@@ -77,7 +77,7 @@ func (g *Graph) Fresh[T any](name string, opts ...Option) *Node[*T] {
 	return define(g, "Fresh", name, func(*Scope) (*T, error) { return new(T), nil }, opts)
 }
 
-// See docs/graph-design.md, "Implementation".
+// See docs/graph-design.md, "Implementation invariants".
 func define[T any](g *Graph, call, name string, ctor func(*Scope) (T, error), opts []Option) *Node[T] {
 	g.mu.Lock()
 	defer g.mu.Unlock()

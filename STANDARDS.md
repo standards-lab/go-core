@@ -4,7 +4,7 @@ The judgement calls the standards-reviewer applies to go-core, beyond what `mise
 
 - A change that alters documented behavior updates the README and the affected `doc.go` in the same change.
 - A new package joins go-core only when its pattern is process-level and universal, never for one application type or one external technology.
-- `architecture/standards/go-elemental/principles/dependencies.md`: the bottom-up line and no provider in a base, at `go.mod`.
+- `architecture/standards/go-elemental/principles/dependencies.md`: `go.mod`.
 - `architecture/standards/go-elemental/principles/tests-and-docs.md`: the doc.go inventory of every package, and the harness rules `process/processtest` realizes.
 - `architecture/standards/go-elemental/principles/topology-and-naming.md`: the root module and its packages.
 - `architecture/standards/go-elemental/principles/release-and-ci.md`: one root `v<semver>` artifact with one `CHANGELOG.md`.
@@ -12,5 +12,5 @@ The judgement calls the standards-reviewer applies to go-core, beyond what `mise
 - `architecture/standards/go-elemental/principles/construction-and-execution.md`: `reactor.New` and `event.NewRecorder` take their configuration as a trailing Options struct whose zero value keeps the defaults, and a new constructor that takes configuration does the same.
 - `architecture/standards/go-elemental/principles/utc-times.md`: `logging.New`'s handlers, which write each record's time in UTC.
 - `architecture/principles/validation-first.md`: a new configuration field validates in its type's Finalize, and a new `config.Options` field validates before `Load` reads the first file.
-- `architecture/principles/comments.md` governs Go source, tests, scripts, and every configuration file (TOML, YAML, `.gitignore`, Dockerfile, compose), not just exported API; a data file's header is its package documentation.
-- `architecture/principles/context-architecture.md`: the README and each `doc.go` are the homes.
+- `architecture/principles/comments.md`: every comment.
+- `architecture/principles/context-architecture.md`: the README, `docs/`, and each `doc.go` are the homes.

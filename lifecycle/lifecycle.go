@@ -149,7 +149,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	})
 }
 
-// See docs/graph-design.md, "Implementation".
+// See docs/graph-design.md, "Implementation invariants".
 func (c *Coordinator) execute(
 	ctx context.Context,
 	op string,
