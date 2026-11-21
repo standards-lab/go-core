@@ -12,4 +12,5 @@ The judgement calls the standards-reviewer applies to go-core, beyond what `mise
 - `architecture/standards/go-elemental/principles/construction-and-execution.md`: `reactor.New` and `event.NewRecorder` take their configuration as a trailing Options struct whose zero value keeps the defaults, and a new constructor that takes configuration does the same.
 - `architecture/standards/go-elemental/principles/utc-times.md`: `logging.New`'s handlers, which write each record's time in UTC.
 - `architecture/principles/validation-first.md`: a new configuration field validates in its type's Finalize, and a new `config.Options` field validates before `Load` reads the first file.
+- `architecture/principles/comments.md` governs Go source, tests, scripts, and every configuration file (TOML, YAML, `.gitignore`, Dockerfile, compose), not just exported API; a data file's header is its package documentation.
 - `architecture/principles/context-architecture.md`: the README and each `doc.go` are the homes.
