@@ -2,6 +2,7 @@ package sse_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -185,14 +186,8 @@ func TestRoundTrip(t *testing.T) {
 		{Data: "keeps id 3", ID: "3"},
 		{Type: "end", Data: " spaced: ✓ ", ID: "4"},
 	}
-	if len(got) != len(want) {
-		t.Fatalf("events = %q\nwant     %q", got, want)
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Errorf("events = %q\nwant     %q", got, want)
-			break
-		}
+	if !slices.Equal(got, want) {
+		t.Errorf("events = %q\nwant     %q", got, want)
 	}
 	if retry, ok := d.Retry(); retry != 2500*time.Millisecond || !ok {
 		t.Errorf("Retry() = %v, %v; want 2.5s, true", retry, ok)

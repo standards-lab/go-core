@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -122,14 +123,8 @@ func TestNext(t *testing.T) {
 		for _, r := range readers {
 			t.Run(tt.name+"/"+r.name, func(t *testing.T) {
 				got := readAll(t, sse.NewDecoder(r.wrap(tt.stream)))
-				if len(got) != len(tt.want) {
-					t.Fatalf("events = %q\nwant     %q", got, tt.want)
-				}
-				for i := range got {
-					if got[i] != tt.want[i] {
-						t.Errorf("events = %q\nwant     %q", got, tt.want)
-						break
-					}
+				if !slices.Equal(got, tt.want) {
+					t.Errorf("events = %q\nwant     %q", got, tt.want)
 				}
 			})
 		}
