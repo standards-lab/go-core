@@ -22,7 +22,7 @@ stable as the standard library, this repository depends on the standard library 
 - `config` — loads configuration in layers: a base file, an environment overlay, and secrets.
 - `event` — the CloudEvents 1.0 envelope and its binary-content-mode codec, and the types a
   domain raises its events with: an `EventKind` declared with `Define` raises into a `Queue`,
-  and a `Recorder` emits the queue through a `Sink` into the command's own transaction, only
+  with the extension attributes its `RaiseOptions` sets, and a `Recorder` emits the queue through a `Sink` into the command's own transaction, only
   when the command succeeds. `Permanent` marks a handler's error that redelivery cannot fix.
 - `graph` — a typed dependency graph: nodes described inertly, each a name and a constructor,
   placed at definition after other nodes or in groups, and a Build that constructs what the

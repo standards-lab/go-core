@@ -12,6 +12,8 @@
 //     type of its data; [Define], which declares one, and [CheckType], the
 //     rule its type follows; [EventKind.Type], and [EventKind.Raise], which
 //     adds an event of the kind to a [Queue]
+//   - [RaiseOptions], which configures one raise: [RaiseOptions.Extensions],
+//     the raised event's extension attributes
 //   - [Queue], the events one command raises, with [Queue.Events], a copy of
 //     them, and [Queue.Err], every failure a raise held
 //   - [Sink], what writes stamped events into a transaction, and [Recorder],
@@ -38,6 +40,16 @@
 // type of its data:
 //
 //	var Started = event.Define[StartedData]("exercise.started")
+//
+// A raise takes a [RaiseOptions], whose zero value raises the event with no
+// extension attributes. [RaiseOptions.Extensions] sets them, keyed by name;
+// the raise copies the map, and a name [Event.Validate] rejects fails the
+// command when the recorder emits:
+//
+//	Started.Raise(q, id, data, event.RaiseOptions{})
+//	Started.Raise(q, id, data, event.RaiseOptions{
+//		Extensions: map[string]string{"correlationid": cid},
+//	})
 //
 // A command raises its events into a [Queue] while it runs, and a
 // [Recorder] emits them through its [Sink] into the command's own

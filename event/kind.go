@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"unicode"
 )
@@ -29,21 +30,37 @@ func Define[T any](typ string) EventKind[T] {
 // Type returns the kind's event type.
 func (k EventKind[T]) Type() string { return k.typ }
 
-// Raise adds an event of this kind about subject, carrying data, to q. The
-// event has no id, source, or time until the recorder stamps it. An empty
-// subject leaves the attribute absent. A failure to encode data is held on
-// q, and fails the command when the recorder emits.
-func (k EventKind[T]) Raise(q *Queue, subject string, data T) {
+// RaiseOptions configures one [EventKind.Raise]. The zero value raises an
+// event with no extension attributes.
+type RaiseOptions struct {
+	// Extensions holds the raised event's extension attributes, keyed by
+	// name. Raise copies the map, so a later change to it leaves the queued
+	// event as raised. Nil or empty leaves the event's Extensions nil. A name
+	// [Event.Validate] rejects fails the command when the recorder emits.
+	Extensions map[string]string
+}
+
+// Raise adds an event of this kind about subject, carrying data, to q, with
+// the extension attributes opts sets. The event has no id, source, or time
+// until the recorder stamps it. An empty subject leaves the attribute
+// absent. A failure to encode data is held on q, and fails the command when
+// the recorder emits.
+func (k EventKind[T]) Raise(q *Queue, subject string, data T, opts RaiseOptions) {
 	b, err := json.Marshal(data)
 	if err != nil {
 		q.fail(fmt.Errorf("%s: encode: %w", k.typ, err))
 		return
+	}
+	var ext map[string]string
+	if len(opts.Extensions) > 0 {
+		ext = maps.Clone(opts.Extensions)
 	}
 	q.events = append(q.events, Event{
 		Type:            k.typ,
 		Subject:         subject,
 		DataContentType: "application/json",
 		Data:            b,
+		Extensions:      ext,
 	})
 }
 

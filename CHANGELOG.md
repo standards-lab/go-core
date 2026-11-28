@@ -6,6 +6,38 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+A raise sets its event's extension attributes: `EventKind.Raise` takes a trailing
+`event.RaiseOptions`, whose `Extensions` the raised event carries. The zero value raises the event
+with no extension attributes, as before.
+
+### Added
+
+- `event.RaiseOptions`, which configures one raise. `RaiseOptions.Extensions` sets the raised
+  event's extension attributes, keyed by name; the raise copies the map, so a later change to it
+  leaves the queued event as raised. A name `Event.Validate` rejects fails the command at
+  `Recorder.Emit`, and the sink gets nothing.
+
+### Changed
+
+- **Breaking:** `EventKind.Raise` takes a trailing `event.RaiseOptions`. A raise with no
+  extension attributes passes `event.RaiseOptions{}`.
+
+### Migrating from v0.12.0
+
+- **A raise takes one `event.RaiseOptions` value.** Pass the zero value for an event with no
+  extension attributes.
+
+  ```go
+  // v0.12.0
+  kind.Raise(q, subject, data)
+
+  // Unreleased
+  kind.Raise(q, subject, data, event.RaiseOptions{})
+  kind.Raise(q, subject, data, event.RaiseOptions{
+      Extensions: map[string]string{"correlationid": correlationID},
+  })
+  ```
+
 ## [v0.12.0] - 2026-11-11
 
 Constructors that take configuration take it as a trailing Options struct, not variadic option

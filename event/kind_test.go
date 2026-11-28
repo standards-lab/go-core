@@ -2,6 +2,7 @@ package event_test
 
 import (
 	"encoding/json"
+	"maps"
 	"math"
 	"strings"
 	"testing"
@@ -49,8 +50,8 @@ func TestDefinePanicsOnARejectedType(t *testing.T) {
 
 func TestRaiseQueuesAnUnstampedJSONEvent(t *testing.T) {
 	var q event.Queue
-	kindApproved.Raise(&q, "grant-1", approved{By: "ada"})
-	kindApproved.Raise(&q, "", approved{By: "bea"})
+	kindApproved.Raise(&q, "grant-1", approved{By: "ada"}, event.RaiseOptions{})
+	kindApproved.Raise(&q, "", approved{By: "bea"}, event.RaiseOptions{})
 	if err := q.Err(); err != nil {
 		t.Fatalf("Err() = %v", err)
 	}
@@ -76,8 +77,8 @@ func TestRaiseQueuesAnUnstampedJSONEvent(t *testing.T) {
 
 func TestRaiseHoldsAnEncodeFailure(t *testing.T) {
 	var q event.Queue
-	kindApproved.Raise(&q, "grant-1", approved{})
-	kindUnfit.Raise(&q, "grant-1", math.NaN())
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{})
+	kindUnfit.Raise(&q, "grant-1", math.NaN(), event.RaiseOptions{})
 	err := q.Err()
 	if err == nil || !strings.Contains(err.Error(), "lab.grant.unfit") {
 		t.Fatalf("Err() = %v, want the failed raise's", err)
@@ -89,9 +90,41 @@ func TestRaiseHoldsAnEncodeFailure(t *testing.T) {
 
 func TestQueueEventsReturnsACopy(t *testing.T) {
 	var q event.Queue
-	kindApproved.Raise(&q, "grant-1", approved{})
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{})
 	q.Events()[0].Subject = "changed"
 	if got := q.Events()[0].Subject; got != "grant-1" {
 		t.Errorf("Subject = %q after changing the returned slice, want grant-1", got)
+	}
+}
+
+func TestRaiseWithTheZeroOptionsSetsNoExtensions(t *testing.T) {
+	var q event.Queue
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{})
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{Extensions: map[string]string{}})
+	for i, e := range q.Events() {
+		if e.Extensions != nil {
+			t.Errorf("event %d Extensions = %v, want nil", i, e.Extensions)
+		}
+	}
+}
+
+func TestRaiseSetsTheExtensions(t *testing.T) {
+	var q event.Queue
+	want := map[string]string{"correlationid": "c-1", "causationid": "e-9", "layer": "domain"}
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{Extensions: want})
+	if got := q.Events()[0].Extensions; !maps.Equal(got, want) {
+		t.Errorf("Extensions = %v, want %v", got, want)
+	}
+}
+
+func TestRaiseCopiesTheExtensions(t *testing.T) {
+	var q event.Queue
+	ext := map[string]string{"correlationid": "c-1"}
+	kindApproved.Raise(&q, "grant-1", approved{}, event.RaiseOptions{Extensions: ext})
+	ext["correlationid"] = "changed"
+	ext["layer"] = "added"
+	want := map[string]string{"correlationid": "c-1"}
+	if got := q.Events()[0].Extensions; !maps.Equal(got, want) {
+		t.Errorf("Extensions = %v after changing the caller's map, want %v", got, want)
 	}
 }
