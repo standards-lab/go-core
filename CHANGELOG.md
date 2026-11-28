@@ -6,6 +6,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-11-27
+
 A raise sets its event's extension attributes: `EventKind.Raise` takes a trailing
 `event.RaiseOptions`, whose `Extensions` the raised event carries. The zero value raises the event
 with no extension attributes, as before. A recorder stamps service-wide extension attributes on
@@ -37,7 +39,7 @@ every event it emits, from `event.Options.Extensions`; a raise's value wins when
   // v0.12.0
   kind.Raise(q, subject, data)
 
-  // Unreleased
+  // v0.13.0
   kind.Raise(q, subject, data, event.RaiseOptions{})
   kind.Raise(q, subject, data, event.RaiseOptions{
       Extensions: map[string]string{"correlationid": correlationID},
@@ -487,7 +489,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/standards-lab/go-core/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-core/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-core/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-core/compare/v0.9.0...v0.10.0
