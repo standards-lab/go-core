@@ -56,8 +56,8 @@
 // that makes it true. [Recorder.Emit] states when it stamps and writes.
 //
 // [Options.Extensions] sets the service-wide extension attributes a recorder
-// stamps on every event it emits, and states which value an event carries
-// when a raise sets the same name:
+// stamps on every event it emits. When a raise sets the same name, the event
+// carries the raise's value:
 //
 //	rec := event.NewRecorder(sink, source, event.Options{
 //		Extensions: map[string]string{"layer": "domain"},

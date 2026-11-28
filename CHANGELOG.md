@@ -20,7 +20,8 @@ every event it emits, from `event.Options.Extensions`; a raise's value wins when
 - `event.Options.Extensions`, the extension attributes a Recorder stamps on every event it emits,
   keyed by name, when it stamps the id, source, and time. When a raise sets the same name, the
   event carries the raise's value. `NewRecorder` copies the map, so a later change to it leaves
-  the recorder as built, and panics on a name `Event.Validate` rejects. Nil or empty stamps none.
+  the recorder as built, and panics on a name `Event.Validate` rejects. A nil or empty map stamps
+  none.
 
 ### Changed
 

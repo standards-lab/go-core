@@ -82,10 +82,10 @@ func NewRecorder[Tx any](sink Sink[Tx], source string, opts Options) *Recorder[T
 // Emit wraps fn, a command's body, into the function a transaction runs, such
 // as sqlate's Transact. The body runs on the transaction with a fresh
 // [Queue]. When it returns an error, Emit returns it and writes nothing.
-// When it succeeds, Emit stamps each queued event, its time the clock's in
-// UTC and its extension attributes the recorder's under the raise's own, and
-// writes them, in the order raised, through the sink into the same
-// transaction, before the caller commits. A failed raise or write fails the
+// When it succeeds, Emit stamps each queued event with the clock's time in
+// UTC and the recorder's extension attributes, the raise's value winning
+// where a name repeats, and writes them, in the order raised, through the
+// sink into the same transaction, before the caller commits. A failed raise or write fails the
 // command, so the transaction rolls back with its state and its events
 // together. Emit neither begins nor ends the transaction; the code that
 // began it ends it. ctx is the context of the write.
