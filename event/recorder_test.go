@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -372,5 +373,24 @@ func TestNewRecorderRejectsABadExtensionName(t *testing.T) {
 			}()
 			event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{name: "v"}})
 		}()
+	}
+}
+
+func TestEmittedExtensionsSurviveTheCodec(t *testing.T) {
+	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "domain"}},
+		event.RaiseOptions{Extensions: map[string]string{"correlationid": "c-1"}})
+	h, body, err := event.Encode(es[0])
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if !slices.Equal(h["ce-layer"], []string{"domain"}) || !slices.Equal(h["ce-correlationid"], []string{"c-1"}) {
+		t.Errorf("headers = %v, want ce-layer and ce-correlationid", h)
+	}
+	got, err := event.Decode(h, body)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if want := map[string]string{"layer": "domain", "correlationid": "c-1"}; !maps.Equal(got.Extensions, want) {
+		t.Errorf("decoded Extensions = %v, want %v", got.Extensions, want)
 	}
 }
