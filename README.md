@@ -3,7 +3,7 @@
 go-core is the Core SDK for Standards Lab's Go Elemental standard. It provides layered
 configuration, a dependency graph and the process lifecycle that runs it, a reactor that joins a
 source of occurrences to a handler, the CloudEvents envelope a domain raises its events in, a
-server-sent event stream reader, and logging.
+server-sent event stream reader and writer, and logging.
 
 `github.com/standards-lab/go-core` is a single Go module with the process-level packages every
 program in the standard builds on.
@@ -52,10 +52,12 @@ stable as the standard library, this repository depends on the standard library 
   `Options.CancelAfter` period passes. `Every` delivers on an interval, and `Wake` also delivers
   on each `Waker.Nudge` a producer calls. `Gate` pauses background work while an operation runs
   exclusively.
-- `sse` — reads a server-sent event stream, the WHATWG `text/event-stream` format, from any
-  `io.Reader` as its bytes arrive: `NewDecoder` returns a `Decoder` whose `Next` returns each
-  dispatched `Event`, its type, data, and last event ID, and whose `Retry` reports the
-  reconnection time the stream last set.
+- `sse` — reads and writes a server-sent event stream, the WHATWG `text/event-stream` format.
+  `NewDecoder` reads any `io.Reader` as its bytes arrive and returns a `Decoder` whose `Next`
+  returns each dispatched `Event`, its type, data, and last event ID, and whose `Retry` reports
+  the reconnection time the stream last set. `NewEncoder` writes to any `io.Writer` and returns
+  an `Encoder` whose `Encode`, `Comment`, and `Retry` each send their lines in one `Write`, so an
+  HTTP writer can flush once per event.
 
 ## Development
 

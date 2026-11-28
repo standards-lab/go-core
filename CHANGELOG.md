@@ -16,6 +16,12 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
   field set. The stream is decoded as UTF-8 with replacement, and the Decoder holds only the line
   and event it is building, with no size limit; the caller bounds an untrusted stream through its
   context or transport.
+- `sse` — writes a server-sent event stream to any `io.Writer`. `NewEncoder` returns an
+  `Encoder`; its `Encode` writes an `Event` as `event`, `id`, and one `data` line per line of
+  `Data`, split at CR, LF, and CRLF, then a blank line; `Comment` writes comment lines; and
+  `Retry` writes a `retry` field in whole milliseconds. Each call sends its bytes in one `Write`
+  and returns a write error unchanged. `Encode` rejects a `Type` or `ID` holding a line break, or
+  an `ID` holding NUL, and `Retry` rejects a negative duration, writing nothing.
 
 ## [v0.13.0] - 2026-11-27
 
