@@ -6,6 +6,17 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+### Added
+
+- `sse` — reads a server-sent event stream, the WHATWG `text/event-stream` format, on the
+  standard library alone and from any `io.Reader`. `NewDecoder` returns a `Decoder`; its `Next`
+  returns the stream's next `Event`, with its `Type`, its `Data` as its own `[]byte`, and the
+  stream's last event `ID`, as soon as the blank line ending it arrives, and returns `io.EOF` at
+  the stream's end. `Decoder.Retry` reports the reconnection time the stream's last valid `retry`
+  field set. The stream is decoded as UTF-8 with replacement, and the Decoder holds only the line
+  and event it is building, with no size limit; the caller bounds an untrusted stream through its
+  context or transport.
+
 ## [v0.13.0] - 2026-11-27
 
 A raise sets its event's extension attributes: `EventKind.Raise` takes a trailing

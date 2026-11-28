@@ -27,3 +27,4 @@ standard states the principles it follows.
 - **reactor** (built): the lifecycle component that runs one source of occurrences into one
   handler and drains at shutdown, its interval sources, and the quiesce gate
   ([doc.go](../reactor/doc.go)).
+- **sse** (built): the server-sent event stream reader ([doc.go](../sse/doc.go)).
