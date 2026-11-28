@@ -6,6 +6,55 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-11-27
+
+A raise sets its event's extension attributes: `EventKind.Raise` takes a trailing
+`event.RaiseOptions`, whose `Extensions` the raised event carries. The zero value raises the event
+with no extension attributes, as before. A recorder stamps service-wide extension attributes on
+every event it emits, from `event.Options.Extensions`; a raise's value wins when a name repeats.
+
+### Added
+
+- `event.RaiseOptions`, which configures one raise. `RaiseOptions.Extensions` sets the raised
+  event's extension attributes, keyed by name; the raise copies the map, so a later change to it
+  leaves the queued event as raised. A name `Event.Validate` rejects fails the command at
+  `Recorder.Emit`, and the sink gets nothing.
+- `event.Options.Extensions`, the extension attributes a Recorder stamps on every event it emits,
+  keyed by name, when it stamps the id, source, and time. When a raise sets the same name, the
+  event carries the raise's value. `NewRecorder` copies the map, so a later change to it leaves
+  the recorder as built, and panics on a name `Event.Validate` rejects. A nil or empty map stamps
+  none.
+
+### Changed
+
+- **Breaking:** `EventKind.Raise` takes a trailing `event.RaiseOptions`. A raise with no
+  extension attributes passes `event.RaiseOptions{}`.
+
+### Migrating from v0.12.0
+
+- **A raise takes one `event.RaiseOptions` value.** Pass the zero value for an event with no
+  extension attributes.
+
+  ```go
+  // v0.12.0
+  kind.Raise(q, subject, data)
+
+  // v0.13.0
+  kind.Raise(q, subject, data, event.RaiseOptions{})
+  kind.Raise(q, subject, data, event.RaiseOptions{
+      Extensions: map[string]string{"correlationid": correlationID},
+  })
+  ```
+
+- **A recorder stamps service-wide extension attributes.** Set `event.Options.Extensions` to
+  stamp them on every event the recorder emits; a raise's value for the same name wins.
+
+  ```go
+  rec := event.NewRecorder(sink, source, event.Options{
+      Extensions: map[string]string{"layer": "domain"},
+  })
+  ```
+
 ## [v0.12.0] - 2026-11-11
 
 Constructors that take configuration take it as a trailing Options struct, not variadic option
@@ -440,7 +489,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/standards-lab/go-core/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-core/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-core/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-core/compare/v0.9.0...v0.10.0

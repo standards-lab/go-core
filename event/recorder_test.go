@@ -3,8 +3,10 @@ package event_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +50,21 @@ func fixed(s *sink) *event.Recorder[*tx] {
 	})
 }
 
+func emitWith(t *testing.T, opts event.Options, raises ...event.RaiseOptions) []event.Event {
+	t.Helper()
+	s := &sink{}
+	_, err := event.NewRecorder[*tx](s, "/exercise", opts).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		for _, ro := range raises {
+			kindStarted.Raise(q, "ex-1", started{}, ro)
+		}
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.events
+}
+
 func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
 	s := &sink{}
 	on := &tx{name: "t1"}
@@ -55,8 +72,8 @@ func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
 		if got != on {
 			t.Errorf("body ran on %v, want %v", got, on)
 		}
-		kindStarted.Raise(q, "ex-1", started{Round: 0})
-		kindStopped.Raise(q, "ex-1", struct{}{})
+		kindStarted.Raise(q, "ex-1", started{Round: 0}, event.RaiseOptions{})
+		kindStopped.Raise(q, "ex-1", struct{}{}, event.RaiseOptions{})
 		return "done", nil
 	})
 	out, err := run(on)
@@ -90,9 +107,9 @@ func TestEmitStampsOneTimeForTheWholeQueue(t *testing.T) {
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	tick := func() time.Time { at = at.Add(time.Second); return at }
 	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{Clock: tick}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "ex-1", started{Round: 0})
-		kindStarted.Raise(q, "ex-1", started{Round: 1})
-		kindStopped.Raise(q, "ex-1", struct{}{})
+		kindStarted.Raise(q, "ex-1", started{Round: 0}, event.RaiseOptions{})
+		kindStarted.Raise(q, "ex-1", started{Round: 1}, event.RaiseOptions{})
+		kindStopped.Raise(q, "ex-1", struct{}{}, event.RaiseOptions{})
 		return 0, nil
 	})(&tx{})
 	if err != nil {
@@ -112,7 +129,7 @@ func TestEmitWritesNothingWhenTheBodyFails(t *testing.T) {
 	s := &sink{}
 	boom := errors.New("refused")
 	out, err := fixed(s).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "ex-1", started{})
+		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
 		return 7, boom
 	})(&tx{})
 	if !errors.Is(err, boom) {
@@ -136,7 +153,7 @@ func TestEmitWritesNothingWhenNothingIsRaised(t *testing.T) {
 func TestEmitFailsTheCommandWhenTheSinkFails(t *testing.T) {
 	boom := errors.New("insert failed")
 	out, err := fixed(&sink{err: boom}).Emit(t.Context(), func(_ *tx, q *event.Queue) (string, error) {
-		kindStarted.Raise(q, "ex-1", started{})
+		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
 		return "done", nil
 	})(&tx{})
 	if !errors.Is(err, boom) {
@@ -150,8 +167,8 @@ func TestEmitFailsTheCommandWhenTheSinkFails(t *testing.T) {
 func TestEmitFailsTheCommandWhenARaiseFails(t *testing.T) {
 	s := &sink{}
 	_, err := fixed(s).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "ex-1", started{})
-		kindBadValue.Raise(q, "ex-1", math.NaN())
+		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
+		kindBadValue.Raise(q, "ex-1", math.NaN(), event.RaiseOptions{})
 		if q.Err() == nil {
 			t.Error("the queue holds no error after an unencodable raise")
 		}
@@ -171,8 +188,8 @@ func TestEmitFailsTheCommandWhenARaiseFails(t *testing.T) {
 func TestEmitMintsVersion7IDs(t *testing.T) {
 	s := &sink{}
 	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "", started{})
-		kindStarted.Raise(q, "", started{})
+		kindStarted.Raise(q, "", started{}, event.RaiseOptions{})
+		kindStarted.Raise(q, "", started{}, event.RaiseOptions{})
 		return 0, nil
 	})(&tx{})
 	if err != nil {
@@ -195,7 +212,7 @@ func TestEmitMintsVersion7IDs(t *testing.T) {
 func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 	s := &sink{}
 	_, err := event.NewRecorder[*tx](s, "/exercise", event.Options{}).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "", started{})
+		kindStarted.Raise(q, "", started{}, event.RaiseOptions{})
 		return 0, nil
 	})(&tx{})
 	if err != nil {
@@ -209,7 +226,7 @@ func TestEmitStampsTheDefaultClockInUTC(t *testing.T) {
 func TestNewRecorderKeepsTheDefaultsLeftUnset(t *testing.T) {
 	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	raise := func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "", started{})
+		kindStarted.Raise(q, "", started{}, event.RaiseOptions{})
 		return 0, nil
 	}
 
@@ -252,5 +269,128 @@ func TestNewRecorderRejectsAWiringDefect(t *testing.T) {
 			}()
 			build()
 		}()
+	}
+}
+
+func TestEmitWritesARaisesExtensions(t *testing.T) {
+	want := map[string]string{"correlationid": "c-1"}
+	es := emitWith(t, event.Options{}, event.RaiseOptions{Extensions: want})
+	if got := es[0].Extensions; !maps.Equal(got, want) {
+		t.Errorf("Extensions = %v, want %v", got, want)
+	}
+}
+
+func TestEmitFailsTheCommandOnARejectedExtensionName(t *testing.T) {
+	for _, name := range []string{"Layer", "id", "trace-id", ""} {
+		s := &sink{}
+		_, err := fixed(s).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+			kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
+			kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{Extensions: map[string]string{name: "v"}})
+			return 0, nil
+		})(&tx{})
+		if err == nil || !strings.Contains(err.Error(), "extension") {
+			t.Errorf("extension %q: err = %v, want the invalid name's", name, err)
+		}
+		if len(s.events) != 0 {
+			t.Errorf("extension %q: wrote %d events, want none", name, len(s.events))
+		}
+	}
+}
+
+func TestEmitStampsTheRecordersExtensionsOnEveryEvent(t *testing.T) {
+	want := map[string]string{"layer": "domain"}
+	es := emitWith(t, event.Options{Extensions: want}, event.RaiseOptions{}, event.RaiseOptions{})
+	if len(es) != 2 {
+		t.Fatalf("wrote %d events, want 2", len(es))
+	}
+	for i, e := range es {
+		if !maps.Equal(e.Extensions, want) {
+			t.Errorf("event %d Extensions = %v, want %v", i, e.Extensions, want)
+		}
+	}
+	es[0].Extensions["layer"] = "changed"
+	if es[1].Extensions["layer"] != "domain" {
+		t.Errorf("events share an extensions map: second event's layer = %q", es[1].Extensions["layer"])
+	}
+	if want["layer"] != "domain" {
+		t.Errorf("stamping changed the options' map: layer = %q", want["layer"])
+	}
+}
+
+func TestEmitStampsNoExtensionsFromTheZeroOptions(t *testing.T) {
+	for _, opts := range []event.Options{{}, {Extensions: map[string]string{}}} {
+		es := emitWith(t, opts, event.RaiseOptions{})
+		if es[0].Extensions != nil {
+			t.Errorf("Options%+v: Extensions = %v, want nil", opts, es[0].Extensions)
+		}
+	}
+}
+
+func TestEmitKeepsTheRaisesValueOverTheRecorders(t *testing.T) {
+	raised := map[string]string{"layer": "raise", "correlationid": "c-1"}
+	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "recorder", "causationid": "e-0"}},
+		event.RaiseOptions{Extensions: raised})
+	want := map[string]string{"layer": "raise", "correlationid": "c-1", "causationid": "e-0"}
+	if !maps.Equal(es[0].Extensions, want) {
+		t.Errorf("Extensions = %v, want %v", es[0].Extensions, want)
+	}
+	if len(raised) != 2 {
+		t.Errorf("stamping changed the raise's map: %v", raised)
+	}
+}
+
+func TestNewRecorderCopiesTheOptionsExtensions(t *testing.T) {
+	s := &sink{}
+	ext := map[string]string{"layer": "domain"}
+	r := event.NewRecorder[*tx](s, "/exercise", event.Options{Extensions: ext})
+	ext["layer"] = "changed"
+	ext["extra"] = "x"
+	_, err := r.Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"layer": "domain"}; !maps.Equal(s.events[0].Extensions, want) {
+		t.Errorf("Extensions = %v, want %v", s.events[0].Extensions, want)
+	}
+}
+
+func TestNewRecorderRejectsABadExtensionName(t *testing.T) {
+	for name, want := range map[string]string{
+		"Layer":    `"Layer"`,
+		"id":       `"id"`,
+		"trace-id": `"trace-id"`,
+		"":         "empty",
+	} {
+		func() {
+			defer func() {
+				msg, _ := recover().(string)
+				if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, want) {
+					t.Errorf("extension %q: panicked with %q, want an \"event: \" message naming Options.Extensions and %s", name, msg, want)
+				}
+			}()
+			event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{name: "v"}})
+		}()
+	}
+}
+
+func TestEmittedExtensionsSurviveTheCodec(t *testing.T) {
+	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "domain"}},
+		event.RaiseOptions{Extensions: map[string]string{"correlationid": "c-1"}})
+	h, body, err := event.Encode(es[0])
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if !slices.Equal(h["ce-layer"], []string{"domain"}) || !slices.Equal(h["ce-correlationid"], []string{"c-1"}) {
+		t.Errorf("headers = %v, want ce-layer and ce-correlationid", h)
+	}
+	got, err := event.Decode(h, body)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if want := map[string]string{"layer": "domain", "correlationid": "c-1"}; !maps.Equal(got.Extensions, want) {
+		t.Errorf("decoded Extensions = %v, want %v", got.Extensions, want)
 	}
 }

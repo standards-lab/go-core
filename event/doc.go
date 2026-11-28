@@ -12,6 +12,8 @@
 //     type of its data; [Define], which declares one, and [CheckType], the
 //     rule its type follows; [EventKind.Type], and [EventKind.Raise], which
 //     adds an event of the kind to a [Queue]
+//   - [RaiseOptions], which configures one raise: [RaiseOptions.Extensions],
+//     the raised event's extension attributes
 //   - [Queue], the events one command raises, with [Queue.Events], a copy of
 //     them, and [Queue.Err], every failure a raise held
 //   - [Sink], what writes stamped events into a transaction, and [Recorder],
@@ -19,7 +21,8 @@
 //     returns one, and [Recorder.Emit], which wraps a command's body into
 //     the function a transaction runs
 //   - [Options], which configures a Recorder: [Options.Clock], the time it
-//     stamps, and [Options.IDs], how it mints an event id
+//     stamps, [Options.IDs], how it mints an event id, and
+//     [Options.Extensions], the extension attributes it stamps on every event
 //   - [Permanent], which marks a handler's error as one redelivery cannot
 //     fix, and [IsPermanent], which reports the mark
 //
@@ -39,10 +42,26 @@
 //
 //	var Started = event.Define[StartedData]("exercise.started")
 //
+// A raise takes a [RaiseOptions], whose zero value raises the event with no
+// extension attributes; [RaiseOptions.Extensions] sets them:
+//
+//	Started.Raise(q, id, data, event.RaiseOptions{})
+//	Started.Raise(q, id, data, event.RaiseOptions{
+//		Extensions: map[string]string{"correlationid": cid},
+//	})
+//
 // A command raises its events into a [Queue] while it runs, and a
 // [Recorder] emits them through its [Sink] into the command's own
 // transaction, so an event is emitted only in the transaction of the command
 // that makes it true. [Recorder.Emit] states when it stamps and writes.
+//
+// [Options.Extensions] sets the service-wide extension attributes a recorder
+// stamps on every event it emits. When a raise sets the same name, the event
+// carries the raise's value:
+//
+//	rec := event.NewRecorder(sink, source, event.Options{
+//		Extensions: map[string]string{"layer": "domain"},
+//	})
 //
 // The transaction is a type parameter, so this package names no database.
 // The composition root fixes the type when it builds the recorder over a
