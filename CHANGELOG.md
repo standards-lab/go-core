@@ -7,25 +7,25 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 ## [Unreleased]
 
 A new `sse` package reads and writes server-sent event streams. It joins go-core because the
-pattern is process-level and universal: clients read event streams and servers write them, so it
-serves neither alone. The release adds no breaking change.
+pattern is process-level and universal: clients read event streams and servers write them, and the
+package serves both, not one alone. The release adds no breaking change.
 
 ### Added
 
-- `sse` — reads a server-sent event stream, the WHATWG `text/event-stream` format, on the
-  standard library alone and from any `io.Reader`. `NewDecoder` returns a `Decoder`; its `Next`
-  returns the stream's next `Event`, with its `Type`, its `Data` as its own `[]byte`, and the
-  stream's last event `ID`, as soon as the blank line ending it arrives, and returns `io.EOF` at
-  the stream's end. `Decoder.Retry` reports the reconnection time the stream's last valid `retry`
-  field set. The stream is decoded as UTF-8 with replacement, and the Decoder holds only the line
-  and event it is building, with no size limit; the caller bounds an untrusted stream through its
-  context or transport.
-- `sse` — writes a server-sent event stream to any `io.Writer`. `NewEncoder` returns an
-  `Encoder`; its `Encode` writes an `Event` as `event`, `id`, and one `data` line per line of
-  `Data`, split at CR, LF, and CRLF, then a blank line; `Comment` writes comment lines; and
-  `Retry` writes a `retry` field in whole milliseconds. Each call sends its bytes in one `Write`
-  and returns a write error unchanged. `Encode` rejects a `Type` or `ID` holding a line break, or
-  an `ID` holding NUL, and `Retry` rejects a negative duration, writing nothing.
+- `sse`, which reads and writes a server-sent event stream, the WHATWG `text/event-stream` format,
+  on the standard library alone. `NewDecoder` reads any `io.Reader` and returns a `Decoder`, whose
+  `Next` returns the stream's next `Event` as soon as the blank line ending it arrives: its `Type`,
+  its `Data` as a `[]byte` of its own, and the stream's last event `ID`. `Next` returns `io.EOF` at
+  the stream's end, and `Decoder.Retry` reports the reconnection time the stream's last valid
+  `retry` field set. The Decoder decodes the stream as UTF-8 with replacement and holds only the
+  line and event it is building, with no size limit, so the caller bounds an untrusted stream
+  through its context or transport. `NewEncoder` writes to any `io.Writer` and returns an
+  `Encoder`. `Encoder.Encode` writes an `Event` as its `event` and `id` lines, one `data` line for
+  each line of `Data` split at CR, LF, and CRLF, and a blank line; `Comment` writes comment lines;
+  and `Retry` writes a `retry` field in whole milliseconds. Each call sends its bytes in one
+  `Write` and returns a write error unchanged. `Encode` rejects a `Type` or `ID` holding a line
+  break, or an `ID` holding NUL, and `Retry` rejects a negative duration; a rejected call writes
+  nothing.
 
 ## [v0.13.0] - 2026-11-27
 

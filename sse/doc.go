@@ -12,7 +12,7 @@
 //   - [Decoder], which reads the events of one stream, and [NewDecoder],
 //     which returns one
 //   - [Decoder.Next], which returns the stream's next event
-//   - [Decoder.Retry], the reconnection time the stream last set
+//   - [Decoder.Retry], which reports the reconnection time the stream last set
 //   - [Encoder], which writes the events of one stream, and [NewEncoder],
 //     which returns one
 //   - [Encoder.Encode], which writes one event
