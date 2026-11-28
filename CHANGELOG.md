@@ -6,6 +6,10 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+A new `sse` package reads and writes server-sent event streams. It joins go-core because the
+pattern is process-level and universal: clients read event streams and servers write them, so it
+serves neither alone. The release adds no breaking change.
+
 ### Added
 
 - `sse` — reads a server-sent event stream, the WHATWG `text/event-stream` format, on the
