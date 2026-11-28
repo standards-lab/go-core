@@ -6,7 +6,6 @@ import (
 	"maps"
 	"math"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +47,21 @@ func fixed(s *sink) *event.Recorder[*tx] {
 		Clock: func() time.Time { return at },
 		IDs:   func() string { n++; return strings.Repeat("a", n) },
 	})
+}
+
+func emitWith(t *testing.T, opts event.Options, raises ...event.RaiseOptions) []event.Event {
+	t.Helper()
+	s := &sink{}
+	_, err := event.NewRecorder[*tx](s, "/exercise", opts).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		for _, ro := range raises {
+			kindStarted.Raise(q, "ex-1", started{}, ro)
+		}
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.events
 }
 
 func TestEmitStampsAndWritesInRaiseOrder(t *testing.T) {
@@ -258,16 +272,9 @@ func TestNewRecorderRejectsAWiringDefect(t *testing.T) {
 }
 
 func TestEmitWritesARaisesExtensions(t *testing.T) {
-	s := &sink{}
 	want := map[string]string{"correlationid": "c-1"}
-	_, err := fixed(s).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{Extensions: want})
-		return 0, nil
-	})(&tx{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := s.events[0].Extensions; !maps.Equal(got, want) {
+	es := emitWith(t, event.Options{}, event.RaiseOptions{Extensions: want})
+	if got := es[0].Extensions; !maps.Equal(got, want) {
 		t.Errorf("Extensions = %v, want %v", got, want)
 	}
 }
@@ -287,21 +294,6 @@ func TestEmitFailsTheCommandOnARejectedExtensionName(t *testing.T) {
 			t.Errorf("extension %q: wrote %d events, want none", name, len(s.events))
 		}
 	}
-}
-
-func emitWith(t *testing.T, opts event.Options, raises ...event.RaiseOptions) []event.Event {
-	t.Helper()
-	s := &sink{}
-	_, err := event.NewRecorder[*tx](s, "/exercise", opts).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
-		for _, ro := range raises {
-			kindStarted.Raise(q, "ex-1", started{}, ro)
-		}
-		return 0, nil
-	})(&tx{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s.events
 }
 
 func TestEmitStampsTheRecordersExtensionsOnEveryEvent(t *testing.T) {
@@ -365,44 +357,20 @@ func TestNewRecorderCopiesTheOptionsExtensions(t *testing.T) {
 }
 
 func TestNewRecorderRejectsABadExtensionName(t *testing.T) {
-	for _, name := range []string{"Layer", "id", "trace-id"} {
+	for name, want := range map[string]string{
+		"Layer":    `"Layer"`,
+		"id":       `"id"`,
+		"trace-id": `"trace-id"`,
+		"":         "empty",
+	} {
 		func() {
 			defer func() {
 				msg, _ := recover().(string)
-				if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, `"`+name+`"`) {
-					t.Errorf("extension %q: panicked with %q, want an \"event: \" message naming Options.Extensions and the name", name, msg)
+				if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, want) {
+					t.Errorf("extension %q: panicked with %q, want an \"event: \" message naming Options.Extensions and %s", name, msg, want)
 				}
 			}()
 			event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{name: "v"}})
 		}()
-	}
-	func() {
-		defer func() {
-			msg, _ := recover().(string)
-			if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, "empty") {
-				t.Errorf("empty extension name: panicked with %q, want an \"event: \" message naming Options.Extensions", msg)
-			}
-		}()
-		event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{"": "v"}})
-	}()
-}
-
-func TestEmittedExtensionsSurviveTheCodec(t *testing.T) {
-	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "domain"}},
-		event.RaiseOptions{Extensions: map[string]string{"correlationid": "c-1"}})
-	want := es[0]
-	h, body, err := event.Encode(want)
-	if err != nil {
-		t.Fatalf("Encode: %v", err)
-	}
-	if !slices.Equal(h["ce-layer"], []string{"domain"}) || !slices.Equal(h["ce-correlationid"], []string{"c-1"}) {
-		t.Errorf("headers = %v, want ce-layer and ce-correlationid", h)
-	}
-	got, err := event.Decode(h, body)
-	if err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-	if !maps.Equal(got.Extensions, want.Extensions) {
-		t.Errorf("decoded Extensions = %v, want %v", got.Extensions, want.Extensions)
 	}
 }

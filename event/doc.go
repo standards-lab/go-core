@@ -43,9 +43,7 @@
 //	var Started = event.Define[StartedData]("exercise.started")
 //
 // A raise takes a [RaiseOptions], whose zero value raises the event with no
-// extension attributes. [RaiseOptions.Extensions] sets them, keyed by name;
-// the raise copies the map, and a name [Event.Validate] rejects fails the
-// command when the recorder emits:
+// extension attributes; [RaiseOptions.Extensions] sets them:
 //
 //	Started.Raise(q, id, data, event.RaiseOptions{})
 //	Started.Raise(q, id, data, event.RaiseOptions{
@@ -58,10 +56,8 @@
 // that makes it true. [Recorder.Emit] states when it stamps and writes.
 //
 // [Options.Extensions] sets the service-wide extension attributes a recorder
-// stamps on every event it emits, alongside the id, source, and time. When a
-// raise sets the same name, the event carries the raise's value.
-// [NewRecorder] copies the map, and a name [Event.Validate] rejects panics
-// there:
+// stamps on every event it emits, and states which value an event carries
+// when a raise sets the same name:
 //
 //	rec := event.NewRecorder(sink, source, event.Options{
 //		Extensions: map[string]string{"layer": "domain"},
