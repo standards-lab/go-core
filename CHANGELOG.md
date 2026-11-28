@@ -8,7 +8,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 A raise sets its event's extension attributes: `EventKind.Raise` takes a trailing
 `event.RaiseOptions`, whose `Extensions` the raised event carries. The zero value raises the event
-with no extension attributes, as before.
+with no extension attributes, as before. A recorder stamps service-wide extension attributes on
+every event it emits, from `event.Options.Extensions`; a raise's value wins when a name repeats.
 
 ### Added
 
@@ -16,6 +17,10 @@ with no extension attributes, as before.
   event's extension attributes, keyed by name; the raise copies the map, so a later change to it
   leaves the queued event as raised. A name `Event.Validate` rejects fails the command at
   `Recorder.Emit`, and the sink gets nothing.
+- `event.Options.Extensions`, the extension attributes a Recorder stamps on every event it emits,
+  keyed by name, when it stamps the id, source, and time. When a raise sets the same name, the
+  event carries the raise's value. `NewRecorder` copies the map, so a later change to it leaves
+  the recorder as built, and panics on a name `Event.Validate` rejects. Nil or empty stamps none.
 
 ### Changed
 
@@ -35,6 +40,15 @@ with no extension attributes, as before.
   kind.Raise(q, subject, data, event.RaiseOptions{})
   kind.Raise(q, subject, data, event.RaiseOptions{
       Extensions: map[string]string{"correlationid": correlationID},
+  })
+  ```
+
+- **A recorder stamps service-wide extension attributes.** Set `event.Options.Extensions` to
+  stamp them on every event the recorder emits; a raise's value for the same name wins.
+
+  ```go
+  rec := event.NewRecorder(sink, source, event.Options{
+      Extensions: map[string]string{"layer": "domain"},
   })
   ```
 

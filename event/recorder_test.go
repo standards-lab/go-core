@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -285,5 +286,123 @@ func TestEmitFailsTheCommandOnARejectedExtensionName(t *testing.T) {
 		if len(s.events) != 0 {
 			t.Errorf("extension %q: wrote %d events, want none", name, len(s.events))
 		}
+	}
+}
+
+func emitWith(t *testing.T, opts event.Options, raises ...event.RaiseOptions) []event.Event {
+	t.Helper()
+	s := &sink{}
+	_, err := event.NewRecorder[*tx](s, "/exercise", opts).Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		for _, ro := range raises {
+			kindStarted.Raise(q, "ex-1", started{}, ro)
+		}
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.events
+}
+
+func TestEmitStampsTheRecordersExtensionsOnEveryEvent(t *testing.T) {
+	want := map[string]string{"layer": "domain"}
+	es := emitWith(t, event.Options{Extensions: want}, event.RaiseOptions{}, event.RaiseOptions{})
+	if len(es) != 2 {
+		t.Fatalf("wrote %d events, want 2", len(es))
+	}
+	for i, e := range es {
+		if !maps.Equal(e.Extensions, want) {
+			t.Errorf("event %d Extensions = %v, want %v", i, e.Extensions, want)
+		}
+	}
+	es[0].Extensions["layer"] = "changed"
+	if es[1].Extensions["layer"] != "domain" {
+		t.Errorf("events share an extensions map: second event's layer = %q", es[1].Extensions["layer"])
+	}
+	if want["layer"] != "domain" {
+		t.Errorf("stamping changed the options' map: layer = %q", want["layer"])
+	}
+}
+
+func TestEmitStampsNoExtensionsFromTheZeroOptions(t *testing.T) {
+	for _, opts := range []event.Options{{}, {Extensions: map[string]string{}}} {
+		es := emitWith(t, opts, event.RaiseOptions{})
+		if es[0].Extensions != nil {
+			t.Errorf("Options%+v: Extensions = %v, want nil", opts, es[0].Extensions)
+		}
+	}
+}
+
+func TestEmitKeepsTheRaisesValueOverTheRecorders(t *testing.T) {
+	raised := map[string]string{"layer": "raise", "correlationid": "c-1"}
+	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "recorder", "causationid": "e-0"}},
+		event.RaiseOptions{Extensions: raised})
+	want := map[string]string{"layer": "raise", "correlationid": "c-1", "causationid": "e-0"}
+	if !maps.Equal(es[0].Extensions, want) {
+		t.Errorf("Extensions = %v, want %v", es[0].Extensions, want)
+	}
+	if len(raised) != 2 {
+		t.Errorf("stamping changed the raise's map: %v", raised)
+	}
+}
+
+func TestNewRecorderCopiesTheOptionsExtensions(t *testing.T) {
+	s := &sink{}
+	ext := map[string]string{"layer": "domain"}
+	r := event.NewRecorder[*tx](s, "/exercise", event.Options{Extensions: ext})
+	ext["layer"] = "changed"
+	ext["extra"] = "x"
+	_, err := r.Emit(t.Context(), func(_ *tx, q *event.Queue) (int, error) {
+		kindStarted.Raise(q, "ex-1", started{}, event.RaiseOptions{})
+		return 0, nil
+	})(&tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"layer": "domain"}; !maps.Equal(s.events[0].Extensions, want) {
+		t.Errorf("Extensions = %v, want %v", s.events[0].Extensions, want)
+	}
+}
+
+func TestNewRecorderRejectsABadExtensionName(t *testing.T) {
+	for _, name := range []string{"Layer", "id", "trace-id"} {
+		func() {
+			defer func() {
+				msg, _ := recover().(string)
+				if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, `"`+name+`"`) {
+					t.Errorf("extension %q: panicked with %q, want an \"event: \" message naming Options.Extensions and the name", name, msg)
+				}
+			}()
+			event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{name: "v"}})
+		}()
+	}
+	func() {
+		defer func() {
+			msg, _ := recover().(string)
+			if !strings.HasPrefix(msg, "event: ") || !strings.Contains(msg, "Options.Extensions") || !strings.Contains(msg, "empty") {
+				t.Errorf("empty extension name: panicked with %q, want an \"event: \" message naming Options.Extensions", msg)
+			}
+		}()
+		event.NewRecorder[*tx](&sink{}, "/exercise", event.Options{Extensions: map[string]string{"": "v"}})
+	}()
+}
+
+func TestEmittedExtensionsSurviveTheCodec(t *testing.T) {
+	es := emitWith(t, event.Options{Extensions: map[string]string{"layer": "domain"}},
+		event.RaiseOptions{Extensions: map[string]string{"correlationid": "c-1"}})
+	want := es[0]
+	h, body, err := event.Encode(want)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if !slices.Equal(h["ce-layer"], []string{"domain"}) || !slices.Equal(h["ce-correlationid"], []string{"c-1"}) {
+		t.Errorf("headers = %v, want ce-layer and ce-correlationid", h)
+	}
+	got, err := event.Decode(h, body)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if !maps.Equal(got.Extensions, want.Extensions) {
+		t.Errorf("decoded Extensions = %v, want %v", got.Extensions, want.Extensions)
 	}
 }

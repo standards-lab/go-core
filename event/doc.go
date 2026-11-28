@@ -21,7 +21,8 @@
 //     returns one, and [Recorder.Emit], which wraps a command's body into
 //     the function a transaction runs
 //   - [Options], which configures a Recorder: [Options.Clock], the time it
-//     stamps, and [Options.IDs], how it mints an event id
+//     stamps, [Options.IDs], how it mints an event id, and
+//     [Options.Extensions], the extension attributes it stamps on every event
 //   - [Permanent], which marks a handler's error as one redelivery cannot
 //     fix, and [IsPermanent], which reports the mark
 //
@@ -55,6 +56,16 @@
 // [Recorder] emits them through its [Sink] into the command's own
 // transaction, so an event is emitted only in the transaction of the command
 // that makes it true. [Recorder.Emit] states when it stamps and writes.
+//
+// [Options.Extensions] sets the service-wide extension attributes a recorder
+// stamps on every event it emits, alongside the id, source, and time. When a
+// raise sets the same name, the event carries the raise's value.
+// [NewRecorder] copies the map, and a name [Event.Validate] rejects panics
+// there:
+//
+//	rec := event.NewRecorder(sink, source, event.Options{
+//		Extensions: map[string]string{"layer": "domain"},
+//	})
 //
 // The transaction is a type parameter, so this package names no database.
 // The composition root fixes the type when it builds the recorder over a
