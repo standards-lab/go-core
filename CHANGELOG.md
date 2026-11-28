@@ -6,6 +6,8 @@ All notable changes to `github.com/standards-lab/go-core` are documented here. T
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-11-28
+
 A new `sse` package reads and writes server-sent event streams. It joins go-core because the
 pattern is process-level and universal: clients read event streams and servers write them, and the
 package serves both, not one alone. The release adds no breaking change.
@@ -510,7 +512,8 @@ depends on the standard library alone.
   layered load: `Level` delegating its vocabulary to `slog`, `Format` selecting the handler, and the
   writer as a parameter to `New`.
 
-[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-core/compare/v0.14.0...HEAD
+[v0.14.0]: https://github.com/standards-lab/go-core/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/standards-lab/go-core/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-core/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-core/compare/v0.10.0...v0.11.0
